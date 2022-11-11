@@ -14,7 +14,6 @@ import (
 	"github.com/kamalshkeir/kmap"
 	"github.com/kamalshkeir/kmux/ws"
 	"github.com/kamalshkeir/korm/drivers/kmongo"
-	mongo1 "github.com/kamalshkeir/korm/drivers/kmongo"
 	"github.com/kamalshkeir/korm/drivers/mysqldriver"
 	"github.com/kamalshkeir/korm/drivers/pgdriver"
 	"github.com/kamalshkeir/korm/drivers/sqlitedriver"
@@ -29,7 +28,7 @@ var (
 	FlushCacheEvery = 30 * time.Minute
 	// DefaultDB keep tracking of the first database connected
 	DefaultDB         = ""
-	useCache          = false
+	useCache          = true
 	databases         = []DatabaseEntity{}
 	mModelTablename   = map[any]string{}
 	cacheGetAllTables = kmap.New[string, []string](false)
@@ -129,7 +128,7 @@ func NewDatabaseFromDSN(dbType, dbName string, dbDSN ...string) error {
 			}
 		}
 		if !dbFound {
-			mc, err := mongo1.NewMongoFromDSN(dbName, dbDSN...)
+			mc, err := kmongo.NewMongoFromDSN(dbName, dbDSN...)
 			if !klog.CheckError(err) {
 				databases = append(databases, DatabaseEntity{
 					Name:      dbName,
@@ -296,7 +295,7 @@ func NewSQLDatabaseFromConnection(dbType, dbName string, conn *sql.DB) error {
 
 // NewMongoDatabaseFromConnection register a new *mongo.Client
 func NewMongoDatabaseFromConnection(dbName string, dbConn *mongo.Client) (*mongo.Database, error) {
-	return mongo1.NewMongoFromConnection(dbName, dbConn)
+	return kmongo.NewMongoFromConnection(dbName, dbConn)
 }
 
 // NewBusServerKORM return new ksbus.Server that can be Run, RunTLS, RunAutoTLS
@@ -384,7 +383,7 @@ func GetMONGOConnection(dbName ...string) *mongo.Database {
 	}
 	conn = db.MongoConn
 	if conn == nil {
-		if v, ok := mongo1.MMongoDBS.Get(name); ok {
+		if v, ok := kmongo.MMongoDBS.Get(name); ok {
 			return v
 		} else {
 			return nil
@@ -395,7 +394,7 @@ func GetMONGOConnection(dbName ...string) *mongo.Database {
 
 // GetMONGOClient return the mongo client if any, you should check if the client not nil
 func GetMONGOClient() *mongo.Client {
-	return mongo1.GetClient()
+	return kmongo.GetClient()
 }
 
 // GetAllTables get all tables for the optional dbName given, otherwise, if not args, it will return tables of the first connected database
@@ -412,7 +411,7 @@ func GetAllTables(dbName ...string) []string {
 		}
 	}
 	if GetMONGOConnection(dbName...) != nil {
-		tables := mongo1.GetAllTables(dbName...)
+		tables := kmongo.GetAllTables(dbName...)
 		if useCache && len(tables) > 0 {
 			cacheGetAllTables.Set(name, tables)
 		}
@@ -500,7 +499,7 @@ func GetAllColumnsTypes(table string, dbName ...string) map[string]string {
 	}
 
 	if GetMONGOConnection(dbName...) != nil {
-		cols := mongo1.GetAllColumns(table, dbName...)
+		cols := kmongo.GetAllColumns(table, dbName...)
 		if len(cols) > 0 {
 			return cols
 		}
