@@ -53,7 +53,7 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@v1.2.0
+go get -u github.com/kamalshkeir/korm@latest
 ```
 
 ### Connect to a database
