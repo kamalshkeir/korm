@@ -1,7 +1,6 @@
 package korm
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -16,8 +15,6 @@ import (
 
 	"github.com/kamalshkeir/kinput"
 	"github.com/kamalshkeir/klog"
-	"github.com/kamalshkeir/korm/drivers/mongodriver"
-	"go.mongodb.org/mongo-driver/mongo"
 )
 
 type dbCache struct {
@@ -39,7 +36,7 @@ func LinkModel[T comparable](to_table_name string, db *DatabaseEntity) {
 	if db.Name == "" {
 		var err error
 		db.Name = databases[0].Name
-		db,err = GetMemoryDatabase(db.Name)
+		db, err = GetMemoryDatabase(db.Name)
 		if klog.CheckError(err) {
 			return
 		}
@@ -88,7 +85,6 @@ func LinkModel[T comparable](to_table_name string, db *DatabaseEntity) {
 		handleRename(to_table_name, fields, cols, diff, db, ftags, pk)
 	}()
 	wg.Wait()
-	
 
 	tFound := false
 	for _, t := range db.Tables {
@@ -96,7 +92,7 @@ func LinkModel[T comparable](to_table_name string, db *DatabaseEntity) {
 			tFound = true
 		}
 	}
-	
+
 	if !tFound {
 		db.Tables = append(db.Tables, TableEntity{
 			Name:       to_table_name,
@@ -113,11 +109,11 @@ func LinkModel[T comparable](to_table_name string, db *DatabaseEntity) {
 func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []string, db *DatabaseEntity, ftypes map[string]string, ftags map[string][]string, pk string) {
 	if len(cols) > len(fields) { // extra column db
 		for _, d := range diff {
-			fileName := "drop_"+to_table_name+"_"+d+".sql"
+			fileName := "drop_" + to_table_name + "_" + d + ".sql"
 			if v, ok := ftags[d]; ok && v[0] == "-" || d == pk {
 				continue
 			}
-			if _,err := os.Stat("migrations/"+fileName);err == nil {
+			if _, err := os.Stat("migrations/" + fileName); err == nil {
 				continue
 			}
 			fmt.Println(" ")
@@ -150,19 +146,19 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 							}
 						}
 						if Debug {
-							klog.Printf("%s\n",sst)
-							klog.Printf("%s\n",statement)
-							klog.Printf("%s\n",trigs)
+							klog.Printf("%s\n", sst)
+							klog.Printf("%s\n", statement)
+							klog.Printf("%s\n", trigs)
 						}
 						_, err := conn.Exec(sst)
 						if klog.CheckError(err) {
-							klog.Printf("%s\n",sst)
+							klog.Printf("%s\n", sst)
 							return
 						}
 						_, err = conn.Exec(statement)
 						if err != nil {
 							temp := to_table_name + "_temp"
-							_,err := autoMigrate[T](db, temp,true)
+							_, err := autoMigrate[T](db, temp, true)
 							if klog.CheckError(err) {
 								return
 							}
@@ -204,18 +200,18 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 						}
 						_, err := conn.Exec(sst)
 						if klog.CheckError(err) {
-							klog.Printf("%s\n",sst)
+							klog.Printf("%s\n", sst)
 							return
 						}
 						if Debug {
-							klog.Printf("%s\n",sst)
-							klog.Printf("%s\n",statement)
-							klog.Printf("%s\n",trigs)
+							klog.Printf("%s\n", sst)
+							klog.Printf("%s\n", statement)
+							klog.Printf("%s\n", trigs)
 						}
 						_, err = conn.Exec(statement)
 						if err != nil {
 							temp := to_table_name + "_temp"
-							_,err := autoMigrate[T](db, temp,true)
+							_, err := autoMigrate[T](db, temp, true)
 							if klog.CheckError(err) {
 								return
 							}
@@ -237,11 +233,11 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 						os.Exit(0)
 					}
 				}
-			} else if  SliceContains([]string{"generate", "G", "g"}, choice) {
+			} else if SliceContains([]string{"generate", "G", "g"}, choice) {
 				query := ""
 				sst := "DROP INDEX IF EXISTS idx_" + to_table_name + "_" + d + ";"
 				trigs := "DROP TRIGGER IF EXISTS " + to_table_name + "_update_trig;"
-				
+
 				if len(databases) > 1 && db.Name == "" {
 					ddb := kinput.Input(kinput.Blue, "> There are more than one database connected, enter database name: ")
 					conn := GetSQLConnection(ddb)
@@ -254,8 +250,8 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 										if db.Dialect == POSTGRES {
 											trigs += "ON " + to_table_name
 										}
-										if !strings.HasSuffix(trigs,";") {
-											trigs+=";"
+										if !strings.HasSuffix(trigs, ";") {
+											trigs += ";"
 										}
 										query += trigs
 									}
@@ -263,30 +259,29 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 							}
 						}
 						if Debug {
-							klog.Printf("%s\n",sst)
-							klog.Printf("%s\n",statement)
-							klog.Printf("%s\n",trigs)
+							klog.Printf("%s\n", sst)
+							klog.Printf("%s\n", statement)
+							klog.Printf("%s\n", trigs)
 						}
-						if !strings.HasSuffix(sst,";") {
-							sst+=";"
+						if !strings.HasSuffix(sst, ";") {
+							sst += ";"
 						}
 						query += sst
 
 						temp := to_table_name + "_temp"
-						tempQuery,err := autoMigrate[T](db, temp,false)
+						tempQuery, err := autoMigrate[T](db, temp, false)
 						if klog.CheckError(err) {
 							return
 						}
 						query += tempQuery
-						if !strings.HasSuffix(tempQuery,";") {
-							tempQuery+=";"
+						if !strings.HasSuffix(tempQuery, ";") {
+							tempQuery += ";"
 						}
 						cls := strings.Join(fields, ",")
-						
 
-						query += "INSERT INTO " + temp + " SELECT " + cls + " FROM " + to_table_name+";"
-						query += "DROP TABLE "+to_table_name+";"
-						query += "ALTER TABLE " + temp + " RENAME TO " + to_table_name+";"
+						query += "INSERT INTO " + temp + " SELECT " + cls + " FROM " + to_table_name + ";"
+						query += "DROP TABLE " + to_table_name + ";"
+						query += "ALTER TABLE " + temp + " RENAME TO " + to_table_name + ";"
 					}
 				} else {
 					conn := db.Conn
@@ -299,49 +294,48 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 										if db.Dialect == POSTGRES {
 											trigs += "ON " + to_table_name
 										}
-										if !strings.HasSuffix(trigs,";") {
-											trigs+=";"
+										if !strings.HasSuffix(trigs, ";") {
+											trigs += ";"
 										}
 										query += trigs
 									}
 								}
 							}
 						}
-						if !strings.HasSuffix(sst,";") {
-							sst+=";"
+						if !strings.HasSuffix(sst, ";") {
+							sst += ";"
 						}
 						query += sst
 						if Debug {
-							klog.Printf("%s\n",sst)
-							klog.Printf("%s\n",statement)
-							klog.Printf("%s\n",trigs)
+							klog.Printf("%s\n", sst)
+							klog.Printf("%s\n", statement)
+							klog.Printf("%s\n", trigs)
 						}
 						temp := to_table_name + "_temp"
-						tempQuery,err := autoMigrate[T](db, temp,false)
+						tempQuery, err := autoMigrate[T](db, temp, false)
 						if klog.CheckError(err) {
 							return
 						}
 						query += tempQuery
 						cls := strings.Join(fields, ",")
-						
 
-						query += "INSERT INTO " + temp + " SELECT " + cls + " FROM " + to_table_name+";"
-						query += "DROP TABLE "+to_table_name+";"
-						query += "ALTER TABLE " + temp + " RENAME TO " + to_table_name+";"
+						query += "INSERT INTO " + temp + " SELECT " + cls + " FROM " + to_table_name + ";"
+						query += "DROP TABLE " + to_table_name + ";"
+						query += "ALTER TABLE " + temp + " RENAME TO " + to_table_name + ";"
 					}
 				}
 
-				if _,err := os.Stat("migrations");err != nil {
-					err := os.MkdirAll("migrations",os.ModeDir)
+				if _, err := os.Stat("migrations"); err != nil {
+					err := os.MkdirAll("migrations", os.ModeDir)
 					klog.CheckError(err)
 				}
 
-				if _,err := os.Stat("migrations/"+fileName);err != nil {
-					f,err := os.Create("migrations/"+fileName)
+				if _, err := os.Stat("migrations/" + fileName); err != nil {
+					f, err := os.Create("migrations/" + fileName)
 					if klog.CheckError(err) {
 						return
 					}
-					_,err = f.WriteString(query)
+					_, err = f.WriteString(query)
 					if klog.CheckError(err) {
 						f.Close()
 						return
@@ -349,11 +343,11 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 					f.Close()
 					fmt.Printf(klog.Green, "migrations/"+fileName+" created")
 				} else {
-					f,err := os.Open("migrations/"+fileName)
+					f, err := os.Open("migrations/" + fileName)
 					if klog.CheckError(err) {
 						return
 					}
-					_,err = f.WriteString(query)
+					_, err = f.WriteString(query)
 					if klog.CheckError(err) {
 						f.Close()
 						return
@@ -367,11 +361,11 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 		}
 	} else if len(cols) < len(fields) { // missing column db
 		for _, d := range diff {
-			fileName := "add_"+to_table_name+"_"+d+".sql"
+			fileName := "add_" + to_table_name + "_" + d + ".sql"
 			if v, ok := ftags[d]; ok && v[0] == "-" || d == pk {
 				continue
 			}
-			if _,err := os.Stat("migrations/"+fileName);err == nil {
+			if _, err := os.Stat("migrations/" + fileName); err == nil {
 				continue
 			}
 			fmt.Println(" ")
@@ -548,7 +542,7 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 						if conn != nil {
 							_, err := conn.Exec(statement)
 							if klog.CheckError(err) {
-								klog.Printf("%s\n",statement)
+								klog.Printf("%s\n", statement)
 								return
 							}
 							if len(trigs) > 0 {
@@ -564,21 +558,21 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 							if statIndexes != "" {
 								_, err := conn.Exec(statIndexes)
 								if klog.CheckError(err) {
-									klog.Printf("%s\n",statIndexes)
+									klog.Printf("%s\n", statIndexes)
 									return
 								}
 							}
 							if mstatIndexes != "" {
 								_, err := conn.Exec(mstatIndexes)
 								if klog.CheckError(err) {
-									klog.Printf("%s\n",mstatIndexes)
+									klog.Printf("%s\n", mstatIndexes)
 									return
 								}
 							}
 							if ustatIndexes != "" {
 								_, err := conn.Exec(ustatIndexes)
 								if klog.CheckError(err) {
-									klog.Printf("%s\n",ustatIndexes)
+									klog.Printf("%s\n", ustatIndexes)
 									return
 								}
 							}
@@ -606,7 +600,7 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 						if conn != nil {
 							_, err := conn.Exec(statement)
 							if klog.CheckError(err) {
-								klog.Printf("%s\n",statement)
+								klog.Printf("%s\n", statement)
 								return
 							}
 							if len(trigs) > 0 {
@@ -621,21 +615,21 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 							if statIndexes != "" {
 								_, err := conn.Exec(statIndexes)
 								if klog.CheckError(err) {
-									klog.Printf("%s\n",statIndexes)
+									klog.Printf("%s\n", statIndexes)
 									return
 								}
 							}
 							if mstatIndexes != "" {
 								_, err := conn.Exec(mstatIndexes)
 								if klog.CheckError(err) {
-									klog.Printf("%s\n",mstatIndexes)
+									klog.Printf("%s\n", mstatIndexes)
 									return
 								}
 							}
 							if ustatIndexes != "" {
 								_, err := conn.Exec(ustatIndexes)
 								if klog.CheckError(err) {
-									klog.Printf("%s\n",ustatIndexes)
+									klog.Printf("%s\n", ustatIndexes)
 									return
 								}
 							}
@@ -661,40 +655,39 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 					}
 				} else if SliceContains([]string{"generate", "G", "g"}, choice) {
 					query := ""
-					
-					
+
 					if len(databases) > 1 && db.Name == "" {
 						ddb := kinput.Input(kinput.Blue, "> There are more than one database connected, database name:")
 						conn := GetSQLConnection(ddb)
 						if conn != nil {
-							if !strings.HasSuffix(statement,";") {
-								statement+=";"
+							if !strings.HasSuffix(statement, ";") {
+								statement += ";"
 							}
 							query += statement
 							if len(trigs) > 0 {
 								for _, st := range trigs {
-									if !strings.HasSuffix(st,";") {
-										st+=";"
+									if !strings.HasSuffix(st, ";") {
+										st += ";"
 									}
 									query += st
 								}
 							}
 
 							if statIndexes != "" {
-								if !strings.HasSuffix(statIndexes,";") {
-									statIndexes+=";"
+								if !strings.HasSuffix(statIndexes, ";") {
+									statIndexes += ";"
 								}
 								query += statIndexes
 							}
 							if mstatIndexes != "" {
-								if !strings.HasSuffix(mstatIndexes,";") {
-									mstatIndexes+=";"
+								if !strings.HasSuffix(mstatIndexes, ";") {
+									mstatIndexes += ";"
 								}
 								query += mstatIndexes
 							}
 							if ustatIndexes != "" {
-								if !strings.HasSuffix(ustatIndexes,";") {
-									ustatIndexes+=";"
+								if !strings.HasSuffix(ustatIndexes, ";") {
+									ustatIndexes += ";"
 								}
 								query += ustatIndexes
 							}
@@ -719,33 +712,33 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 					} else {
 						conn := GetSQLConnection(db.Name)
 						if conn != nil {
-							if !strings.HasSuffix(statement,";") {
-								statement+=";"
+							if !strings.HasSuffix(statement, ";") {
+								statement += ";"
 							}
 							query += statement
 							if len(trigs) > 0 {
 								for _, st := range trigs {
-									if !strings.HasSuffix(st,";") {
-										st+=";"
+									if !strings.HasSuffix(st, ";") {
+										st += ";"
 									}
 									query += st
 								}
 							}
 							if statIndexes != "" {
-								if !strings.HasSuffix(statIndexes,";") {
-									statIndexes+=";"
+								if !strings.HasSuffix(statIndexes, ";") {
+									statIndexes += ";"
 								}
 								query += statIndexes
 							}
 							if mstatIndexes != "" {
-								if !strings.HasSuffix(mstatIndexes,";") {
-									mstatIndexes+=";"
+								if !strings.HasSuffix(mstatIndexes, ";") {
+									mstatIndexes += ";"
 								}
 								query += mstatIndexes
 							}
 							if ustatIndexes != "" {
-								if !strings.HasSuffix(ustatIndexes,";") {
-									ustatIndexes+=";"
+								if !strings.HasSuffix(ustatIndexes, ";") {
+									ustatIndexes += ";"
 								}
 								query += ustatIndexes
 							}
@@ -770,35 +763,35 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 						}
 					}
 
-					if _,err := os.Stat("migrations");err != nil {
-						err := os.MkdirAll("migrations",os.ModeDir)
+					if _, err := os.Stat("migrations"); err != nil {
+						err := os.MkdirAll("migrations", os.ModeDir)
 						klog.CheckError(err)
 					}
 
-					if _,err := os.Stat("migrations/"+fileName);err != nil {
-						f,err := os.Create("migrations/"+fileName)
+					if _, err := os.Stat("migrations/" + fileName); err != nil {
+						f, err := os.Create("migrations/" + fileName)
 						if klog.CheckError(err) {
 							return
 						}
-						_,err = f.WriteString(query)
+						_, err = f.WriteString(query)
 						if klog.CheckError(err) {
 							f.Close()
 							return
 						}
 						f.Close()
-						klog.Printfs("grmigrations/%s created\n",fileName)
+						klog.Printfs("grmigrations/%s created\n", fileName)
 					} else {
-						f,err := os.Open("migrations/"+fileName)
+						f, err := os.Open("migrations/" + fileName)
 						if klog.CheckError(err) {
 							return
 						}
-						_,err = f.WriteString(query)
+						_, err = f.WriteString(query)
 						if klog.CheckError(err) {
 							f.Close()
 							return
 						}
 						f.Close()
-						klog.Printfs("grmigrations/%s created\n",fileName)
+						klog.Printfs("grmigrations/%s created\n", fileName)
 					}
 				} else {
 					klog.Printfs("grNothing changed\n")
@@ -813,7 +806,7 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 func handleIndexes(to_table_name, colName string, indexes []string, mi *migrationInput) (statIndexes string, mstatIndexes string, ustatIndexes string) {
 	if len(indexes) > 0 {
 		if len(indexes) > 1 {
-			klog.Printf("%s cannot have more than 1 index\n",mi.fName)
+			klog.Printf("%s cannot have more than 1 index\n", mi.fName)
 		} else {
 			ff := strings.ReplaceAll(colName, "DESC", "")
 			statIndexes = fmt.Sprintf("CREATE INDEX idx_%s_%s ON %s (%s)", to_table_name, ff, to_table_name, indexes[0])
@@ -822,7 +815,7 @@ func handleIndexes(to_table_name, colName string, indexes []string, mi *migratio
 
 	if len(*mi.mindexes) > 0 {
 		if len(*mi.mindexes) > 1 {
-			klog.Printf("%s cannot have more than 1 multiple indexes\n",mi.fName)
+			klog.Printf("%s cannot have more than 1 multiple indexes\n", mi.fName)
 		} else {
 			if v, ok := (*mi.mindexes)[mi.fName]; ok {
 				ff := strings.ReplaceAll(colName, "DESC", "")
@@ -833,7 +826,7 @@ func handleIndexes(to_table_name, colName string, indexes []string, mi *migratio
 
 	if len(*mi.uindexes) > 0 {
 		if len(*mi.uindexes) > 1 {
-			klog.Printf("%s cannot have more than 1 multiple indexes",mi.fName)
+			klog.Printf("%s cannot have more than 1 multiple indexes", mi.fName)
 		} else {
 			if v, ok := (*mi.uindexes)[mi.fName]; ok {
 				sp := strings.Split(v, ",")
@@ -952,8 +945,7 @@ func handleRename(to_table_name string, fields, cols, diff []string, db *Databas
 	}
 }
 
-
-func GetConstraints(db *DatabaseEntity, tableName string) map[string][]string {
+func getConstraints(db *DatabaseEntity, tableName string) map[string][]string {
 	res := map[string][]string{}
 	switch db.Dialect {
 	case SQLITE:
@@ -994,12 +986,12 @@ func GetConstraints(db *DatabaseEntity, tableName string) map[string][]string {
 				}
 			}
 		}
-	case POSTGRES, MYSQL,MARIA:
+	case POSTGRES, MYSQL, MARIA:
 		st := "select table_name,constraint_type,constraint_name from INFORMATION_SCHEMA.TABLE_CONSTRAINTS where table_name='" + tableName + "';"
 		d, err := Query(db.Name, st)
 		if !klog.CheckError(err) {
 			for _, dd := range d {
-				klog.Printf("gr%s\n",dd)
+				klog.Printf("gr%s\n", dd)
 				switch {
 				case strings.HasPrefix(dd["constraint_name"].(string), "chk_"):
 					ln := len("chk_") + len(tableName) + 1
@@ -1053,35 +1045,6 @@ func GetConstraints(db *DatabaseEntity, tableName string) map[string][]string {
 		}
 	}
 	return res
-}
-
-func ShutdownDatabases(databasesName ...string) error {
-	if len(databasesName) > 0 {
-		for _, db := range databases {
-			if SliceContains(databasesName,db.Name) {
-				if err := db.Conn.Close(); err != nil {
-					return err
-				}
-			}
-		}
-		ctx,cancel := context.WithTimeout(context.Background(),5*time.Second)
-		defer cancel()
-		err := mongodriver.GetClient().Disconnect(ctx)
-		klog.CheckError(err)
-	} else {
-		for i := range databases {
-			if err := databases[i].Conn.Close(); err != nil {
-				return err
-			}
-		}
-		mongodriver.MMongoDBS.Range(func(key string, value *mongo.Database) {
-			ctx,cancel := context.WithTimeout(context.Background(),5*time.Second)
-			defer cancel()
-			err := value.Client().Disconnect(ctx)
-			klog.CheckError(err)
-		})
-	}
-	return nil
 }
 
 func getTableName[T comparable]() string {
@@ -1188,7 +1151,6 @@ func encodeHex(dst []byte, uuid [16]byte) {
 	hex.Encode(dst[24:], uuid[10:])
 }
 
-
 func RunEvery(t time.Duration, function any) {
 	//Usage : go RunEvery(2 * time.Second,func(){})
 	fn, ok := function.(func())
@@ -1215,7 +1177,6 @@ func SliceContains[T comparable](elems []T, vs ...T) bool {
 	}
 	return false
 }
-
 
 func Difference[T comparable](slice1 []T, slice2 []T) []T {
 	var diff []T
@@ -1257,6 +1218,7 @@ func SliceRemove[T comparable](slice *[]T, elemsToRemove ...T) {
 
 var matchFirstCap = regexp.MustCompile("(.)([A-Z][a-z]+)")
 var matchAllCap = regexp.MustCompile("([a-z0-9])([A-Z])")
+
 func ToSnakeCase(str string) string {
 	snake := matchFirstCap.ReplaceAllString(str, "${1}_${2}")
 	snake = matchAllCap.ReplaceAllString(snake, "${1}_${2}")

@@ -9,10 +9,11 @@ import (
 	"strings"
 
 	"github.com/kamalshkeir/klog"
-	"github.com/kamalshkeir/korm/drivers/mongodriver"
+	"github.com/kamalshkeir/korm/drivers/kmongo"
 )
 
-var whereReplacer = strings.NewReplacer("?","","=","","AND",",","and",",","OR",",","or",",")
+var whereReplacer = strings.NewReplacer("?", "", "=", "", "AND", ",", "and", ",", "OR", ",", "or", ",")
+
 type BuilderM struct {
 	debug      bool
 	limit      int
@@ -104,11 +105,11 @@ func (b *BuilderM) Page(pageNumber int) *BuilderM {
 func (b *BuilderM) OrderBy(fields ...string) *BuilderM {
 	if b.database == "" {
 		if databases[0].Dialect == MONGO {
-			b.database=databases[0].Name
+			b.database = databases[0].Name
 		}
 	}
-	if _,ok := mongodriver.MMongoDBS.Get(b.database);ok {
-		b.orderBys=strings.Join(fields,",")
+	if _, ok := kmongo.MMongoDBS.Get(b.database); ok {
+		b.orderBys = strings.Join(fields, ",")
 		b.order = append(b.order, "order_by")
 		return b
 	}
@@ -173,39 +174,41 @@ func (b *BuilderM) All() ([]map[string]any, error) {
 		}
 	}
 	if b.database == "" {
-		b.database=databases[0].Name
+		b.database = databases[0].Name
 	}
-	
-	if _,ok := mongodriver.MMongoDBS.Get(b.database);ok {
+
+	if _, ok := kmongo.MMongoDBS.Get(b.database); ok {
 		wf := map[string]any{}
 		if b.whereQuery != "" {
-			b.whereQuery=whereReplacer.Replace(b.whereQuery)
-			if strings.Contains(b.whereQuery,",") {
-				sp := strings.Split(b.whereQuery,",")
+			b.whereQuery = whereReplacer.Replace(b.whereQuery)
+			if strings.Contains(b.whereQuery, ",") {
+				sp := strings.Split(b.whereQuery, ",")
 				if len(b.args) == len(sp) {
-					for i,s := range sp {
-						wf[strings.TrimSpace(s)]=b.args[i]
+					for i, s := range sp {
+						wf[strings.TrimSpace(s)] = b.args[i]
 					}
 				}
 			} else {
 				if len(b.args) == 1 {
-					wf[strings.TrimSpace(b.whereQuery)]=b.args[0]
+					wf[strings.TrimSpace(b.whereQuery)] = b.args[0]
 				}
 			}
-		} 
-		if len(wf) == 0 {wf=nil}
+		}
+		if len(wf) == 0 {
+			wf = nil
+		}
 		if b.ctx == nil {
 			b.ctx = context.Background()
 		}
-		data,err := mongodriver.Query[map[string]any](b.ctx,b.tableName,b.selected,wf,int64(b.limit),int64(b.page),b.orderBys,b.database)
+		data, err := kmongo.Query[map[string]any](b.ctx, b.tableName, b.selected, wf, int64(b.limit), int64(b.page), b.orderBys, b.database)
 		if err != nil {
-			return nil,err
+			return nil, err
 		}
 		if useCache {
 			cachesAllM.Set(c, data)
 		}
-		return data,nil
-	} 
+		return data, nil
+	}
 
 	if b.selected != "" {
 		b.statement = "select " + b.selected + " from " + b.tableName
@@ -274,37 +277,39 @@ func (b *BuilderM) One() (map[string]any, error) {
 		}
 	}
 	if b.database == "" {
-		b.database=databases[0].Name
+		b.database = databases[0].Name
 	}
-	if _,ok := mongodriver.MMongoDBS.Get(b.database);ok {
+	if _, ok := kmongo.MMongoDBS.Get(b.database); ok {
 		wf := map[string]any{}
-		if b.whereQuery != "" {			
-			b.whereQuery=whereReplacer.Replace(b.whereQuery)
-			if strings.Contains(b.whereQuery,",") {
-				sp := strings.Split(b.whereQuery,",")
+		if b.whereQuery != "" {
+			b.whereQuery = whereReplacer.Replace(b.whereQuery)
+			if strings.Contains(b.whereQuery, ",") {
+				sp := strings.Split(b.whereQuery, ",")
 				if len(b.args) == len(sp) {
-					for i,s := range sp {
-						wf[strings.TrimSpace(s)]=b.args[i]
+					for i, s := range sp {
+						wf[strings.TrimSpace(s)] = b.args[i]
 					}
 				}
 			} else {
 				if len(b.args) == 1 {
-					wf[strings.TrimSpace(b.whereQuery)]=b.args[0]
+					wf[strings.TrimSpace(b.whereQuery)] = b.args[0]
 				}
 			}
-		} 
-		if len(wf) == 0 {wf=nil}
+		}
+		if len(wf) == 0 {
+			wf = nil
+		}
 		if b.ctx == nil {
 			b.ctx = context.Background()
 		}
-		data,err := mongodriver.QueryOne[map[string]any](b.ctx,b.tableName,b.selected,wf,int64(b.limit),int64(b.page),strings.ReplaceAll(b.orderBys,"ORDER BY",""),b.database)
+		data, err := kmongo.QueryOne[map[string]any](b.ctx, b.tableName, b.selected, wf, int64(b.limit), int64(b.page), strings.ReplaceAll(b.orderBys, "ORDER BY", ""), b.database)
 		if err != nil {
-			return nil,err
+			return nil, err
 		}
 		if useCache {
 			cachesOneM.Set(c, data)
 		}
-		return data,nil
+		return data, nil
 	}
 
 	if b.selected != "" && b.selected != "*" {
@@ -367,18 +372,18 @@ func (b *BuilderM) Insert(fields_comma_separated string, fields_values ...any) (
 	}
 	if db.Dialect == MONGO {
 		mmm := map[string]any{}
-		sp := strings.Split(fields_comma_separated,",")
-		for i,s := range sp {
-			mmm[s]=fields_values[i]
+		sp := strings.Split(fields_comma_separated, ",")
+		for i, s := range sp {
+			mmm[s] = fields_values[i]
 		}
 		if b.ctx == nil {
 			b.ctx = context.Background()
 		}
-		err := mongodriver.CreateRow(b.ctx,b.tableName,mmm,b.database)
+		err := kmongo.CreateRow(b.ctx, b.tableName, mmm, b.database)
 		if klog.CheckError(err) {
-			return 0,err
+			return 0, err
 		}
-		return 1,nil
+		return 1, nil
 	}
 
 	split := strings.Split(fields_comma_separated, ",")
@@ -390,7 +395,7 @@ func (b *BuilderM) Insert(fields_comma_separated string, fields_values ...any) (
 		switch db.Dialect {
 		case POSTGRES, SQLITE:
 			placeholdersSlice = append(placeholdersSlice, "$"+strconv.Itoa(i+1))
-		case MYSQL,MARIA,"mariadb":
+		case MYSQL, MARIA, "mariadb":
 			placeholdersSlice = append(placeholdersSlice, "?")
 		default:
 			return 0, errors.New("database is neither sqlite, postgres or mysql")
@@ -418,8 +423,8 @@ func (b *BuilderM) Insert(fields_comma_separated string, fields_values ...any) (
 	}
 	if err != nil {
 		if Debug {
-			klog.Printf("ylstatement: %s\nfields_values: %v \n",statement,fields_values)
-			klog.Printf("rderr:%v\n",err)
+			klog.Printf("ylstatement: %s\nfields_values: %v \n", statement, fields_values)
+			klog.Printf("rderr:%v\n", err)
 		}
 		return affectedRows, err
 	}
@@ -450,35 +455,35 @@ func (b *BuilderM) Set(query string, args ...any) (int, error) {
 	}
 	if db.Dialect == MONGO {
 		if b.ctx == nil {
-			b.ctx=context.Background()
+			b.ctx = context.Background()
 		}
 		wf := map[string]any{}
 		if b.whereQuery != "" {
-			b.whereQuery=whereReplacer.Replace(b.whereQuery)
-			if strings.Contains(b.whereQuery,",") {
-				sp := strings.Split(b.whereQuery,",")
+			b.whereQuery = whereReplacer.Replace(b.whereQuery)
+			if strings.Contains(b.whereQuery, ",") {
+				sp := strings.Split(b.whereQuery, ",")
 				if len(b.args) == len(sp) {
-					for i,s := range sp {
-						wf[strings.TrimSpace(s)]=b.args[i]
+					for i, s := range sp {
+						wf[strings.TrimSpace(s)] = b.args[i]
 					}
 				}
 			} else {
 				if len(b.args) == 1 {
-					wf[strings.TrimSpace(b.whereQuery)]=b.args[0]
+					wf[strings.TrimSpace(b.whereQuery)] = b.args[0]
 				}
 			}
-		} 
+		}
 		newRow := map[string]any{}
-		spp := strings.Split(query,",")
-		for _,s := range spp {
-			seq := strings.Split(s,"=")
-			newRow[seq[0]]=seq[1]
+		spp := strings.Split(query, ",")
+		for _, s := range spp {
+			seq := strings.Split(s, "=")
+			newRow[seq[0]] = seq[1]
 		}
-		err := mongodriver.UpdateRow(b.ctx,b.tableName,wf,newRow)
+		err := kmongo.UpdateRow(b.ctx, b.tableName, wf, newRow)
 		if klog.CheckError(err) {
-			return 0,err
+			return 0, err
 		}
-		return 1,nil
+		return 1, nil
 	}
 	if b.whereQuery == "" {
 		return 0, errors.New("you should use Where before Update")
@@ -535,28 +540,28 @@ func (b *BuilderM) Delete() (int, error) {
 	if db.Dialect == MONGO {
 		wf := map[string]any{}
 		if b.whereQuery != "" {
-			b.whereQuery=whereReplacer.Replace(b.whereQuery)
-			if strings.Contains(b.whereQuery,",") {
-				sp := strings.Split(b.whereQuery,",")
+			b.whereQuery = whereReplacer.Replace(b.whereQuery)
+			if strings.Contains(b.whereQuery, ",") {
+				sp := strings.Split(b.whereQuery, ",")
 				if len(b.args) == len(sp) {
-					for i,s := range sp {
-						wf[strings.TrimSpace(s)]=b.args[i]
+					for i, s := range sp {
+						wf[strings.TrimSpace(s)] = b.args[i]
 					}
 				}
 			} else {
 				if len(b.args) == 1 {
-					wf[strings.TrimSpace(b.whereQuery)]=b.args[0]
+					wf[strings.TrimSpace(b.whereQuery)] = b.args[0]
 				}
 			}
 		}
 		if b.ctx == nil {
 			b.ctx = context.Background()
 		}
-		err := mongodriver.DeleteRow(b.ctx,b.tableName,wf,b.database)
+		err := kmongo.DeleteRow(b.ctx, b.tableName, wf, b.database)
 		if klog.CheckError(err) {
-			return 0,err
+			return 0, err
 		}
-		return 1,nil
+		return 1, nil
 	}
 
 	b.statement = "DELETE FROM " + b.tableName
@@ -608,10 +613,10 @@ func (b *BuilderM) Drop() (int, error) {
 
 	if db.Dialect == MONGO {
 		if b.ctx == nil {
-			b.ctx=context.Background()
+			b.ctx = context.Background()
 		}
-		mongodriver.DropTable(b.ctx,b.tableName,b.database)
-		return 1,nil
+		kmongo.DropTable(b.ctx, b.tableName, b.database)
+		return 1, nil
 	}
 	b.statement = "DROP TABLE " + b.tableName
 	var res sql.Result
@@ -641,7 +646,7 @@ func (b *BuilderM) queryM(statement string, args ...any) ([]map[string]interface
 	adaptPlaceholdersToDialect(&statement, db.Dialect)
 
 	if db.Conn == nil {
-		return nil,errors.New("no connection")
+		return nil, errors.New("no connection")
 	}
 	var rows *sql.Rows
 	if b.ctx != nil {

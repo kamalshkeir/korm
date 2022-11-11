@@ -2,4 +2,5 @@ package mysqldriver
 
 import _ "github.com/go-sql-driver/mysql"
 
-var MYSQL_DRIVER_USED=false
+// MYSQL_DRIVER_USED Used to import the driver only when used
+var MYSQL_DRIVER_USED = false

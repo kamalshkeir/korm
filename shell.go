@@ -188,7 +188,7 @@ func getRow() {
 }
 
 func migratefromfile(path string) error {
-	if !SliceContains([]string{POSTGRES, SQLITE, MYSQL,MARIA}, databases[0].Dialect) {
+	if !SliceContains([]string{POSTGRES, SQLITE, MYSQL, MARIA}, databases[0].Dialect) {
 		fmt.Printf(Red, "database is neither postgres, sqlite or mysql ")
 		return errors.New("database is neither postgres, sqlite or mysql ")
 	}
@@ -253,5 +253,3 @@ func deleteRow() {
 		fmt.Printf(Red, "some of args are empty")
 	}
 }
-
-

@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/kamalshkeir/klog"
-	"github.com/kamalshkeir/korm/drivers/mongodriver"
+	"github.com/kamalshkeir/korm/drivers/kmongo"
 )
 
 var MigrationAutoCheck = true
@@ -39,85 +39,85 @@ func checkUpdatedAtTrigger(dialect, tableName, col, pk string) map[string][]stri
 	return triggers
 }
 
-func AddTrigger(onTable, col, bf_af_UpdateInsertDelete string,ofColumn, stmt string,forEachRow bool,whenEachRow string, dbName ...string) {
+func AddTrigger(onTable, col, bf_af_UpdateInsertDelete string, ofColumn, stmt string, forEachRow bool, whenEachRow string, dbName ...string) {
 	stat := []string{}
 	if len(dbName) == 0 {
 		dbName = append(dbName, databases[0].Name)
 	}
-	if strings.Contains(strings.ToLower(ofColumn),"of") {
-		ofColumn=strings.ReplaceAll(strings.ToLower(ofColumn),"of","")
-	} 
+	if strings.Contains(strings.ToLower(ofColumn), "of") {
+		ofColumn = strings.ReplaceAll(strings.ToLower(ofColumn), "of", "")
+	}
 	var dialect = ""
-	db,err := GetMemoryDatabase(dbName[0])
+	db, err := GetMemoryDatabase(dbName[0])
 	if !klog.CheckError(err) {
-		dialect=db.Dialect
+		dialect = db.Dialect
 	}
 	switch dialect {
-	case "sqlite","sqlite3","":
+	case "sqlite", "sqlite3", "":
 		if ofColumn != "" {
-			ofColumn = " OF "+col
+			ofColumn = " OF " + col
 		}
-		st := "CREATE TRIGGER IF NOT EXISTS "+onTable + "_trig_" + col + " "
-		st += bf_af_UpdateInsertDelete+ofColumn+" ON " + onTable
+		st := "CREATE TRIGGER IF NOT EXISTS " + onTable + "_trig_" + col + " "
+		st += bf_af_UpdateInsertDelete + ofColumn + " ON " + onTable
 		st += " BEGIN " + stmt + ";End;"
 		stat = append(stat, st)
-	case POSTGRES,"coakroach","pg","coakroachdb":
+	case POSTGRES, "coakroach", "pg", "coakroachdb":
 		if ofColumn != "" {
-			ofColumn = " OF "+col
+			ofColumn = " OF " + col
 		}
 		name := onTable + "_trig_" + col
-		st := "CREATE OR REPLACE FUNCTION "+name+"_func() RETURNS trigger AS $$"
+		st := "CREATE OR REPLACE FUNCTION " + name + "_func() RETURNS trigger AS $$"
 		st += " BEGIN " + stmt + ";RETURN NEW;"
 		st += "END;$$ LANGUAGE plpgsql;"
 		stat = append(stat, st)
 		trigCreate := "CREATE OR REPLACE TRIGGER " + name
-		trigCreate += " " + bf_af_UpdateInsertDelete+ofColumn+" ON public." + onTable
-		trigCreate += " FOR EACH ROW EXECUTE PROCEDURE "+name+"_func();"
+		trigCreate += " " + bf_af_UpdateInsertDelete + ofColumn + " ON public." + onTable
+		trigCreate += " FOR EACH ROW EXECUTE PROCEDURE " + name + "_func();"
 		stat = append(stat, trigCreate)
-	case MYSQL,MARIA:
-		stat=append(stat, "DROP TRIGGER "+onTable + "_trig_" + col+";")
-		st := "CREATE TRIGGER "+onTable + "_trig_" + col + " "
-		st += bf_af_UpdateInsertDelete+" ON " + onTable
+	case MYSQL, MARIA:
+		stat = append(stat, "DROP TRIGGER "+onTable+"_trig_"+col+";")
+		st := "CREATE TRIGGER " + onTable + "_trig_" + col + " "
+		st += bf_af_UpdateInsertDelete + " ON " + onTable
 		st += " FOR EACH ROW " + stmt + ";"
 		stat = append(stat, st)
 	default:
-		return 
+		return
 	}
 
 	if Debug {
-		klog.Printf("statement: %s \n",stat)
+		klog.Printf("statement: %s \n", stat)
 	}
-	
-	for _,s := range stat {
-		err := ExecSQL(dbName[0],s)
+
+	for _, s := range stat {
+		err := ExecSQL(dbName[0], s)
 		if err != nil {
-			if !StringContains(err.Error(),"Trigger does not exist") {
-				klog.Printf("rdcould not add trigger %v\n",err)
-				return 
+			if !StringContains(err.Error(), "Trigger does not exist") {
+				klog.Printf("rdcould not add trigger %v\n", err)
+				return
 			}
 		}
 	}
 }
 
-func DropTrigger(onField,tableName string, dbName ...string) {
-	stat := "DROP TRIGGER "+tableName + "_trig_" + onField+";"
+func DropTrigger(onField, tableName string, dbName ...string) {
+	stat := "DROP TRIGGER " + tableName + "_trig_" + onField + ";"
 	if Debug {
-		klog.Printf("yl%s\n",stat)
+		klog.Printf("yl%s\n", stat)
 	}
 	n := databases[0].Name
 	if len(dbName) > 0 {
-		n=dbName[0]
+		n = dbName[0]
 	}
-	err := ExecSQL(n,stat)
+	err := ExecSQL(n, stat)
 	if err != nil {
-		if !StringContains(err.Error(),"Trigger does not exist") {
-			return 
+		if !StringContains(err.Error(), "Trigger does not exist") {
+			return
 		}
-		klog.Printf("rderr:%v\n",err)
+		klog.Printf("rderr:%v\n", err)
 	}
 }
 
-func autoMigrate[T comparable](db *DatabaseEntity, tableName string, execute bool) (string,error) {
+func autoMigrate[T comparable](db *DatabaseEntity, tableName string, execute bool) (string, error) {
 	toReturnstats := []string{}
 	dialect := db.Dialect
 	s := reflect.ValueOf(new(T)).Elem()
@@ -186,7 +186,7 @@ func autoMigrate[T comparable](db *DatabaseEntity, tableName string, execute boo
 			case "Time":
 				handleMigrationTime(mi)
 			default:
-				klog.Printf("%s of type %s not handled\n",fName,ty)
+				klog.Printf("%s of type %s not handled\n", fName, ty)
 			}
 		}
 	}
@@ -230,7 +230,7 @@ func autoMigrate[T comparable](db *DatabaseEntity, tableName string, execute boo
 		})
 	}
 	if Debug {
-		klog.Printf("ylstatement:%s\n",statement)
+		klog.Printf("ylstatement:%s\n", statement)
 	}
 
 	c, cancel := context.WithTimeout(context.TODO(), 3*time.Second)
@@ -238,15 +238,15 @@ func autoMigrate[T comparable](db *DatabaseEntity, tableName string, execute boo
 	if execute {
 		ress, err := db.Conn.ExecContext(c, statement)
 		if err != nil {
-			return "",err
+			return "", err
 		}
 		_, err = ress.RowsAffected()
 		if err != nil {
-			return "",err
+			return "", err
 		}
-	} 
+	}
 	toReturnstats = append(toReturnstats, statement)
-	
+
 	if !strings.HasSuffix(tableName, "_temp") {
 		if len(triggers) > 0 {
 			for _, stats := range triggers {
@@ -258,7 +258,7 @@ func autoMigrate[T comparable](db *DatabaseEntity, tableName string, execute boo
 						err := ExecSQL(db.Name, st)
 						if klog.CheckError(err) {
 							klog.Printfs("rdtrigger updated_at %s: %s\n", tableName, st)
-							return "",err
+							return "", err
 						}
 					}
 					toReturnstats = append(toReturnstats, st)
@@ -268,7 +268,7 @@ func autoMigrate[T comparable](db *DatabaseEntity, tableName string, execute boo
 		statIndexes := ""
 		if len(indexes) > 0 {
 			if len(indexes) > 1 {
-				klog.Printf("%s cannot have more than 1 index\n",mi.fName)
+				klog.Printf("%s cannot have more than 1 index\n", mi.fName)
 			} else {
 				ff := strings.ReplaceAll(indexes[0], "DESC", "")
 				statIndexes = fmt.Sprintf("CREATE INDEX idx_%s_%s ON %s (%s)", tableName, ff, tableName, indexes[0])
@@ -277,7 +277,7 @@ func autoMigrate[T comparable](db *DatabaseEntity, tableName string, execute boo
 		mstatIndexes := ""
 		if len(*mi.mindexes) > 0 {
 			if len(*mi.mindexes) > 1 {
-				klog.Printf("%s cannot have more than 1 multiple indexes\n",mi.fName)
+				klog.Printf("%s cannot have more than 1 multiple indexes\n", mi.fName)
 			} else {
 				for k, v := range *mi.mindexes {
 					ff := strings.ReplaceAll(k, "DESC", "")
@@ -289,7 +289,7 @@ func autoMigrate[T comparable](db *DatabaseEntity, tableName string, execute boo
 		for col, tagValue := range *mi.uindexes {
 			sp := strings.Split(tagValue, ",")
 			for i := range sp {
-				if sp[i][0] == 'I' && db.Dialect != MYSQL && db.Dialect != MARIA{
+				if sp[i][0] == 'I' && db.Dialect != MYSQL && db.Dialect != MARIA {
 					sp[i] = "LOWER(" + sp[i][1:] + ")"
 				}
 			}
@@ -298,16 +298,16 @@ func autoMigrate[T comparable](db *DatabaseEntity, tableName string, execute boo
 		}
 		if statIndexes != "" {
 			if Debug {
-				klog.Printfs("%s\n",statIndexes)
+				klog.Printfs("%s\n", statIndexes)
 			}
 			if execute {
 				_, err := db.Conn.Exec(statIndexes)
 				if klog.CheckError(err) {
 					klog.Printfs("rdindexes: %s\n", statIndexes)
-					return "",err
+					return "", err
 				}
 			}
-			
+
 			toReturnstats = append(toReturnstats, statIndexes)
 		}
 		if mstatIndexes != "" {
@@ -318,10 +318,10 @@ func autoMigrate[T comparable](db *DatabaseEntity, tableName string, execute boo
 				_, err := db.Conn.Exec(mstatIndexes)
 				if klog.CheckError(err) {
 					klog.Printfs("rdmindexes: %s\n", mstatIndexes)
-					return "",err
+					return "", err
 				}
 			}
-			
+
 			toReturnstats = append(toReturnstats, mstatIndexes)
 		}
 		if len(ustatIndexes) > 0 {
@@ -333,9 +333,9 @@ func autoMigrate[T comparable](db *DatabaseEntity, tableName string, execute boo
 					_, err := db.Conn.Exec(ustatIndexes[i])
 					if klog.CheckError(err) {
 						klog.Printfs("rduindexes: %s\n", ustatIndexes)
-						return "",err
+						return "", err
 					}
-				}		
+				}
 				toReturnstats = append(toReturnstats, ustatIndexes[i])
 			}
 		}
@@ -343,8 +343,8 @@ func autoMigrate[T comparable](db *DatabaseEntity, tableName string, execute boo
 	if execute {
 		klog.Printfs("gr %s migrated successfully, restart the server\n", tableName)
 	}
-	toReturnQuery:=strings.Join(toReturnstats,";")
-	return toReturnQuery,nil
+	toReturnQuery := strings.Join(toReturnstats, ";")
+	return toReturnQuery, nil
 }
 
 func AutoMigrate[T comparable](tableName string, dbName ...string) error {
@@ -369,7 +369,7 @@ func AutoMigrate[T comparable](tableName string, dbName ...string) error {
 	} else {
 		return errors.New("cannot migrate more than one database at the same time")
 	}
-	
+
 	tbFoundDB := false
 	tables := GetAllTables(dbname)
 	for _, t := range tables {
@@ -377,22 +377,22 @@ func AutoMigrate[T comparable](tableName string, dbName ...string) error {
 			tbFoundDB = true
 		}
 	}
-	if db.Dialect == MONGO{
+	if db.Dialect == MONGO {
 		if !tbFoundDB {
-			mongodriver.CreateRow(context.Background(),tableName,new(T))
+			kmongo.CreateRow(context.Background(), tableName, new(T))
 		}
 		return nil
 	}
-	
+
 	tbFoundLocal := false
 	if len(db.Tables) == 0 {
-		if tbFoundDB && MigrationAutoCheck{
+		if tbFoundDB && MigrationAutoCheck {
 			// found db not local
 			LinkModel[T](tableName, db)
 			return nil
 		} else {
 			// not db and not local
-			_,err := autoMigrate[T](db, tableName,true)
+			_, err := autoMigrate[T](db, tableName, true)
 			if klog.CheckError(err) {
 				return err
 			}
@@ -406,18 +406,17 @@ func AutoMigrate[T comparable](tableName string, dbName ...string) error {
 			}
 		}
 	}
-	
-	
+
 	if MigrationAutoCheck && (tbFoundDB || tbFoundLocal) {
 		LinkModel[T](tableName, db)
 		return nil
 	} else {
-		_,err := autoMigrate[T](db, tableName,true)
+		_, err := autoMigrate[T](db, tableName, true)
 		if klog.CheckError(err) {
 			return err
 		}
 	}
-	
+
 	return nil
 }
 
@@ -450,7 +449,7 @@ func handleMigrationInt(mi *migrationInput) {
 					autoinc = "INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT"
 				case POSTGRES:
 					autoinc = "SERIAL NOT NULL PRIMARY KEY"
-				case MYSQL,MARIA:
+				case MYSQL, MARIA:
 					autoinc = "INTEGER NOT NULL PRIMARY KEY AUTO_INCREMENT"
 				default:
 					klog.Printf("dialect can be sqlite, postgres or mysql only, not %s\n", mi.dialect)
@@ -466,7 +465,7 @@ func handleMigrationInt(mi *migrationInput) {
 			case "default":
 				defaultt = " DEFAULT 0"
 			default:
-				klog.Printf("%s not handled for migration int\n",tag)
+				klog.Printf("%s not handled for migration int\n", tag)
 			}
 		} else {
 			sp := strings.Split(tag, ":")
@@ -515,7 +514,7 @@ func handleMigrationInt(mi *migrationInput) {
 					switch mi.dialect {
 					case SQLITE, "":
 						sp[1] = strings.Replace(strings.ToLower(sp[1]), "len", "length", -1)
-					case POSTGRES, MYSQL,MARIA:
+					case POSTGRES, MYSQL, MARIA:
 						sp[1] = strings.Replace(strings.ToLower(sp[1]), "len", "char_length", -1)
 					default:
 						klog.Printf("check not handled for dialect:%s\n", mi.dialect)
@@ -547,7 +546,7 @@ func handleMigrationInt(mi *migrationInput) {
 					(*mi.uindexes)[mi.fName] = sp[1]
 				}
 			default:
-				klog.Printf("MIGRATION INT: not handled %s for %s , field: %s\n",sp[0],tag,mi.fName)
+				klog.Printf("MIGRATION INT: not handled %s for %s , field: %s\n", sp[0], tag, mi.fName)
 			}
 		}
 	}
@@ -583,7 +582,7 @@ func handleMigrationInt(mi *migrationInput) {
 
 func handleMigrationBool(mi *migrationInput) {
 	defaultt := ""
-	
+
 	tags := (*mi.fTags)[mi.fName]
 	if len(tags) == 1 && tags[0] == "-" {
 		(*mi.res)[mi.fName] = ""
@@ -657,7 +656,7 @@ func handleMigrationBool(mi *migrationInput) {
 					klog.Printf("it should be fk:users.id:cascade/donothing\n")
 				}
 			default:
-				klog.Printf("%s not handled for %s migration bool\n",sp[0], mi.fName)
+				klog.Printf("%s not handled for %s migration bool\n", sp[0], mi.fName)
 			}
 		} else {
 			switch tag {
@@ -668,12 +667,12 @@ func handleMigrationBool(mi *migrationInput) {
 			case "default":
 				defaultt = " DEFAULT 0"
 			default:
-				klog.Printf("%s not handled in Migration Bool\n",tag)
+				klog.Printf("%s not handled in Migration Bool\n", tag)
 			}
 		}
 	}
 	if defaultt != "" {
-		(*mi.res)[mi.fName] = "INTEGER NOT NULL"+defaultt+" CHECK (" + mi.fName + " IN (0, 1))"
+		(*mi.res)[mi.fName] = "INTEGER NOT NULL" + defaultt + " CHECK (" + mi.fName + " IN (0, 1))"
 	}
 }
 
@@ -701,7 +700,7 @@ func handleMigrationString(mi *migrationInput) {
 				unique = " UNIQUE"
 				s := ""
 				if mi.dialect != "mysql" {
-					s="I"
+					s = "I"
 				}
 				(*mi.uindexes)[mi.fName] = s + mi.fName
 			case "default":
@@ -784,7 +783,7 @@ func handleMigrationString(mi *migrationInput) {
 					switch mi.dialect {
 					case SQLITE, "":
 						sp[1] = strings.Replace(strings.ToLower(sp[1]), "len", "length", -1)
-					case POSTGRES, MYSQL,MARIA:
+					case POSTGRES, MYSQL, MARIA:
 						sp[1] = strings.Replace(strings.ToLower(sp[1]), "len", "char_length", -1)
 					default:
 						klog.Printf("check not handled for dialect:%s\n", mi.dialect)
@@ -792,7 +791,7 @@ func handleMigrationString(mi *migrationInput) {
 				}
 				checks = append(checks, strings.TrimSpace(sp[1]))
 			default:
-				klog.Printf("MIGRATION STRING: not handled %s for %s , field: %s \n",sp[0],tag,mi.fName)
+				klog.Printf("MIGRATION STRING: not handled %s for %s , field: %s \n", sp[0], tag, mi.fName)
 			}
 		}
 	}
@@ -846,7 +845,7 @@ func handleMigrationFloat(mi *migrationInput) {
 			case "default":
 				mtags["default"] = " DEFAULT 0.00"
 			default:
-				klog.Printf("%s not handled for migration float\n",tag)
+				klog.Printf("%s not handled for migration float\n", tag)
 			}
 		} else {
 			sp := strings.Split(tag, ":")
@@ -920,7 +919,7 @@ func handleMigrationFloat(mi *migrationInput) {
 					switch mi.dialect {
 					case SQLITE, "":
 						sp[1] = strings.Replace(strings.ToLower(sp[1]), "len", "length", -1)
-					case POSTGRES, MYSQL,MARIA:
+					case POSTGRES, MYSQL, MARIA:
 						sp[1] = strings.Replace(strings.ToLower(sp[1]), "len", "char_length", -1)
 					default:
 						klog.Printf("check not handled for dialect: %s \n", mi.dialect)
@@ -932,7 +931,7 @@ func handleMigrationFloat(mi *migrationInput) {
 					mtags["check"] = strings.TrimSpace(sp[1])
 				}
 			default:
-				klog.Printf("MIGRATION FLOAT: not handled %s for %s , field: %s \n",sp[0],tag,mi.fName)
+				klog.Printf("MIGRATION FLOAT: not handled %s for %s , field: %s \n", sp[0], tag, mi.fName)
 			}
 		}
 
@@ -954,7 +953,7 @@ func handleMigrationFloat(mi *migrationInput) {
 			case "check":
 				(*mi.res)[mi.fName] += " CHECK(" + v + ")"
 			default:
-				klog.Printf("case %s not handled\n",k)
+				klog.Printf("case %s not handled\n", k)
 			}
 		}
 	}
@@ -989,7 +988,7 @@ func handleMigrationTime(mi *migrationInput) {
 					defaultt = "TEXT NOT NULL DEFAULT (datetime('now','localtime'))"
 				case POSTGRES:
 					defaultt = "TIMESTAMP NOT NULL DEFAULT (now())"
-				case MYSQL,MARIA:
+				case MYSQL, MARIA:
 					defaultt = "TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
 				default:
 					klog.Printf("not handled Time for %s %s \n", mi.fName, mi.fType)
@@ -999,7 +998,7 @@ func handleMigrationTime(mi *migrationInput) {
 			case "-index", "index-":
 				*mi.indexes = append(*mi.indexes, mi.fName+" DESC")
 			default:
-				klog.Printf("%s tag not handled for time\n",tag)
+				klog.Printf("%s tag not handled for time\n", tag)
 			}
 		} else {
 			sp := strings.Split(tag, ":")
@@ -1045,7 +1044,7 @@ func handleMigrationTime(mi *migrationInput) {
 					switch mi.dialect {
 					case SQLITE, "":
 						sp[1] = strings.Replace(strings.ToLower(sp[1]), "len", "length", -1)
-					case POSTGRES ,MARIA:
+					case POSTGRES, MARIA:
 						sp[1] = strings.Replace(strings.ToLower(sp[1]), "len", "char_length", -1)
 					default:
 						klog.Printf("check not handled for dialect:%s\n", mi.dialect)
@@ -1069,7 +1068,7 @@ func handleMigrationTime(mi *migrationInput) {
 					(*mi.mindexes)[mi.fName] = sp[1]
 				}
 			default:
-				klog.Printf("case %s not handled for time\n",sp[0])
+				klog.Printf("case %s not handled for time\n", sp[0])
 			}
 		}
 	}
