@@ -2,4 +2,5 @@ package sqlitedriver
 
 import _ "modernc.org/sqlite"
 
-var SQLITE_DRIVER_USED=false
+// SQLITE_DRIVER_USED Used to import the driver only when used
+var SQLITE_DRIVER_USED = false

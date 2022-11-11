@@ -1,6 +1,7 @@
 package korm
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -12,7 +13,8 @@ import (
 	"github.com/kamalshkeir/klog"
 	"github.com/kamalshkeir/kmap"
 	"github.com/kamalshkeir/kmux/ws"
-	"github.com/kamalshkeir/korm/drivers/mongodriver"
+	"github.com/kamalshkeir/korm/drivers/kmongo"
+	mongo1 "github.com/kamalshkeir/korm/drivers/kmongo"
 	"github.com/kamalshkeir/korm/drivers/mysqldriver"
 	"github.com/kamalshkeir/korm/drivers/pgdriver"
 	"github.com/kamalshkeir/korm/drivers/sqlitedriver"
@@ -21,17 +23,21 @@ import (
 )
 
 var (
-	Debug             = false
-	FlushCacheEvery   = 30*time.Minute
+	// Debug when true show extra useful logs for queries executed for migrations and queries statements
+	Debug = false
+	// FlushCacheEvery execute korm.FlushCache() every 30 min by default, you should not worry about it, but useful that you can change it
+	FlushCacheEvery = 30 * time.Minute
+	// DefaultDB keep tracking of the first database connected
+	DefaultDB         = ""
 	useCache          = false
 	databases         = []DatabaseEntity{}
 	mModelTablename   = map[any]string{}
 	cacheGetAllTables = kmap.New[string, []string](false)
 	cachesOneM        = kmap.New[dbCache, map[string]any](false)
 	cachesAllM        = kmap.New[dbCache, []map[string]any](false)
-	DefaultDB         = ""
-	onceDone          = false
-	cachebus          ksbus.Bus
+
+	onceDone = false
+	cachebus ksbus.Bus
 )
 
 const (
@@ -62,6 +68,7 @@ type DatabaseEntity struct {
 	Tables    []TableEntity
 }
 
+// NewDatabaseFromDSN the generic way to connect to all handled databases, mongo included
 func NewDatabaseFromDSN(dbType, dbName string, dbDSN ...string) error {
 	var dsn string
 	if strings.HasPrefix(dbType, "cockroach") {
@@ -90,7 +97,7 @@ func NewDatabaseFromDSN(dbType, dbName string, dbDSN ...string) error {
 			dsn = split[0] + "@" + "tcp(" + split[1] + ")/" + dbName
 		}
 	case MARIA, "mariadb":
-		dbType=MARIA
+		dbType = MARIA
 		if len(dbDSN) == 0 {
 			return errors.New("dbDSN for mysql cannot be empty")
 		}
@@ -104,7 +111,7 @@ func NewDatabaseFromDSN(dbType, dbName string, dbDSN ...string) error {
 			dsn = split[0] + "@" + "tcp(" + split[1] + ")/" + dbName
 		}
 	case SQLITE, "":
-		dbType=SQLITE
+		dbType = SQLITE
 		if dsn == "" {
 			dsn = "db.sqlite"
 		}
@@ -122,7 +129,7 @@ func NewDatabaseFromDSN(dbType, dbName string, dbDSN ...string) error {
 			}
 		}
 		if !dbFound {
-			mc, err := mongodriver.NewMongoFromDSN(dbName, dbDSN...)
+			mc, err := mongo1.NewMongoFromDSN(dbName, dbDSN...)
 			if !klog.CheckError(err) {
 				databases = append(databases, DatabaseEntity{
 					Name:      dbName,
@@ -225,6 +232,7 @@ func NewDatabaseFromDSN(dbType, dbName string, dbDSN ...string) error {
 	return nil
 }
 
+// NewSQLDatabaseFromConnection register a new database from connection, without the need for a dsn, if you are already connected to it
 func NewSQLDatabaseFromConnection(dbType, dbName string, conn *sql.DB) error {
 	if strings.HasPrefix(dbType, "cockroach") {
 		dbType = POSTGRES
@@ -286,6 +294,12 @@ func NewSQLDatabaseFromConnection(dbType, dbName string, conn *sql.DB) error {
 	return nil
 }
 
+// NewMongoDatabaseFromConnection register a new *mongo.Client
+func NewMongoDatabaseFromConnection(dbName string, dbConn *mongo.Client) (*mongo.Database, error) {
+	return mongo1.NewMongoFromConnection(dbName, dbConn)
+}
+
+// NewBusServerKORM return new ksbus.Server that can be Run, RunTLS, RunAutoTLS
 func NewBusServerKORM() *ksbus.Server {
 	srv := ksbus.NewServer()
 	cachebus = *srv.Bus
@@ -300,43 +314,59 @@ func NewBusServerKORM() *ksbus.Server {
 	return srv
 }
 
+// BeforeServersData handle connections and data received from another server
 func BeforeServersData(fn func(data any, conn *ws.Conn)) {
-	ksbus.BeforeServersData=fn
+	ksbus.BeforeServersData = fn
 }
 
+// BeforeDataWS handle connections and data received before upgrading websockets, useful to handle authentication
 func BeforeDataWS(fn func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) bool) {
-	ksbus.BeforeDataWS=fn
+	ksbus.BeforeDataWS = fn
 }
 
+// FlushCache send msg to the cache system to Flush all the cache, safe to use in concurrent mode, and safe to use in general, it's done every 30 minutes(korm.FlushCacheEvery) and on update , create, delete , drop
 func FlushCache() {
 	go cachebus.Publish(CACHE_TOPIC, map[string]any{
 		"type": "clean",
 	})
 }
 
+// DisableCheck disable struct check for migrations on execution
 func DisableCheck() {
 	MigrationAutoCheck = false
 }
 
+// DisableCache disable the cache system, if you are having problem with it, you can korm.FlushCache on command too
 func DisableCache() {
 	useCache = false
 }
 
+// GetConnection common way to get a connection,returned as any with isSQL bool, so you can use it for both *sql.DB or *mongo.Database
+func GetConnection(dbName ...string) (any, bool) {
+	var db *DatabaseEntity
+	var err error
+	if len(dbName) > 0 {
+		db, err = GetMemoryDatabase(dbName[0])
+	} else {
+		db, err = GetMemoryDatabase(databases[0].Name)
+	}
+	if klog.CheckError(err) {
+		return nil, false
+	}
+	if db.Conn != nil {
+		return db.Conn, true
+	}
+	return db.MongoConn, false
+}
+
 // GetSQLConnection return default connection (if dbName not specified or empty or "default"),  else it return the specified one
 func GetSQLConnection(dbName ...string) *sql.DB {
-	if len(dbName) > 0 {
-		db, err := GetMemoryDatabase(dbName[0])
-		if klog.CheckError(err) {
-			return nil
-		}
-		return db.Conn
-	} else {
-		db, err := GetMemoryDatabase(databases[0].Name)
-		if klog.CheckError(err) {
-			return nil
-		}
-		return db.Conn
+	conn, isSQL := GetConnection(dbName...)
+	if isSQL {
+		return conn.(*sql.DB)
 	}
+	klog.Printf("rd%s is not SQL database\n", dbName[0])
+	return nil
 }
 
 // GetMONGOConnection return default connection (if dbName not specified or empty or "default"),  else it return the specified one
@@ -354,7 +384,7 @@ func GetMONGOConnection(dbName ...string) *mongo.Database {
 	}
 	conn = db.MongoConn
 	if conn == nil {
-		if v, ok := mongodriver.MMongoDBS.Get(name); ok {
+		if v, ok := mongo1.MMongoDBS.Get(name); ok {
 			return v
 		} else {
 			return nil
@@ -363,10 +393,12 @@ func GetMONGOConnection(dbName ...string) *mongo.Database {
 	return conn
 }
 
-func GetMONGOClient(dbName ...string) *mongo.Client {
-	return mongodriver.GetClient()
+// GetMONGOClient return the mongo client if any, you should check if the client not nil
+func GetMONGOClient() *mongo.Client {
+	return mongo1.GetClient()
 }
 
+// GetAllTables get all tables for the optional dbName given, otherwise, if not args, it will return tables of the first connected database
 func GetAllTables(dbName ...string) []string {
 	var name string
 	if len(dbName) == 0 {
@@ -380,7 +412,7 @@ func GetAllTables(dbName ...string) []string {
 		}
 	}
 	if GetMONGOConnection(dbName...) != nil {
-		tables := mongodriver.GetAllTables(dbName...)
+		tables := mongo1.GetAllTables(dbName...)
 		if useCache && len(tables) > 0 {
 			cacheGetAllTables.Set(name, tables)
 		}
@@ -460,6 +492,7 @@ func GetAllTables(dbName ...string) []string {
 	return tables
 }
 
+// GetAllColumnsTypes get columns and types from the database
 func GetAllColumnsTypes(table string, dbName ...string) map[string]string {
 	dName := databases[0].Name
 	if len(dbName) > 0 {
@@ -467,7 +500,7 @@ func GetAllColumnsTypes(table string, dbName ...string) map[string]string {
 	}
 
 	if GetMONGOConnection(dbName...) != nil {
-		cols := mongodriver.GetAllColumns(table, dbName...)
+		cols := mongo1.GetAllColumns(table, dbName...)
 		if len(cols) > 0 {
 			return cols
 		}
@@ -536,6 +569,7 @@ func GetAllColumnsTypes(table string, dbName ...string) map[string]string {
 	return columns
 }
 
+// GetMemoryTable get a table from memory for specified or first connected db
 func GetMemoryTable(tbName string, dbName ...string) (TableEntity, error) {
 	dName := databases[0].Name
 	if len(dbName) > 0 {
@@ -553,6 +587,7 @@ func GetMemoryTable(tbName string, dbName ...string) (TableEntity, error) {
 	return TableEntity{}, errors.New("nothing found")
 }
 
+// GetMemoryTable get all tables from memory for specified or first connected db
 func GetMemoryTables(dbName ...string) ([]TableEntity, error) {
 	dName := databases[0].Name
 	if len(dbName) > 0 {
@@ -565,6 +600,7 @@ func GetMemoryTables(dbName ...string) ([]TableEntity, error) {
 	return db.Tables, nil
 }
 
+// GetMemoryDatabases get all databases from memory
 func GetMemoryDatabases() []DatabaseEntity {
 	return databases
 }
@@ -589,5 +625,52 @@ func GetMemoryDatabase(dbName string) (*DatabaseEntity, error) {
 			}
 		}
 		return nil, errors.New(dbName + "database not found")
+	}
+}
+
+// ShutdownDatabases shutdown many database, and detect if sql and mongo
+func ShutdownDatabases(databasesName ...string) error {
+	if len(databasesName) > 0 {
+		for _, db := range databases {
+			if SliceContains(databasesName, db.Name) {
+				if err := db.Conn.Close(); err != nil {
+					return err
+				}
+			}
+		}
+		var newErr error
+		if kmongo.IsUsed {
+			kmongo.MMongoClients.Range(func(name string, cl *mongo.Client) {
+				if SliceContains(databasesName, name) {
+					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+					defer cancel()
+					err := cl.Disconnect(ctx)
+					if err != nil {
+						newErr = err
+					}
+				}
+			})
+		}
+		return newErr
+	} else {
+		for i := range databases {
+			if err := databases[i].Conn.Close(); err != nil {
+				return err
+			}
+		}
+		var newErr error
+		if kmongo.IsUsed {
+			kmongo.MMongoClients.Range(func(name string, cl *mongo.Client) {
+				if SliceContains(databasesName, name) {
+					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+					defer cancel()
+					err := cl.Disconnect(ctx)
+					if err != nil {
+						newErr = err
+					}
+				}
+			})
+		}
+		return newErr
 	}
 }

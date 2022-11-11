@@ -25,7 +25,7 @@
 ---
 ### Let [numbers](#benchmarks) speak for themselves
 ## KORM is an Elegant and dead easy to use [ORM](#api-working-with-sql-and-mongo) using generics and network bus, that can handle sql and mongo dbs. 
-## It is Composable, you can use it as ORM with internal bus only , or add the Server Bus to it when you want to scale and synchronise your data between multiple KORM, you have full control on the data came in and go out, also the Bus come with built-in , you can check the bus via this [link](https://github.com/kamalshkeir/ksbus)
+## It is Composable, you can use it as ORM with internal bus only , or add the Server Bus to it when you want to scale and synchronise your data between multiple KORM, you have full control on the data came in and go out, you can check the [NetworkBus](https://github.com/kamalshkeir/ksbus)
 
 
 #### It come with :
@@ -66,6 +66,8 @@ err := korm.NewDatabaseFromDSN(korm.SQLITE, "db")
 err := korm.NewDatabaseFromDSN(korm.POSTGRES,"dbName", "localhost:5432")
 // mysql
 err := korm.NewDatabaseFromDSN(korm.MYSQL,"dbName","localhost:3306")
+
+korm.ShutdownDatabases(databasesName ...string) error
 ...
 ...
 ```
@@ -130,12 +132,11 @@ all, _ := korm.Model[FirstTable]()
 ```go
 func NewDatabaseFromDSN(dbType, dbName string, dbDSN ...string) error
 func NewSQLDatabaseFromConnection(dbType, dbName string, conn *sql.DB) error
+func NewMongoDatabaseFromConnection(dbName string, dbConn *mongo.Client) (*mongo.Database, error)
 func NewBusServerKORM() *ksbus.Server
 func BeforeServersData(fn func(data any, conn *ws.Conn))
 func BeforeDataWS(fn func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) bool)
-func FlushCache()
-func DisableCheck()
-func DisableCache()
+func GetConnection(dbName ...string) (any, bool)
 func GetSQLConnection(dbName ...string) *sql.DB
 func GetMONGOConnection(dbName ...string) *mongo.Database
 func GetMONGOClient(dbName ...string) *mongo.Client
@@ -145,6 +146,10 @@ func GetMemoryTable(tbName string, dbName ...string) (TableEntity, error)
 func GetMemoryTables(dbName ...string) ([]TableEntity, error)
 func GetMemoryDatabases() []DatabaseEntity
 func GetMemoryDatabase(dbName string) (*DatabaseEntity, error)
+func ShutdownDatabases(databasesName ...string) error
+func FlushCache()
+func DisableCheck()
+func DisableCache()
 ```
 
 #### Builder `map[string]any`:
