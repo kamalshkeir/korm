@@ -1003,24 +1003,24 @@ func handleCache(data map[string]any) {
 			go func() {
 				cachesAllM.Range(func(key dbCache, value []map[string]any) {
 					if key.table == v && key.database == dbName {
-						cachesAllM.Delete(key)
+						go cachesAllM.Delete(key)
 					}
 				})
 				cachesAllS.Range(func(key dbCache, value any) {
 					if key.table == v && key.database == dbName {
-						cachesAllS.Delete(key)
+						go cachesAllS.Delete(key)
 					}
 				})
 				cachesOneM.Range(func(key dbCache, value map[string]any) {
 					if key.table == v && key.database == dbName {
-						cachesOneM.Delete(key)
+						go cachesOneM.Delete(key)
 					}
 				})
 				cachesOneS.Range(func(key dbCache, value any) {
 					if key.table == v && key.database == dbName {
-						cachesOneS.Delete(key)
+						go cachesOneS.Delete(key)
 					}
-				})	
+				})
 			}()			
 		} else {
 			go func() {

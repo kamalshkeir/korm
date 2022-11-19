@@ -11,7 +11,6 @@ import (
 	"github.com/kamalshkeir/klog"
 )
 
-
 type BuilderM struct {
 	debug      bool
 	limit      int
@@ -143,6 +142,7 @@ func (b *BuilderM) All() ([]map[string]any, error) {
 	if b.tableName == "" {
 		return nil, errors.New("unable to find table, try db.Table before")
 	}
+
 	c := dbCache{
 		database:   b.database,
 		table:      b.tableName,
@@ -161,6 +161,7 @@ func (b *BuilderM) All() ([]map[string]any, error) {
 			return v, nil
 		}
 	}
+
 	if b.database == "" {
 		b.database = databases[0].Name
 	}
@@ -197,12 +198,10 @@ func (b *BuilderM) All() ([]map[string]any, error) {
 		klog.Printf("statement:%s\n", b.statement)
 		klog.Printf("args:%v\n", b.args)
 	}
-
 	models, err := b.queryM(b.statement, b.args...)
 	if err != nil {
 		return nil, err
 	}
-
 	if useCache {
 		cachesAllM.Set(c, models)
 	}
@@ -591,7 +590,7 @@ func Query(dbName string, statement string, args ...any) ([]map[string]interface
 }
 
 func ExecSQL(dbName, query string, args ...any) error {
-	conn,ok := GetConnection(dbName)
+	conn, ok := GetConnection(dbName)
 	if !ok {
 		return errors.New("no connection found")
 	}
