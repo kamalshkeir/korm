@@ -84,10 +84,7 @@ func InitShell() bool {
 			for _, db := range databases {
 				fmt.Printf(Blue, `  - `+db.Name)
 			}
-			dbName, err := kinput.String(kinput.Blue, "Enter Database Name to use: ")
-			if klog.CheckError(err) {
-				return true
-			}
+			dbName := kinput.Input(kinput.Blue, "Enter Database Name to use: ")
 			if dbName == "" {
 				return true
 			}
@@ -159,17 +156,13 @@ func InitShell() bool {
 }
 
 func getAll() {
-	tableName, err := kinput.String(kinput.Blue, "Enter a table name: ")
+	tableName := kinput.Input(kinput.Blue, "Enter a table name: ")
+	data, err := Table(tableName).Database(usedDB).All()
 	if err == nil {
-		data, err := Table(tableName).Database(usedDB).All()
-		if err == nil {
-			d, _ := json.MarshalIndent(data, "", "    ")
-			fmt.Printf(Green, string(d))
-		} else {
-			fmt.Printf(Red, err.Error())
-		}
+		d, _ := json.MarshalIndent(data, "", "    ")
+		fmt.Printf(Green, string(d))
 	} else {
-		fmt.Printf(Red, "table name invalid")
+		fmt.Printf(Red, err.Error())
 	}
 }
 
