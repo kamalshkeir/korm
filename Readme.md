@@ -375,6 +375,7 @@ BenchmarkGetAllS_GORM-4            10000            106229 ns/op            5612
 BenchmarkGetAllM_GORM-4             3036           5820141 ns/op         2094855 B/op      23046 allocs/op
 BenchmarkGetRowS_GORM-4            10000            101521 ns/op            5940 B/op        133 allocs/op
 BenchmarkGetRowM_GORM-4            10000            103402 ns/op            6392 B/op        165 allocs/op
+
 BenchmarkGetAllS-4               3023593               385.7 ns/op           240 B/op          2 allocs/op
 BenchmarkGetAllM-4               3767484               325.2 ns/op           240 B/op          2 allocs/op
 BenchmarkGetRowS-4               2522994               480.2 ns/op           260 B/op          4 allocs/op
@@ -387,13 +388,13 @@ BenchmarkGetAllS_GORM-4            12949             91299 ns/op            4171
 BenchmarkGetAllM_GORM-4             3162           6063702 ns/op         2181614 B/op      23993 allocs/op
 BenchmarkGetRowS_GORM-4            11848             95822 ns/op            5908 B/op        133 allocs/op
 BenchmarkGetRowM_GORM-4            10000            103733 ns/op            6360 B/op        165 allocs/op
+
 BenchmarkGetAllS-4               2982590               393.1 ns/op           240 B/op          2 allocs/op
 BenchmarkGetAllM-4               3454128               334.3 ns/op           240 B/op          2 allocs/op
 BenchmarkGetRowS-4               2406265               495.2 ns/op           260 B/op          4 allocs/op
 BenchmarkGetRowM-4               2757932               437.2 ns/op           260 B/op          4 allocs/op
 BenchmarkGetAllTables-4         51738410                22.68 ns/op            0 B/op          0 allocs/op
 BenchmarkGetAllColumns-4        24481651                46.93 ns/op            0 B/op          0 allocs/op
-
 ////////////////////////////////////////////    MYSQL       //////////////////////////////////////////////
 BenchmarkGetAllS-4               2933072               414.5 ns/op           208 B/op          2 allocs/op
 BenchmarkGetAllM-4               6704588               180.4 ns/op            16 B/op          1 allocs/op
@@ -412,43 +413,70 @@ BenchmarkGetAllTables-4         51621339                23.52 ns/op            0
 
 
 
+package benchmarks
+
+import (
+	"testing"
+
+	"github.com/kamalshkeir/klog"
+	"github.com/kamalshkeir/korm"
+	"github.com/kamalshkeir/sqlitedriver"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+)
+
 type TestTable struct {
 	Id      uint   `korm:"pk"`
 	Content string `korm:"size:50"`
 }
 
-type TestTable struct {
-    gorm.Model
-	Content string 
+type TestTableGorm struct {
+	ID      uint `gorm:"primarykey"`
+	Content string
 }
 
-gormDB, err = gorm.Open(sqlite.Open("bench.sqlite"), &gorm.Config{
-    SkipDefaultTransaction: true,
-})
-klog.CheckError(err)
-err = gormDB.AutoMigrate(&TestTable{})
-err = gormDB.Create(&TestTable{
-    Content: "test",
-}).Error
-klog.CheckError(err)
+var gormDB *gorm.DB
 
-_ = korm.NewDatabaseFromDSN(korm.SQLITE,"bench")
-// migrate table test_table from struct TestTable
-err := korm.AutoMigrate[TestTable]("test_table")
-if klog.CheckError(err){
-	return
-}
-t, _ := korm.Table("test_table").All()
-if len(t) == 0 {
-	_,err := korm.Model[TestTable]().Insert(&TestTable{
-		Content: "test",
+func init() {
+	var err error
+	sqlitedriver.Use()
+	gormDB, err = gorm.Open(sqlite.Open("benchgorm.sqlite"), &gorm.Config{
+		SkipDefaultTransaction: true,
 	})
-	klog.CheckError(err)
+	if klog.CheckError(err) {
+		return
+	}
+	err = gormDB.AutoMigrate(&TestTableGorm{})
+	if klog.CheckError(err) {
+		return
+	}
+	dest := []TestTableGorm{}
+	err = gormDB.Find(&dest,&TestTableGorm{}).Error
+	if err != nil || len(dest) == 0 {
+		err := gormDB.Create(&TestTableGorm{
+			Content: "test",
+		}).Error
+		if klog.CheckError(err) {
+			return
+		}
+	}
+	_ = korm.New(korm.SQLITE, "bench")
+	// migrate table test_table from struct TestTable
+	err = korm.AutoMigrate[TestTable]("test_table")
+	if klog.CheckError(err) {
+		return
+	}
+	t, _ := korm.Table("test_table").All()
+	if len(t) == 0 {
+		_, err := korm.Model[TestTable]().Insert(&TestTable{
+			Content: "test",
+		})
+		klog.CheckError(err)
+	}
 }
-
 
 func BenchmarkGetAllS_GORM(b *testing.B) {
-	a := []TestTable{}
+	a := []TestTableGorm{}
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -459,13 +487,12 @@ func BenchmarkGetAllS_GORM(b *testing.B) {
 	}
 }
 
-
 func BenchmarkGetAllM_GORM(b *testing.B) {
 	a := []map[string]any{}
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		err := gormDB.Find(&TestTable{}).Scan(&a).Error
+		err := gormDB.Find(&TestTableGorm{}).Scan(&a).Error
 		if err != nil {
 			b.Error("error BenchmarkGetAllM_GORM:", err)
 		}
@@ -473,12 +500,12 @@ func BenchmarkGetAllM_GORM(b *testing.B) {
 }
 
 func BenchmarkGetRowS_GORM(b *testing.B) {
-	u := TestTable{}
+	u := TestTableGorm{}
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		err := gormDB.Where(&TestTable{
-			Content: "dqsdq",
+		err := gormDB.Where(&TestTableGorm{
+			Content: "test",
 		}).First(&u).Error
 		if err != nil {
 			b.Error("error BenchmarkGetRowS_GORM:", err)
@@ -491,8 +518,8 @@ func BenchmarkGetRowM_GORM(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		err := gormDB.Model(&TestTable{}).Where(&TestTable{
-			Content: "dqsdq",
+		err := gormDB.Model(&TestTableGorm{}).Where(&TestTableGorm{
+			Content: "test",
 		}).First(&u).Error
 		if err != nil {
 			b.Error("error BenchmarkGetRowS_GORM:", err)
@@ -565,7 +592,6 @@ func BenchmarkGetAllColumns(b *testing.B) {
 		}
 	}
 }
-
 ```
 
 
