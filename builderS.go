@@ -10,7 +10,6 @@ import (
 
 	"github.com/kamalshkeir/klog"
 	"github.com/kamalshkeir/kmap"
-	"github.com/kamalshkeir/korm/drivers/kmongo"
 	"github.com/kamalshkeir/kstrct"
 )
 
@@ -102,16 +101,6 @@ func (b *Builder[T]) Insert(model *T) (int, error) {
 	if klog.CheckError(err) {
 		return 0, err
 	}
-	if db.Dialect == MONGO {
-		if b.ctx == nil {
-			b.ctx = context.Background()
-		}
-		err := kmongo.CreateRow(b.ctx, b.tableName, model, b.database)
-		if klog.CheckError(err) {
-			return 0, err
-		}
-		return 1, nil
-	}
 
 	names, mvalues, _, mtags := getStructInfos(model)
 	values := []any{}
@@ -195,39 +184,7 @@ func (b *Builder[T]) Set(query string, args ...any) (int, error) {
 		return 0, err
 	}
 
-	if db.Dialect == MONGO {
-		if b.ctx == nil {
-			b.ctx = context.Background()
-		}
-		wf := map[string]any{}
-		if b.whereQuery != "" {
-			r := strings.NewReplacer("?", "", "=", "", "AND", ",", "and", ",", "OR", ",", "or", ",")
-			b.whereQuery = r.Replace(b.whereQuery)
-			if strings.Contains(b.whereQuery, ",") {
-				sp := strings.Split(b.whereQuery, ",")
-				if len(b.args) == len(sp) {
-					for i, s := range sp {
-						wf[strings.TrimSpace(s)] = b.args[i]
-					}
-				}
-			} else {
-				if len(b.args) == 1 {
-					wf[strings.TrimSpace(b.whereQuery)] = b.args[0]
-				}
-			}
-		}
-		newRow := map[string]any{}
-		spp := strings.Split(query, ",")
-		for _, s := range spp {
-			seq := strings.Split(s, "=")
-			newRow[seq[0]] = seq[1]
-		}
-		err := kmongo.UpdateRow(b.ctx, b.tableName, wf, newRow)
-		if klog.CheckError(err) {
-			return 0, err
-		}
-		return 1, nil
-	}
+	
 	if b.whereQuery == "" {
 		return 0, errors.New("you should use Where before Update")
 	}
@@ -283,33 +240,7 @@ func (b *Builder[T]) Delete() (int, error) {
 	if klog.CheckError(err) {
 		return 0, err
 	}
-	if db.Dialect == MONGO {
-		wf := map[string]any{}
-		if b.whereQuery != "" {
-			r := strings.NewReplacer("?", "", "=", "", "AND", ",", "and", ",", "OR", ",", "or", ",")
-			b.whereQuery = r.Replace(b.whereQuery)
-			if strings.Contains(b.whereQuery, ",") {
-				sp := strings.Split(b.whereQuery, ",")
-				if len(b.args) == len(sp) {
-					for i, s := range sp {
-						wf[strings.TrimSpace(s)] = b.args[i]
-					}
-				}
-			} else {
-				if len(b.args) == 1 {
-					wf[strings.TrimSpace(b.whereQuery)] = b.args[0]
-				}
-			}
-		}
-		if b.ctx == nil {
-			b.ctx = context.Background()
-		}
-		err := kmongo.DeleteRow(b.ctx, b.tableName, wf, b.database)
-		if klog.CheckError(err) {
-			return 0, err
-		}
-		return 1, nil
-	}
+	
 	b.statement = "DELETE FROM " + b.tableName
 	if b.whereQuery != "" {
 		b.statement += " WHERE " + b.whereQuery
@@ -361,13 +292,7 @@ func (b *Builder[T]) Drop() (int, error) {
 	if klog.CheckError(err) {
 		return 0, err
 	}
-	if db.Dialect == MONGO {
-		if b.ctx == nil {
-			b.ctx = context.Background()
-		}
-		kmongo.DropTable(b.ctx, b.tableName, b.database)
-		return 1, nil
-	}
+	
 	b.statement = "DROP TABLE " + b.tableName
 	var res sql.Result
 	if b.ctx != nil {
@@ -426,16 +351,6 @@ func (b *Builder[T]) Page(pageNumber int) *Builder[T] {
 }
 
 func (b *Builder[T]) OrderBy(fields ...string) *Builder[T] {
-	if b.database == "" {
-		if databases[0].Dialect == MONGO {
-			b.database = databases[0].Name
-		}
-	}
-	if _, ok := kmongo.MMongoDBS.Get(b.database); ok {
-		b.orderBys = strings.Join(fields, ",")
-		b.order = append(b.order, "order_by")
-		return b
-	}
 	b.orderBys = "ORDER BY "
 	orders := []string{}
 	for _, f := range fields {
@@ -481,40 +396,6 @@ func (b *Builder[T]) All() ([]T, error) {
 		if v, ok := cachesAllS.Get(c); ok {
 			return v.([]T), nil
 		}
-	}
-	if _, ok := kmongo.MMongoDBS.Get(b.database); ok {
-		wf := map[string]any{}
-		if b.whereQuery != "" {
-			r := strings.NewReplacer("?", "", "=", "", "AND", ",", "and", ",", "OR", ",", "or", ",")
-			b.whereQuery = r.Replace(b.whereQuery)
-			if strings.Contains(b.whereQuery, ",") {
-				sp := strings.Split(b.whereQuery, ",")
-				if len(b.args) == len(sp) {
-					for i, s := range sp {
-						wf[strings.TrimSpace(s)] = b.args[i]
-					}
-				}
-			} else {
-				if len(b.args) == 1 {
-					wf[strings.TrimSpace(b.whereQuery)] = b.args[0]
-				}
-			}
-		}
-
-		if len(wf) == 0 {
-			wf = nil
-		}
-		if b.ctx == nil {
-			b.ctx = context.Background()
-		}
-		data, err := kmongo.Query[T](b.ctx, b.tableName, b.selected, wf, int64(b.limit), int64(b.page), b.orderBys, b.database)
-		if err != nil {
-			return nil, err
-		}
-		if useCache {
-			cachesAllS.Set(c, data)
-		}
-		return data, nil
 	}
 	if b.selected != "" && b.selected != "*" {
 		b.statement = "select " + b.selected + " from " + b.tableName
@@ -583,39 +464,6 @@ func (b *Builder[T]) One() (T, error) {
 		if v, ok := cachesOneS.Get(c); ok {
 			return v.(T), nil
 		}
-	}
-	if _, ok := kmongo.MMongoDBS.Get(b.database); ok {
-		wf := map[string]any{}
-		if b.whereQuery != "" {
-			r := strings.NewReplacer("?", "", "=", "", "AND", ",", "and", ",", "OR", ",", "or", ",")
-			b.whereQuery = r.Replace(b.whereQuery)
-			if strings.Contains(b.whereQuery, ",") {
-				sp := strings.Split(b.whereQuery, ",")
-				if len(b.args) == len(sp) {
-					for i, s := range sp {
-						wf[strings.TrimSpace(s)] = b.args[i]
-					}
-				}
-			} else {
-				if len(b.args) == 1 {
-					wf[strings.TrimSpace(b.whereQuery)] = b.args[0]
-				}
-			}
-		}
-		if len(wf) == 0 {
-			wf = nil
-		}
-		if b.ctx == nil {
-			b.ctx = context.Background()
-		}
-		data, err := kmongo.QueryOne[T](b.ctx, b.tableName, b.selected, wf, int64(b.limit), int64(b.page), strings.ReplaceAll(b.orderBys, "ORDER BY", ""), b.database)
-		if err != nil {
-			return data, err
-		}
-		if useCache {
-			cachesOneS.Set(c, data)
-		}
-		return data, nil
 	}
 	if b.tableName == "" {
 		return *new(T), errors.New("unable to find model, try korm.LinkModel before")

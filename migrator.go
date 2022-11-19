@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/kamalshkeir/klog"
-	"github.com/kamalshkeir/korm/drivers/kmongo"
 )
 
 var MigrationAutoCheck = true
@@ -376,12 +375,6 @@ func AutoMigrate[T comparable](tableName string, dbName ...string) error {
 		if t == tableName {
 			tbFoundDB = true
 		}
-	}
-	if db.Dialect == MONGO {
-		if !tbFoundDB {
-			kmongo.CreateRow(context.Background(), tableName, new(T))
-		}
-		return nil
 	}
 
 	tbFoundLocal := false

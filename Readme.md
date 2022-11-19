@@ -1,5 +1,5 @@
 <div align="center">
-	<h1 style="color:black;font-size:clamp(30px,12vw,100px);padding-bottom:0;">KORM</h1>
+	<h1 style="color:blue;font-size:clamp(30px,12vw,100px);padding-bottom:0;">KORM</h1>
 	<h3 style="color:#dddd00;font-size:clamp(20px,4vw,40px);">
 	<a href="#benchmarks" style="text-decoration:none;color:#dddd00">The Blazingly Fast ORM</a></h3>
 	<img src="https://img.shields.io/github/go-mod/go-version/kamalshkeir/korm" width="auto" height="20px">
@@ -23,16 +23,17 @@
 </div>
 
 ---
-### Let [numbers](#benchmarks) speak for themselves
-## KORM is an Elegant and dead easy to use [ORM](#api-working-with-sql-and-mongo) using generics and network bus, that can handle sql and mongo dbs. 
-## It is Composable, you can use it as ORM with internal bus only , or add the Server Bus to it when you want to scale and synchronise your data between multiple KORM, you have full control on the data came in and go out, you can check the [NetworkBus](https://github.com/kamalshkeir/ksbus)
+## KORM is an Elegant and [Blazingly Fast](#benchmarks) ORM using generics and network bus. It can handle sql databases and Mongo using [Kormongo](https://github.com/kamalshkeir/kormongo), both have pretty much the same api, everything detailed in this readme
+
+## It is Composable, you can combine it with a Server Bus (using WithBus) when you want to scale and synchronise your data between multiple KORM.
+## You have full control on the data came in and go out, you can check the example below [NetworkBus](https://github.com/kamalshkeir/ksbus)
 
 
 #### It come with :
-- [Interactive Shell](#interactive-shell), to CRUD in your databases `go run main.go dbshell`
+- [Interactive Shell](#interactive-shell), to CRUD in your databases `go run main.go dbshell` or `go run main.go mongoshell` for mongo
 - Network Bus allowing you to send and recv data in realtime using pubsub websockets between your ORMs, so you can decide how you data will be distributed between different databases, see [Example](#example-with-bus-between-2-korm) .
-- [AutoMigrate](#automigrate) directly from struct, whenever you add or remove a field from a migrated struct, you will get a prompt proposing to add the column for the table in the database or remove a column, you can also only generate the query without execute, and then you can use the shell to migrate the generated file.
-- It use std library database/sql, and the Mongo official driver, so if you want, know that you can always do your queries yourself using sql.DB or mongo.Client , but i doubt you will need to, after seeing these [benchmarks](#benchmarks) . `korm.GetConnection(dbName)` AND `korm.GetMONGOConnection(dbName) and korm.GetMONGOClient()`
+- [AutoMigrate](#automigrate) directly from struct, for mongo it will only link the struct to the tableName, allowing usage of BuilderS. For all sql, whenever you add or remove a field from a migrated struct, you will get a prompt proposing to add the column for the table in the database or remove a column, you can also only generate the query without execute, and then you can use the shell to migrate the generated file
+- It use std library database/sql, and the Mongo official driver, so if you want, know that you can always do your queries yourself using sql.DB or mongo.Client , but i doubt you will need to, after seeing these [benchmarks](#benchmarks) . `korm.GetConnection(dbName)` or `kormongo.GetConnection(dbName)`
 - Powerful Query Builder for SQL and Mongo [Builder](#builder-mapstringany).
 - Support of foreign keys, indexes , checks,... [See all](#automigrate)
 - It handle query and execute on multiple database at the same time.
@@ -42,7 +43,7 @@
 #### Supported databases:
 - Postgres
 - Mysql
-- Mongo
+- Mongo via [MONGO](https://github.com/kamalshkeir/kormongo)
 - Sqlite
 - Maria
 - Coakroach
@@ -52,21 +53,26 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@latest
+go get -u github.com/kamalshkeir/korm@latest // sql ORM
+```
+
+```sh
+go get -u github.com/kamalshkeir/kormongo@latest // Mongo ORM
 ```
 
 ### Connect to a database
 ```go
 // mongodb
-err := korm.NewDatabaseFromDSN(korm.MONGO, "dbmongo", "localhost:27017")
+err := kormongo.New("dbmongo", "localhost:27017")
 // sqlite
-err := korm.NewDatabaseFromDSN(korm.SQLITE, "db")
+err := korm.New(korm.SQLITE, "db")
 // postgres
-err := korm.NewDatabaseFromDSN(korm.POSTGRES,"dbName", "localhost:5432")
+err := korm.New(korm.POSTGRES,"dbName", "localhost:5432")
 // mysql
-err := korm.NewDatabaseFromDSN(korm.MYSQL,"dbName","localhost:3306")
+err := korm.New(korm.MYSQL,"dbName","localhost:3306")
 
 korm.ShutdownDatabases(databasesName ...string) error
+kormongo.ShutdownDatabases(databasesName ...string) error
 ...
 ...
 ```
@@ -81,8 +87,7 @@ korm.AutoMigrate[T comparable](tableName string, dbName ...string) error
 
 err := korm.AutoMigrate[User]("users")
 err := korm.AutoMigrate[Bookmark ]("bookmarks")
-//Examples:
-// this is the actual user model used initialy
+
 type User struct {
 	Id        int       `korm:"pk"` // AUTO Increment ID primary key
 	Uuid      string    `korm:"size:40"` // VARCHAR(50)
@@ -103,7 +108,14 @@ type Bookmark struct {
 	UpdatedAt time.Time `korm:"update"` // will update when model updated, handled by triggers for sqlite, coakroach and postgres, and on migration for mysql
 	CreatedAt time.Time `korm:"now"` // now is default to current timestamp and of type TEXT for sqlite
 }
+
+all, _ := korm.Model[User]()
+                   .Where("id = ?",id) // notice here not like mongo, mongo will be like Where("_id",id) without '= ?'
+                   .Select("item1","item2")
+                   .OrderBy("created")
+                   .All()
 ```
+
 MONGO: (No TAGS), only primitive.ObjectID `bson:"_id"` is mandatory
 ```go
 type FirstTable struct {
@@ -120,7 +132,7 @@ klog.CheckError(err)
 
 id,_ := primitive.ObjectIDFromHex("636d4c7bcfde1f5b625f12a4")
 all, _ := korm.Model[FirstTable]()
-                   .Where("_id = ?",id)
+                   .Where("_id",id) // notice here for mongo it's not like sql Where("_id = ?",id) 
                    .Select("item1","item2")
                    .OrderBy("created")
                    .All()
@@ -129,16 +141,13 @@ all, _ := korm.Model[FirstTable]()
 ### API (working with SQL and MONGO)
 #### General
 ```go
-func NewDatabaseFromDSN(dbType, dbName string, dbDSN ...string) error
-func NewSQLDatabaseFromConnection(dbType, dbName string, conn *sql.DB) error
-func NewMongoDatabaseFromConnection(dbName string, dbConn *mongo.Client) (*mongo.Database, error)
-func NewBusServerKORM() *ksbus.Server
+func New(dbType, dbName string, dbDSN ...string) error
+func NewFromConnection(dbType, dbName string, conn *sql.DB) error
+func NewFromConnection(dbName string,dbConn *mongo.Database) error (kormongo)
+func WithBus(bus *ksbus.Server) *ksbus.Server // Usage: WithBus(ksbus.NewServer()) or share an existing one
 func BeforeServersData(fn func(data any, conn *ws.Conn))
 func BeforeDataWS(fn func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) bool)
-func GetConnection(dbName ...string) (any, bool)
-func GetSQLConnection(dbName ...string) *sql.DB
-func GetMONGOConnection(dbName ...string) *mongo.Database
-func GetMONGOClient(dbName ...string) *mongo.Client
+func GetConnection(dbName ...string) (conn *sql.DB,ok bool)
 func GetAllTables(dbName ...string) []string
 func GetAllColumnsTypes(table string, dbName ...string) map[string]string
 func GetMemoryTable(tbName string, dbName ...string) (TableEntity, error)
@@ -147,7 +156,7 @@ func GetMemoryDatabases() []DatabaseEntity
 func GetMemoryDatabase(dbName string) (*DatabaseEntity, error)
 func ShutdownDatabases(databasesName ...string) error
 func FlushCache()
-func DisableCheck()
+func DisableCheck() // Korm Only
 func DisableCache()
 ```
 
@@ -157,8 +166,8 @@ func Table(tableName string) *BuilderM // starter
 func BuilderMap(tableName string) *BuilderM // starter
 func (b *BuilderM) Database(dbName string) *BuilderM // select database
 func (b *BuilderM) Select(columns ...string) *BuilderM // select columns
-func (b *BuilderM) Where(query string, args ...any) *BuilderM
-func (b *BuilderM) Query(query string, args ...any) *BuilderM
+func (b *BuilderM) Where(query string, args ...any) *BuilderM // korm.Where("id = ?",1) for sql and kormongo.Where("id",1) for mongo
+func (b *BuilderM) Query(query string, args ...any) *BuilderM // SQL Only
 func (b *BuilderM) Limit(limit int) *BuilderM
 func (b *BuilderM) Page(pageNumber int) *BuilderM
 func (b *BuilderM) OrderBy(fields ...string) *BuilderM
@@ -170,8 +179,8 @@ func (b *BuilderM) Insert(fields_comma_separated string, fields_values ...any) (
 func (b *BuilderM) Set(query string, args ...any) (int, error) // finisher
 func (b *BuilderM) Delete() (int, error) // finisher
 func (b *BuilderM) Drop() (int, error) // finisher
-func Query(dbName string, statement string, args ...any) ([]map[string]interface{}, error) // finisher
-func ExecSQL(dbName, query string, args ...any) error
+func Query(dbName string, statement string, args ...any) ([]map[string]interface{}, error) // finisher SQL Only
+func ExecSQL(dbName, query string, args ...any) error // SQL Only
 
 Examples:
 
@@ -198,20 +207,23 @@ korm.Model[models.User]().Insert(
 korm.Database("dbNameHere").Table("tableName").Where("id = ? AND email = ?",1,"test@example.com").All() 
 
 // where
-korm.Table("tableName").Where("id = ? AND email = ?",1,"test@example.com").One() 
+korm.Table("tableName").Where("id = ? AND email = ?",1,"test@example.com").One() // SQL
+kormongo.Table("tableName").Where("id, email",1,"test@example.com").One() // Mongo
 
 // delete
-korm.Table("tableName").Where("id = ? AND email = ?",1,"test@example.com").Delete()
+korm.Table("tableName").Where("id = ? AND email = ?",1,"test@example.com").Delete() // SQL
+kormongo.Table("tableName").Where("id,email", 1, "test@example.com").Delete() // Mongo
 
 // drop table
 korm.Table("tableName").Drop()
 
 // update
-korm.Table("tableName").Where("id = ?",1).Set("email = ?","new@example.com")
+korm.Table("tableName").Where("id = ?",1).Set("email = ?","new@example.com") // SQL
+korm.Table("tableName").Where("id",1).Set("email","new@example.com") // Mongo
 ```
 #### Builder `Struct`:
 ```go
-func Model[T comparable](tableName ...string) *Builder[T] // you get the idea ;) 
+func Model[T comparable](tableName ...string) *Builder[T] // you get the idea
 func BuilderS[T comparable](tableName ...string) *Builder[T] 
 func (b *Builder[T]) Database(dbName string) *Builder[T]
 func (b *Builder[T]) Insert(model *T) (int, error)
@@ -273,6 +285,7 @@ import (
 	"github.com/kamalshkeir/kmux"
 	"github.com/kamalshkeir/kmux/ws"
 	"github.com/kamalshkeir/korm"
+	"github.com/kamalshkeir/ksbus"
 )
 
 func main() {
@@ -280,7 +293,7 @@ func main() {
 	if klog.CheckError(err) {return}
 
 	
-	bus := korm.NewBusServerKORM()
+	bus := korm.WithBus(ksbus.NewServer())
 	// handler authentication	
 	korm.BeforeDataWS(func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) bool {
         klog.Printf("handle authentication here\n")
@@ -325,7 +338,7 @@ func main() {
 	if klog.CheckError(err) {return}
 
 	
-	bus := korm.NewBusServerKORM()
+	bus := korm.WithBus(ksbus.NewServer())
 
 	korm.BeforeServersData(func(data any, conn *ws.Conn) {
         klog.Printf("grrecv orm2: %v\n",data)

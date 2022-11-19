@@ -22,6 +22,8 @@ const (
 	Magenta = "\033[5;35m%v\033[0m\n"
 )
 
+var usedDB string
+
 const helpS string = `Commands :  
 [databases, use, tables, columns, migrate, createsuperuser, createuser, getall, get, drop, delete, clear/cls, q/quit/exit, help/commands]
   'databases':
@@ -89,9 +91,11 @@ func InitShell() bool {
 			if dbName == "" {
 				return true
 			}
-			conn = GetSQLConnection(dbName)
+			conn,_ = GetConnection(dbName)
+			usedDB=dbName
 		} else {
-			conn = GetSQLConnection()
+			conn,_ = GetConnection()
+			usedDB=databases[0].Name
 		}
 		defer conn.Close()
 
@@ -125,12 +129,13 @@ func InitShell() bool {
 				fmt.Printf(Green, GetMemoryDatabases())
 			case "use":
 				db := kinput.Input(kinput.Blue, "database name: ")
+				usedDB=db
 				fmt.Printf(Green, "you are using database "+db)
 			case "tables":
-				fmt.Printf(Green, GetAllTables(databases[0].Name))
+				fmt.Printf(Green, GetAllTables(usedDB))
 			case "columns":
 				tb := kinput.Input(kinput.Blue, "Table name: ")
-				mcols := GetAllColumnsTypes(tb, databases[0].Name)
+				mcols := GetAllColumnsTypes(tb, usedDB)
 				cols := []string{}
 				for k := range mcols {
 					cols = append(cols, k)
@@ -156,7 +161,7 @@ func InitShell() bool {
 func getAll() {
 	tableName, err := kinput.String(kinput.Blue, "Enter a table name: ")
 	if err == nil {
-		data, err := Table(tableName).Database(databases[0].Name).All()
+		data, err := Table(tableName).Database(usedDB).All()
 		if err == nil {
 			d, _ := json.MarshalIndent(data, "", "    ")
 			fmt.Printf(Green, string(d))
@@ -175,7 +180,7 @@ func getRow() {
 	if tableName != "" && whereField != "" && equalTo != "" {
 		var data map[string]interface{}
 		var err error
-		data, err = Table(tableName).Database(databases[0].Name).Where(whereField+" = ?", equalTo).One()
+		data, err = Table(tableName).Database(usedDB).Where(whereField+" = ?", equalTo).One()
 		if err == nil {
 			d, _ := json.MarshalIndent(data, "", "    ")
 			fmt.Printf(Green, string(d))
@@ -206,7 +211,8 @@ func migratefromfile(path string) error {
 
 	//exec migrations
 	for i := range statements {
-		_, err := GetSQLConnection().Exec(statements[i])
+		conn,_ := GetConnection(usedDB)
+		_, err := conn.Exec(statements[i])
 		if err != nil {
 			return errors.New("error migrating from " + path + " " + err.Error())
 		}
@@ -217,7 +223,7 @@ func migratefromfile(path string) error {
 func dropTable() {
 	tableName := kinput.Input(kinput.Blue, "Table to drop : ")
 	if tableName != "" {
-		_, err := Table(tableName).Database(databases[0].Name).Drop()
+		_, err := Table(tableName).Database(usedDB).Drop()
 		if err != nil {
 			fmt.Printf(Red, "error dropping table :"+err.Error())
 		} else {
@@ -235,7 +241,7 @@ func deleteRow() {
 	if tableName != "" && whereField != "" && equalTo != "" {
 		equal, err := strconv.Atoi(equalTo)
 		if err != nil {
-			_, err := Table(tableName).Database(databases[0].Name).Where(whereField+" = ?", equalTo).Delete()
+			_, err := Table(tableName).Database(usedDB).Where(whereField+" = ?", equalTo).Delete()
 			if err == nil {
 				fmt.Printf(Green, tableName+"with"+whereField+"="+equalTo+"deleted.")
 			} else {
