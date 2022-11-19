@@ -3,7 +3,6 @@ package korm
 import (
 	"database/sql"
 	"errors"
-	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -31,6 +30,10 @@ var (
 
 	onceDone = false
 	cachebus *ksbus.Bus
+	MaxOpenConns=10
+	MaxIdleConns=10
+	MaxLifetime=30 * time.Minute
+	MaxIdleTime=12 * time.Hour
 )
 
 const (
@@ -62,19 +65,31 @@ type DatabaseEntity struct {
 // NewDatabaseFromDSN the generic way to connect to all handled databases
 func New(dbType, dbName string, dbDSN ...string) error {
 	var dsn string
-	if strings.HasPrefix(dbType, "cockroach") {
-		dbType = POSTGRES
-	}
 	if DefaultDB == "" {
 		DefaultDB = dbName
 	}
+	options := ""
+	if len(dbDSN) > 0 {
+		if strings.Contains(dbDSN[0],"?") {
+			sp := strings.Split(dbDSN[0],"?")
+			dbDSN[0]=sp[0]
+			options=sp[1]
+		}
+	}
 	switch dbType {
-	case POSTGRES:
+	case POSTGRES,COCKROACH:
+		dbType = POSTGRES
 		if len(dbDSN) == 0 {
 			return errors.New("dbDSN for mysql cannot be empty")
 		}
-		dsn = fmt.Sprintf("postgres://%s/%s?sslmode=disable", dbDSN[0], dbName)
-	case MYSQL:
+		dsn = "postgres://"+dbDSN[0]+"/"+dbName
+		if options != "" {
+			dsn+="?"+options
+		} else {
+			dsn+="?sslmode=disable"
+		}
+	case MYSQL,MARIA, "mariadb":
+		dbType = MYSQL
 		if len(dbDSN) == 0 {
 			return errors.New("dbDSN for mysql cannot be empty")
 		}
@@ -87,22 +102,10 @@ func New(dbType, dbName string, dbDSN ...string) error {
 			}
 			dsn = split[0] + "@" + "tcp(" + split[1] + ")/" + dbName
 		}
-	case MARIA, "mariadb":
-		dbType = MARIA
-		if len(dbDSN) == 0 {
-			return errors.New("dbDSN for mysql cannot be empty")
-		}
-		if strings.Contains(dbDSN[0], "tcp(") {
-			dsn = dbDSN[0] + "/" + dbName
-		} else {
-			split := strings.Split(dbDSN[0], "@")
-			if len(split) > 2 {
-				return errors.New("there is 2 or more @ symbol in dsn")
-			}
-			dsn = split[0] + "@" + "tcp(" + split[1] + ")/" + dbName
-		}
-	case SQLITE, "":
-		dbType = SQLITE
+		if options != "" {
+			dsn+="?"+options
+		} 
+	case SQLITE:
 		if dsn == "" {
 			dsn = "db.sqlite"
 		}
@@ -111,20 +114,25 @@ func New(dbType, dbName string, dbDSN ...string) error {
 		} else {
 			dsn = dbName
 		}
+		if options != "" {
+			dsn+="?"+options
+		} else {
+			dsn += "?_pragma=foreign_keys(1)"
+		}
 	default:
+		dbType=SQLITE
 		klog.Printf("%s not handled, choices are: postgres,mysql,sqlite,maria,coakroach\n", dbType)
 		dsn = dbName + ".sqlite"
 		if dsn == "" {
 			dsn = "db.sqlite"
 		}
-	}
-	if dbType == SQLITE {
-		dsn += "?_pragma=foreign_keys(1)"
+		if options != "" {
+			dsn+="?"+options
+		} else {
+			dsn += "?_pragma=foreign_keys(1)"
+		}
 	}
 
-	if dbType == MARIA || dbType == "mariadb" {
-		dbType = "mysql"
-	}
 	conn, err := sql.Open(dbType, dsn)
 	if klog.CheckError(err) {
 		return err
@@ -141,10 +149,10 @@ func New(dbType, dbName string, dbDSN ...string) error {
 		}
 	}
 
-	conn.SetMaxOpenConns(10)
-	conn.SetMaxIdleConns(10)
-	conn.SetConnMaxLifetime(30 * time.Minute)
-	conn.SetConnMaxIdleTime(12 * time.Hour)
+	conn.SetMaxOpenConns(MaxOpenConns)
+	conn.SetMaxIdleConns(MaxIdleConns)
+	conn.SetConnMaxLifetime(MaxLifetime)
+	conn.SetConnMaxIdleTime(MaxIdleTime)
 
 	if !dbFound {
 		databases = append(databases, DatabaseEntity{
@@ -203,10 +211,10 @@ func NewFromConnection(dbType, dbName string, conn *sql.DB) error {
 		}
 	}
 
-	conn.SetMaxOpenConns(10)
-	conn.SetMaxIdleConns(10)
-	conn.SetConnMaxLifetime(30 * time.Minute)
-	conn.SetConnMaxIdleTime(10 * time.Second)
+	conn.SetMaxOpenConns(MaxOpenConns)
+	conn.SetMaxIdleConns(MaxIdleConns)
+	conn.SetConnMaxLifetime(MaxLifetime)
+	conn.SetConnMaxIdleTime(MaxIdleTime)
 	if !dbFound {
 		databases = append(databases, DatabaseEntity{
 			Name:    dbName,
