@@ -155,10 +155,6 @@ func New(dbType, dbName string, dbDSN ...string) error {
 		})
 	}
 	if !onceDone {
-		runned := InitShell()
-		if runned {
-			os.Exit(0)
-		}
 		if useCache {
 			cachebus = ksbus.New()
 			cachebus.Subscribe(CACHE_TOPIC, func(data map[string]any, ch ksbus.Channel) {
@@ -169,6 +165,10 @@ func New(dbType, dbName string, dbDSN ...string) error {
 					"type": "clean",
 				})
 			})
+		}
+		runned := InitShell()
+		if runned {
+			os.Exit(0)
 		}
 		onceDone = true
 	}
@@ -202,14 +202,6 @@ func NewFromConnection(dbType, dbName string, conn *sql.DB) error {
 	conn.SetMaxIdleConns(10)
 	conn.SetConnMaxLifetime(30 * time.Minute)
 	conn.SetConnMaxIdleTime(10 * time.Second)
-	// switch dbType {
-	// case POSTGRES:
-	// 	pgdriver.Use()
-	// case MYSQL, MARIA, "mariadb":
-	// 	mysqldriver.Use()
-	// case SQLITE, "":
-	// 	sqlitedriver.Use()
-	// }
 	if !dbFound {
 		databases = append(databases, DatabaseEntity{
 			Name:    dbName,
@@ -219,10 +211,6 @@ func NewFromConnection(dbType, dbName string, conn *sql.DB) error {
 		})
 	}
 	if !onceDone {
-		runned := InitShell()
-		if runned {
-			os.Exit(0)
-		}
 		if useCache {
 			cachebus = ksbus.New()
 			cachebus.Subscribe(CACHE_TOPIC, func(data map[string]any, ch ksbus.Channel) { handleCache(data) })
@@ -231,6 +219,10 @@ func NewFromConnection(dbType, dbName string, conn *sql.DB) error {
 					"type": "clean",
 				})
 			})
+		}
+		runned := InitShell()
+		if runned {
+			os.Exit(0)
 		}
 		onceDone = true
 	}
