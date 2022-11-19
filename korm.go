@@ -181,6 +181,9 @@ func NewFromConnection(dbType, dbName string, conn *sql.DB) error {
 	if strings.HasPrefix(dbType, "cockroach") {
 		dbType = POSTGRES
 	}
+	if dbType == MARIA || dbType == "mariadb" {
+		dbType = MYSQL
+	}
 	if DefaultDB == "" {
 		DefaultDB = dbName
 	}
@@ -191,8 +194,10 @@ func NewFromConnection(dbType, dbName string, conn *sql.DB) error {
 	dbFound := false
 	for _, dbb := range databases {
 		if dbb.Conn == conn && dbb.Name == dbName {
-			if dbb.Dialect == "mariadb" {
-				dbb.Dialect = MARIA
+			if dbb.Dialect == "mariadb" || dbb.Dialect == MARIA {
+				dbb.Dialect = MYSQL
+			} else if strings.HasPrefix(dbb.Dialect, "cockroach") {
+				dbb.Dialect = POSTGRES
 			}
 			dbFound = true
 		}
