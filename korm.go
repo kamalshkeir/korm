@@ -30,7 +30,7 @@ var (
 	cachesAllM        = kmap.New[dbCache, []map[string]any](false)
 
 	onceDone = false
-	cachebus ksbus.Bus
+	cachebus *ksbus.Bus
 )
 
 const (
@@ -160,7 +160,7 @@ func New(dbType, dbName string, dbDSN ...string) error {
 			os.Exit(0)
 		}
 		if useCache {
-			cachebus = *ksbus.New()
+			cachebus = ksbus.New()
 			cachebus.Subscribe(CACHE_TOPIC, func(data map[string]any, ch ksbus.Channel) {
 				handleCache(data)
 			})
@@ -224,7 +224,7 @@ func NewFromConnection(dbType, dbName string, conn *sql.DB) error {
 			os.Exit(0)
 		}
 		if useCache {
-			cachebus = *ksbus.New()
+			cachebus = ksbus.New()
 			cachebus.Subscribe(CACHE_TOPIC, func(data map[string]any, ch ksbus.Channel) { handleCache(data) })
 			go RunEvery(FlushCacheEvery, func() {
 				cachebus.Publish(CACHE_TOPIC, map[string]any{
@@ -240,7 +240,7 @@ func NewFromConnection(dbType, dbName string, conn *sql.DB) error {
 
 // WithBus take ksbus.NewServer() that can be Run, RunTLS, RunAutoTLS
 func WithBus(bus *ksbus.Server) *ksbus.Server {
-	cachebus = *bus.Bus
+	cachebus = bus.Bus
 	if useCache {
 		cachebus.Subscribe(CACHE_TOPIC, func(data map[string]any, ch ksbus.Channel) { handleCache(data) })
 		go RunEvery(FlushCacheEvery, func() {
