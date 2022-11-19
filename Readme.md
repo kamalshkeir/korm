@@ -65,11 +65,14 @@ go get -u github.com/kamalshkeir/kormongo@latest // Mongo ORM
 // mongodb
 err := kormongo.New("dbmongo", "localhost:27017")
 // sqlite
-err := korm.New(korm.SQLITE, "db")
-// postgres
-err := korm.New(korm.POSTGRES,"dbName", "localhost:5432")
-// mysql
-err := korm.New(korm.MYSQL,"dbName","localhost:3306")
+sqlitedriver.Use() // load sqlite driver
+err := korm.New(korm.SQLITE, "db") // Connect
+// postgres, coakroach
+pgdriver.Use() // load postgres driver
+err := korm.New(korm.POSTGRES,"dbName", "localhost:5432") // Connect
+// mysql, maria
+mysqldriver.Use() // load mysql driver
+err := korm.New(korm.MYSQL,"dbName","localhost:3306") // Connect
 
 korm.ShutdownDatabases(databasesName ...string) error
 kormongo.ShutdownDatabases(databasesName ...string) error
