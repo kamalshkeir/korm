@@ -1149,6 +1149,28 @@ func ToSnakeCase(str string) string {
 	return strings.ToLower(snake)
 }
 
+func SnakeCaseToTitle(str string) (camelCase string) {
+	//snake_case to camelCase
+	isToUpper := false
+	for k, v := range str {
+		if k == 0 {
+			camelCase = strings.ToUpper(string(str[0]))
+		} else {
+			if isToUpper {
+				camelCase += strings.ToUpper(string(v))
+				isToUpper = false
+			} else {
+				if v == '_' {
+					isToUpper = true
+				} else {
+					camelCase += string(v)
+				}
+			}
+		}
+	}
+	return
+}
+
 func StringContains(s string, subs ...string) bool {
 	for _, sub := range subs {
 		if strings.Contains(s, sub) {

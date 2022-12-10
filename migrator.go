@@ -820,6 +820,10 @@ func handleMigrationString(mi *migrationInput) {
 func handleMigrationFloat(mi *migrationInput) {
 	mtags := map[string]string{}
 	tags := (*mi.fTags)[mi.fName]
+	if len(tags) == 0 {
+		(*mi.res)[mi.fName] = "DECIMAL(10,2)"
+		return
+	}
 	if len(tags) == 1 && tags[0] == "-" {
 		(*mi.res)[mi.fName] = ""
 		return
