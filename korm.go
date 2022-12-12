@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/kamalshkeir/klog"
@@ -30,6 +31,7 @@ var (
 
 	onceDone = false
 	cachebus *ksbus.Bus
+	switchBusMutex sync.Mutex
 	MaxOpenConns=10
 	MaxIdleConns=10
 	MaxLifetime=30 * time.Minute
@@ -245,7 +247,9 @@ func NewFromConnection(dbType, dbName string, conn *sql.DB) error {
 
 // WithBus take ksbus.NewServer() that can be Run, RunTLS, RunAutoTLS
 func WithBus(bus *ksbus.Server) *ksbus.Server {
+	switchBusMutex.Lock()
 	cachebus = bus.Bus
+	switchBusMutex.Unlock()
 	if useCache {
 		cachebus.Subscribe(CACHE_TOPIC, func(data map[string]any, ch ksbus.Channel) { handleCache(data) })
 		go RunEvery(FlushCacheEvery, func() {
