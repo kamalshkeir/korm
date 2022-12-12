@@ -171,6 +171,8 @@ func New(dbType, dbName string, dbDSN ...string) error {
 				handleCache(data)
 			})
 			go RunEvery(FlushCacheEvery, func() {
+				switchBusMutex.Lock()
+				defer switchBusMutex.Unlock()
 				cachebus.Publish(CACHE_TOPIC, map[string]any{
 					"type": "clean",
 				})
