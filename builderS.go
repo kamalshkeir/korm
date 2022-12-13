@@ -567,7 +567,12 @@ func (b *Builder[T]) queryS(query string, args ...any) ([]T, error) {
 
 		row := new(T)
 		if b.selected != "" && b.selected != "*" {
-			kstrct.FillFromSelected(row, b.selected, values...)
+			m := map[string]any{}
+			keys := strings.Split(b.selected,",")
+			for i, key := range keys {
+				m[key]=values[i]
+			}
+			kstrct.FillFromMap(row, m)
 		} else {
 			kstrct.FillFromValues(row, values...)
 		}
