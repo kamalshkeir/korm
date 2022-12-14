@@ -10,6 +10,8 @@ github.com/kamalshkeir/ksbus v0.3.0 h1:ykCNBgbmRhBYv2ENUjIvagS73ixfy6kMWJiE/gIXQ
 github.com/kamalshkeir/ksbus v0.3.0/go.mod h1:q0opuUTRacYfJ3xZMKym3AmscMzk8/oqC0oQydFZrQQ=
 github.com/kamalshkeir/kstrct v1.1.0 h1:LVZjD5X9Dn3XxARg4+Pcm9g4HX2kEv7+sATTsihzjvs=
 github.com/kamalshkeir/kstrct v1.1.0/go.mod h1:WdZ0uujSnBI6JNvxWe+Iu2x9E0O9FLVKGBfqYkvVXPY=
+github.com/kamalshkeir/kstrct v1.1.1 h1:RpHoGst5/Zgcgn6s+CND4dF4xDFsA2u03qlSxXDGGjY=
+github.com/kamalshkeir/kstrct v1.1.1/go.mod h1:WdZ0uujSnBI6JNvxWe+Iu2x9E0O9FLVKGBfqYkvVXPY=
 golang.org/x/crypto v0.1.0 h1:MDRAIl0xIo9Io2xV565hzXHw3zVseKrJKodhohM5CjU=
 golang.org/x/crypto v0.1.0/go.mod h1:RecgLatLF4+eUMCP1PoPZQb+cVrJcOPbHkTkbkB9sbw=
 golang.org/x/net v0.1.0 h1:hZ/3BUoy5aId7sCpA/Tc5lt8DkFgdVS2onTpJsZ/fl0=
