@@ -582,9 +582,15 @@ func (b *Builder[T]) queryS(query string, args ...any) ([]T, error) {
 			for i, key := range keys {
 				m[key]=values[i]
 			}
-			kstrct.FillFromMap(row, m)
+			err := kstrct.FillFromMap(row, m)
+			if err != nil {
+				return nil, err
+			}
 		} else {
-			kstrct.FillFromValues(row, values...)
+			err := kstrct.FillFromValues(row, values...)
+			if err != nil {
+				return nil, err
+			}
 		}
 		res = append(res, *row)
 	}
