@@ -471,7 +471,7 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 							uindexes[d] = d
 						}
 					} else {
-						s = "DECIMAL(5,2)"
+						s = "DECIMAL(10,5)"
 					}
 					for _, fk := range fkeys {
 						r := strings.Index(fk, "REFERENCE")
