@@ -587,6 +587,9 @@ func (b *Builder[T]) queryS(query string, args ...any) ([]T, error) {
 				return nil, err
 			}
 		} else {
+			if b.debug {
+				fmt.Println("values=",values)
+			}
 			err := kstrct.FillFromValues(row, values...)
 			if err != nil {
 				return nil, err
