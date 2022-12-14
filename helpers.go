@@ -116,7 +116,6 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 			if _, err := os.Stat("migrations/" + fileName); err == nil {
 				continue
 			}
-			fmt.Println(" ")
 			klog.Printfs("⚠️ found extra column '%s' in the database table '%s'\n", d, to_table_name)
 
 			statement := "ALTER TABLE " + to_table_name + " DROP COLUMN " + d
@@ -368,7 +367,6 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 			if _, err := os.Stat("migrations/" + fileName); err == nil {
 				continue
 			}
-			fmt.Println(" ")
 			klog.Printfs("⚠️ column '%s' is missing from the database table '%s'\n", d, to_table_name)
 			choice, err := kinput.String(kinput.Yellow, "> do you want to add '"+d+"' to the database ?, you can also generate the query using 'g' (Y/g/n):")
 			klog.CheckError(err)

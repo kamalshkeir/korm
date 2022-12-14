@@ -1,3 +1,5 @@
+github.com/go-sql-driver/mysql v1.6.0 h1:BCTh4TKNUYmOmMUcQ3IipzF5prigylS7XXjEkfCHuOE=
+github.com/go-sql-driver/mysql v1.6.0/go.mod h1:DCzpHaOWr8IXmIStZouvnhqoel9Qv2LBy8hT2VhHyBg=
 github.com/kamalshkeir/kinput v0.1.0 h1:mSGQoEE3lpxRN2azpXR2PulWHMNEvJeQVAXbqDfL0uw=
 github.com/kamalshkeir/kinput v0.1.0/go.mod h1:8eh2u/btMpxfx8w+7XoG/FIrtNr0jG0I0SL/ENTh6uQ=
 github.com/kamalshkeir/klog v1.0.0 h1:xZbYuYlDsEG5gfHPGNVms7wQmUFJCV0Uo2pwwaJBbws=
@@ -8,8 +10,10 @@ github.com/kamalshkeir/kmux v1.2.6 h1:9mhvGCG6tKPdOACmMU0OBFy7LgN8AbOXwIoS4mJtlx
 github.com/kamalshkeir/kmux v1.2.6/go.mod h1:ftgmjI2SvSWuJltOHUwJeRZKItzuYVgSvtkt9IRhkAY=
 github.com/kamalshkeir/ksbus v0.3.0 h1:ykCNBgbmRhBYv2ENUjIvagS73ixfy6kMWJiE/gIXQXM=
 github.com/kamalshkeir/ksbus v0.3.0/go.mod h1:q0opuUTRacYfJ3xZMKym3AmscMzk8/oqC0oQydFZrQQ=
-github.com/kamalshkeir/kstrct v1.1.6 h1:DgvSEPev6UUMgewUFILLKAguaQ/WfRMXlHIGIsgIZ20=
-github.com/kamalshkeir/kstrct v1.1.6/go.mod h1:WdZ0uujSnBI6JNvxWe+Iu2x9E0O9FLVKGBfqYkvVXPY=
+github.com/kamalshkeir/kstrct v1.1.8 h1:G16v5grS2v8806ImBp9r2vYKZf+v0irtU+Ndqeu4qMY=
+github.com/kamalshkeir/kstrct v1.1.8/go.mod h1:WdZ0uujSnBI6JNvxWe+Iu2x9E0O9FLVKGBfqYkvVXPY=
+github.com/kamalshkeir/mysqldriver v1.0.0 h1:5nhTQh9uR3lOcqgD6mcwzVb/hS2C3NdZELdMsKyDJvo=
+github.com/kamalshkeir/mysqldriver v1.0.0/go.mod h1:pvqws6pbz6xzKTznOslZj6M/n+gaJnEVndoZcI0mH8o=
 golang.org/x/crypto v0.1.0 h1:MDRAIl0xIo9Io2xV565hzXHw3zVseKrJKodhohM5CjU=
 golang.org/x/crypto v0.1.0/go.mod h1:RecgLatLF4+eUMCP1PoPZQb+cVrJcOPbHkTkbkB9sbw=
 golang.org/x/net v0.1.0 h1:hZ/3BUoy5aId7sCpA/Tc5lt8DkFgdVS2onTpJsZ/fl0=

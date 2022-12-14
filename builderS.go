@@ -122,11 +122,6 @@ func (b *Builder[T]) Insert(model *T) (int, error) {
 			placeholdersSlice = append(placeholdersSlice, "?")
 		}
 	}
-	if b.debug {
-		fmt.Println("ignored=",ignored)
-		fmt.Println("names=",names)
-		fmt.Println("values=",mvalues)
-	}
 	
 	cum := 0
 	for _,ign := range ignored {
@@ -531,11 +526,16 @@ func (b *Builder[T]) queryS(query string, args ...any) ([]T, error) {
 	adaptPlaceholdersToDialect(&query, db.Dialect)
 	res := make([]T, 0)
 
+	stmt, err := db.Conn.Prepare(query)
+	if err != nil {
+		return nil,err
+	}
+	defer stmt.Close()
 	var rows *sql.Rows
 	if b.ctx != nil {
-		rows, err = db.Conn.QueryContext(b.ctx, query, args...)
+		rows, err = stmt.QueryContext(b.ctx, args...)
 	} else {
-		rows, err = db.Conn.Query(query, args...)
+		rows, err = stmt.Query(args...)
 	}
 
 	if err == sql.ErrNoRows {
@@ -568,6 +568,7 @@ func (b *Builder[T]) queryS(query string, args ...any) ([]T, error) {
 		}
 
 		if db.Dialect == MYSQL || db.Dialect == MARIA || db.Dialect == "mariadb" {
+			db.Dialect=MYSQL
 			for i := range values {
 				if v, ok := values[i].([]byte); ok {
 					values[i] = string(v)
@@ -587,9 +588,6 @@ func (b *Builder[T]) queryS(query string, args ...any) ([]T, error) {
 				return nil, err
 			}
 		} else {
-			if b.debug {
-				fmt.Println("values=",values)
-			}
 			err := kstrct.FillFromValues(row, values...)
 			if err != nil {
 				return nil, err
