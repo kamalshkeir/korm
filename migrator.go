@@ -1113,5 +1113,5 @@ func prepareCreateStatement(tbName string, fields map[string]string, fkeys, cols
 	}
 	st = strings.TrimSuffix(st, ",")
 	st += ");"
-	return st
+	return strings.ReplaceAll(st,",,",",") 
 }
