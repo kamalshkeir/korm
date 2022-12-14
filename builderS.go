@@ -122,14 +122,16 @@ func (b *Builder[T]) Insert(model *T) (int, error) {
 			placeholdersSlice = append(placeholdersSlice, "?")
 		}
 	}
-	if Debug {
-		fmt.Println("ignored=",ignored)
-		fmt.Println("names=",names)
-	}
+	fmt.Println("ignored=",ignored)
+	fmt.Println("names=",names)
+	fmt.Println("Debug=",Debug)
+	cum := 0
 	for _,ign := range ignored {
-		names = append(names[:ign], names[ign+len(ignored):]...)
-		values = append(values[:ign], values[ign+len(ignored):]...)
-		delete(mvalues, names[ign])
+		ii := ign-cum
+		names = append(names[:ii], names[ii+1:]...)
+		values = append(values[:ii], values[ii+1:]...)
+		delete(mvalues, names[ii])
+		cum++
 	}
 
 	placeholders := strings.Join(placeholdersSlice, ",")
