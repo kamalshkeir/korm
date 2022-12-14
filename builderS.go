@@ -110,11 +110,6 @@ func (b *Builder[T]) Insert(model *T) (int, error) {
 	placeholdersSlice := []string{}
 	index := 999
 	for i, name := range names {
-		if SliceContains(mtags[name],"-") {
-			delete(mtags,name)
-			names=append(names[:i], names[i+1:]...)
-			continue
-		}
 		if v, ok := mvalues[name]; ok {
 			values = append(values, v)
 		} else {
