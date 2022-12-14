@@ -128,9 +128,9 @@ func (b *Builder[T]) Insert(model *T) (int, error) {
 	cum := 0
 	for _,ign := range ignored {
 		ii := ign-cum
+		delete(mvalues, names[ii])
 		names = append(names[:ii], names[ii+1:]...)
 		values = append(values[:ii], values[ii+1:]...)
-		delete(mvalues, names[ii])
 		cum++
 	}
 
