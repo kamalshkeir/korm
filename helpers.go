@@ -1073,6 +1073,7 @@ func encodeHex(dst []byte, uuid [16]byte) {
 	hex.Encode(dst[24:], uuid[10:])
 }
 
+
 func RunEvery(t time.Duration, function any) {
 	//Usage : go RunEvery(2 * time.Second,func(){})
 	fn, ok := function.(func())
