@@ -108,24 +108,28 @@ func (b *Builder[T]) Insert(model *T) (int, error) {
 		return 0, errors.New("there is more values than fields")
 	}
 	placeholdersSlice := []string{}
-	index := 999
+	ignored := []int{}
 	for i, name := range names {
+		if SliceContains(mtags[name], "-") {
+			ignored = append(ignored, i)
+			continue
+		}
 		if v, ok := mvalues[name]; ok {
 			values = append(values, v)
 		} else {
 			klog.Printf("rd%vnot found in fields\n")
 			return 0, errors.New("field not found")
 		}
-		if SliceContains(mtags[name], "autoinc", "pk") || (strings.Contains(name, "id") && i == 0) {
-			index = i
+		if SliceContains(mtags[name], "autoinc", "pk") {
+			ignored = append(ignored, i)
 		} else {
 			placeholdersSlice = append(placeholdersSlice, "?")
 		}
 	}
-	if index != 999 {
-		names = append(names[:index], names[index+1:]...)
-		values = append(values[:index], values[index+1:]...)
-		delete(mvalues, names[index])
+	for _,ign := range ignored {
+		names = append(names[:ign], names[ign+1:]...)
+		values = append(values[:ign], values[ign+1:]...)
+		delete(mvalues, names[ign])
 	}
 
 	placeholders := strings.Join(placeholdersSlice, ",")
