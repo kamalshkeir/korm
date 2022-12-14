@@ -110,17 +110,13 @@ func (b *Builder[T]) Insert(model *T) (int, error) {
 	placeholdersSlice := []string{}
 	ignored := []int{}
 	for i, name := range names {
-		if SliceContains(mtags[name], "-") {
-			ignored = append(ignored, i)
-			continue
-		}
 		if v, ok := mvalues[name]; ok {
 			values = append(values, v)
 		} else {
 			klog.Printf("rd%vnot found in fields\n")
 			return 0, errors.New("field not found")
 		}
-		if SliceContains(mtags[name], "autoinc", "pk") {
+		if SliceContains(mtags[name], "autoinc", "pk","-") {
 			ignored = append(ignored, i)
 		} else {
 			placeholdersSlice = append(placeholdersSlice, "?")
