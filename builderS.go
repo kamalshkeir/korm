@@ -127,8 +127,8 @@ func (b *Builder[T]) Insert(model *T) (int, error) {
 		}
 	}
 	for _,ign := range ignored {
-		names = append(names[:ign], names[ign+1:]...)
-		values = append(values[:ign], values[ign+1:]...)
+		names = append(names[:ign], names[ign+len(ignored):]...)
+		values = append(values[:ign], values[ign+len(ignored):]...)
 		delete(mvalues, names[ign])
 	}
 
@@ -149,11 +149,12 @@ func (b *Builder[T]) Insert(model *T) (int, error) {
 	} else {
 		res, err = db.Conn.Exec(b.statement, values...)
 	}
+
+	if Debug {
+		klog.Printf("%s,%s\n", b.statement, values)
+		klog.Printf("rderr:%v\n", err)
+	}
 	if err != nil {
-		if Debug {
-			klog.Printf("%s,%s\n", b.statement, values)
-			klog.Printf("rderr:%v\n", err)
-		}
 		return affectedRows, err
 	}
 	rows, err := res.RowsAffected()
