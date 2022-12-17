@@ -47,7 +47,7 @@ func AddTrigger(onTable, col, bf_af_UpdateInsertDelete string, ofColumn, stmt st
 		ofColumn = strings.ReplaceAll(strings.ToLower(ofColumn), "of", "")
 	}
 	var dialect = ""
-	db, err := GetMemoryDatabase(dbName[0])
+	db, err := getMemoryDatabase(dbName[0])
 	if !klog.CheckError(err) {
 		dialect = db.Dialect
 	}
@@ -116,7 +116,7 @@ func DropTrigger(onField, tableName string, dbName ...string) {
 	}
 }
 
-func autoMigrate[T comparable](db *DatabaseEntity, tableName string, execute bool) (string, error) {
+func autoMigrate[T comparable](db *databaseEntity, tableName string, execute bool) (string, error) {
 	toReturnstats := []string{}
 	dialect := db.Dialect
 	s := reflect.ValueOf(new(T)).Elem()
@@ -220,7 +220,7 @@ func autoMigrate[T comparable](db *DatabaseEntity, tableName string, execute boo
 	}
 
 	if !tbFound {
-		db.Tables = append(db.Tables, TableEntity{
+		db.Tables = append(db.Tables, tableEntity{
 			Name:       tableName,
 			Columns:    cols,
 			Tags:       mFieldName_Tags,
@@ -350,18 +350,18 @@ func AutoMigrate[T comparable](tableName string, dbName ...string) error {
 	if _, ok := mModelTablename[*new(T)]; !ok {
 		mModelTablename[*new(T)] = tableName
 	}
-	var db *DatabaseEntity
+	var db *databaseEntity
 	var err error
 	dbname := ""
 	if len(dbName) == 1 {
 		dbname = dbName[0]
-		db, err = GetMemoryDatabase(dbname)
+		db, err = getMemoryDatabase(dbname)
 		if err != nil || db == nil {
 			return errors.New("database not found")
 		}
 	} else if len(dbName) == 0 {
 		dbname = databases[0].Name
-		db, err = GetMemoryDatabase(dbname)
+		db, err = getMemoryDatabase(dbname)
 		if err != nil || db == nil {
 			return errors.New("database not found")
 		}
@@ -381,7 +381,7 @@ func AutoMigrate[T comparable](tableName string, dbName ...string) error {
 	if len(db.Tables) == 0 {
 		if tbFoundDB && MigrationAutoCheck {
 			// found db not local
-			LinkModel[T](tableName, db)
+			linkModel[T](tableName, db)
 			return nil
 		} else {
 			// not db and not local
@@ -401,7 +401,7 @@ func AutoMigrate[T comparable](tableName string, dbName ...string) error {
 	}
 
 	if MigrationAutoCheck && (tbFoundDB || tbFoundLocal) {
-		LinkModel[T](tableName, db)
+		linkModel[T](tableName, db)
 		return nil
 	} else {
 		_, err := autoMigrate[T](db, tableName, true)
@@ -1087,9 +1087,10 @@ func handleMigrationTime(mi *migrationInput) {
 	}
 }
 
-func prepareCreateStatement(tbName string, fields map[string]string, fkeys, cols []string, db *DatabaseEntity, ftags map[string][]string) string {
-	st := "CREATE TABLE IF NOT EXISTS "
-	st += tbName + " ("
+func prepareCreateStatement(tbName string, fields map[string]string, fkeys, cols []string, db *databaseEntity, ftags map[string][]string) string {
+	var strBuilder strings.Builder
+	strBuilder.WriteString("CREATE TABLE IF NOT EXISTS ")
+	strBuilder.WriteString(tbName + " (")
 	for i, col := range cols {
 		fName := col
 		fType := fields[col]
@@ -1100,18 +1101,19 @@ func prepareCreateStatement(tbName string, fields map[string]string, fkeys, cols
 		if i == len(fields)-1 {
 			reste = ""
 		}
-		st += fName + " " + fType + reste
+		strBuilder.WriteString(fName + " " + fType + reste)
 	}
 	if len(fkeys) > 0 {
-		st += ","
+		strBuilder.WriteString(",")
 	}
 	for i, k := range fkeys {
-		st += k
+		strBuilder.WriteString(k)
 		if i < len(fkeys)-1 {
-			st += ","
+			strBuilder.WriteString(",")
 		}
 	}
+	st := strBuilder.String()
 	st = strings.TrimSuffix(st, ",")
 	st += ");"
-	return strings.ReplaceAll(st,",,",",") 
+	return strings.ReplaceAll(st, ",,", ",")
 }

@@ -227,7 +227,7 @@ korm.Table("tableName").Where("id",1).Set("email","new@example.com") // Mongo
 #### Builder `Struct`:
 ```go
 func Model[T comparable](tableName ...string) *Builder[T] // you get the idea
-func BuilderS[T comparable](tableName ...string) *Builder[T] 
+func BuilderStruct[T comparable](tableName ...string) *Builder[T] 
 func (b *Builder[T]) Database(dbName string) *Builder[T]
 func (b *Builder[T]) Insert(model *T) (int, error)
 func (b *Builder[T]) Set(query string, args ...any) (int, error)

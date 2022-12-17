@@ -15,11 +15,11 @@ import (
 )
 
 const (
-	Red     = "\033[1;31m%v\033[0m\n"
-	Green   = "\033[1;32m%v\033[0m\n"
-	Yellow  = "\033[1;33m%v\033[0m\n"
-	Blue    = "\033[1;34m%v\033[0m\n"
-	Magenta = "\033[5;35m%v\033[0m\n"
+	red     = "\033[1;31m%v\033[0m\n"
+	green   = "\033[1;32m%v\033[0m\n"
+	yellow  = "\033[1;33m%v\033[0m\n"
+	blue    = "\033[1;34m%v\033[0m\n"
+	magenta = "\033[5;35m%v\033[0m\n"
 )
 
 var usedDB string
@@ -68,40 +68,40 @@ func InitShell() bool {
 
 	switch args[1] {
 	case "commands":
-		fmt.Printf(Yellow, "Shell Usage: go run main.go dbshell")
-		fmt.Printf(Yellow, commandsS)
+		fmt.Printf(yellow, "Shell Usage: go run main.go dbshell")
+		fmt.Printf(yellow, commandsS)
 		return true
 	case "help":
-		fmt.Printf(Yellow, "Shell Usage: go run main.go dbshell")
-		fmt.Printf(Yellow, helpS)
+		fmt.Printf(yellow, "Shell Usage: go run main.go dbshell")
+		fmt.Printf(yellow, helpS)
 		return true
 	case "dbshell":
-		databases := GetMemoryDatabases()
+		databases := getMemoryDatabases()
 		var conn *sql.DB
 		if len(databases) > 1 {
-			fmt.Printf(Yellow, "-----------------------------------")
-			fmt.Printf(Blue, "Found many databases:")
+			fmt.Printf(yellow, "-----------------------------------")
+			fmt.Printf(blue, "Found many databases:")
 			for _, db := range databases {
-				fmt.Printf(Blue, `  - `+db.Name)
+				fmt.Printf(blue, `  - `+db.Name)
 			}
 			dbName := kinput.Input(kinput.Blue, "Enter Database Name to use: ")
 			if dbName == "" {
 				return true
 			}
-			conn,_ = GetConnection(dbName)
-			usedDB=dbName
+			conn, _ = GetConnection(dbName)
+			usedDB = dbName
 		} else {
-			conn,_ = GetConnection()
-			usedDB=databases[0].Name
+			conn, _ = GetConnection()
+			usedDB = databases[0].Name
 		}
 		defer conn.Close()
 
-		fmt.Printf(Yellow, commandsS)
+		fmt.Printf(yellow, commandsS)
 		for {
 			command, err := kinput.String(kinput.Blue, "> ")
 			if err != nil {
 				if errors.Is(err, io.EOF) {
-					fmt.Printf(Blue, "shell shutting down")
+					fmt.Printf(blue, "shell shutting down")
 				}
 				return true
 			}
@@ -111,25 +111,25 @@ func InitShell() bool {
 				return true
 			case "clear", "cls":
 				kinput.Clear()
-				fmt.Printf(Yellow, commandsS)
+				fmt.Printf(yellow, commandsS)
 			case "help":
-				fmt.Printf(Yellow, helpS)
+				fmt.Printf(yellow, helpS)
 			case "commands":
-				fmt.Printf(Yellow, commandsS)
+				fmt.Printf(yellow, commandsS)
 			case "migrate":
 				path := kinput.Input(kinput.Blue, "path to sql file: ")
 				err := migratefromfile(path)
 				if !klog.CheckError(err) {
-					fmt.Printf(Green, "migrated successfully")
+					fmt.Printf(green, "migrated successfully")
 				}
 			case "databases":
-				fmt.Printf(Green, GetMemoryDatabases())
+				fmt.Printf(green, getMemoryDatabases())
 			case "use":
 				db := kinput.Input(kinput.Blue, "database name: ")
-				usedDB=db
-				fmt.Printf(Green, "you are using database "+db)
+				usedDB = db
+				fmt.Printf(green, "you are using database "+db)
 			case "tables":
-				fmt.Printf(Green, GetAllTables(usedDB))
+				fmt.Printf(green, GetAllTables(usedDB))
 			case "columns":
 				tb := kinput.Input(kinput.Blue, "Table name: ")
 				mcols := GetAllColumnsTypes(tb, usedDB)
@@ -137,7 +137,7 @@ func InitShell() bool {
 				for k := range mcols {
 					cols = append(cols, k)
 				}
-				fmt.Printf(Green, cols)
+				fmt.Printf(green, cols)
 			case "getall":
 				getAll()
 			case "get":
@@ -147,7 +147,7 @@ func InitShell() bool {
 			case "delete":
 				deleteRow()
 			default:
-				fmt.Printf(Red, "command not handled, use 'help' or 'commands' to list available commands ")
+				fmt.Printf(red, "command not handled, use 'help' or 'commands' to list available commands ")
 			}
 		}
 	default:
@@ -160,9 +160,9 @@ func getAll() {
 	data, err := Table(tableName).Database(usedDB).All()
 	if err == nil {
 		d, _ := json.MarshalIndent(data, "", "    ")
-		fmt.Printf(Green, string(d))
+		fmt.Printf(green, string(d))
 	} else {
-		fmt.Printf(Red, err.Error())
+		fmt.Printf(red, err.Error())
 	}
 }
 
@@ -176,22 +176,22 @@ func getRow() {
 		data, err = Table(tableName).Database(usedDB).Where(whereField+" = ?", equalTo).One()
 		if err == nil {
 			d, _ := json.MarshalIndent(data, "", "    ")
-			fmt.Printf(Green, string(d))
+			fmt.Printf(green, string(d))
 		} else {
-			fmt.Printf(Red, "error: "+err.Error())
+			fmt.Printf(red, "error: "+err.Error())
 		}
 	} else {
-		fmt.Printf(Red, "One or more field are empty")
+		fmt.Printf(red, "One or more field are empty")
 	}
 }
 
 func migratefromfile(path string) error {
 	if !SliceContains([]string{POSTGRES, SQLITE, MYSQL, MARIA}, databases[0].Dialect) {
-		fmt.Printf(Red, "database is neither postgres, sqlite or mysql ")
+		fmt.Printf(red, "database is neither postgres, sqlite or mysql ")
 		return errors.New("database is neither postgres, sqlite or mysql ")
 	}
 	if path == "" {
-		fmt.Printf(Red, "path cannot be empty ")
+		fmt.Printf(red, "path cannot be empty ")
 		return errors.New("path cannot be empty ")
 	}
 	statements := []string{}
@@ -204,7 +204,7 @@ func migratefromfile(path string) error {
 
 	//exec migrations
 	for i := range statements {
-		conn,_ := GetConnection(usedDB)
+		conn, _ := GetConnection(usedDB)
 		_, err := conn.Exec(statements[i])
 		if err != nil {
 			return errors.New("error migrating from " + path + " " + err.Error())
@@ -218,12 +218,12 @@ func dropTable() {
 	if tableName != "" {
 		_, err := Table(tableName).Database(usedDB).Drop()
 		if err != nil {
-			fmt.Printf(Red, "error dropping table :"+err.Error())
+			fmt.Printf(red, "error dropping table :"+err.Error())
 		} else {
-			fmt.Printf(Green, tableName+" dropped with success")
+			fmt.Printf(green, tableName+" dropped with success")
 		}
 	} else {
-		fmt.Printf(Red, "table is empty")
+		fmt.Printf(red, "table is empty")
 	}
 }
 
@@ -236,19 +236,19 @@ func deleteRow() {
 		if err != nil {
 			_, err := Table(tableName).Database(usedDB).Where(whereField+" = ?", equalTo).Delete()
 			if err == nil {
-				fmt.Printf(Green, tableName+"with"+whereField+"="+equalTo+"deleted.")
+				fmt.Printf(green, tableName+"with"+whereField+"="+equalTo+"deleted.")
 			} else {
-				fmt.Printf(Red, "error deleting row: "+err.Error())
+				fmt.Printf(red, "error deleting row: "+err.Error())
 			}
 		} else {
 			_, err = Table(tableName).Where(whereField+" = ?", equal).Delete()
 			if err == nil {
-				fmt.Printf(Green, tableName+" with "+whereField+" = "+equalTo+" deleted.")
+				fmt.Printf(green, tableName+" with "+whereField+" = "+equalTo+" deleted.")
 			} else {
-				fmt.Printf(Red, "error deleting row: "+err.Error())
+				fmt.Printf(red, "error deleting row: "+err.Error())
 			}
 		}
 	} else {
-		fmt.Printf(Red, "some of args are empty")
+		fmt.Printf(red, "some of args are empty")
 	}
 }

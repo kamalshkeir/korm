@@ -49,7 +49,7 @@ func Model[T comparable](tableName ...string) *Builder[T] {
 	}
 }
 
-func BuilderS[T comparable](tableName ...string) *Builder[T] {
+func BuilderStruct[T comparable](tableName ...string) *Builder[T] {
 	tName := getTableName[T]()
 	if tName == "" {
 		if len(tableName) > 0 {
@@ -70,7 +70,7 @@ func (b *Builder[T]) Database(dbName string) *Builder[T] {
 	if b.database == "" {
 		b.database = databases[0].Name
 	}
-	db, err := GetMemoryDatabase(b.database)
+	db, err := getMemoryDatabase(b.database)
 	if klog.CheckError(err) {
 		b.database = databases[0].Name
 	} else {
@@ -97,7 +97,7 @@ func (b *Builder[T]) Insert(model *T) (int, error) {
 			"database": b.database,
 		})
 	}
-	db, err := GetMemoryDatabase(b.database)
+	db, err := getMemoryDatabase(b.database)
 	if klog.CheckError(err) {
 		return 0, err
 	}
@@ -116,16 +116,16 @@ func (b *Builder[T]) Insert(model *T) (int, error) {
 			klog.Printf("rd%vnot found in fields\n")
 			return 0, errors.New("field not found")
 		}
-		if SliceContains(mtags[name], "autoinc", "pk","-") {
+		if SliceContains(mtags[name], "autoinc", "pk", "-") {
 			ignored = append(ignored, i)
 		} else {
 			placeholdersSlice = append(placeholdersSlice, "?")
 		}
 	}
-	
+
 	cum := 0
-	for _,ign := range ignored {
-		ii := ign-cum
+	for _, ign := range ignored {
+		ii := ign - cum
 		delete(mvalues, names[ii])
 		names = append(names[:ii], names[ii+1:]...)
 		values = append(values[:ii], values[ii+1:]...)
@@ -149,7 +149,7 @@ func (b *Builder[T]) Insert(model *T) (int, error) {
 	} else {
 		res, err = db.Conn.Exec(b.statement, values...)
 	}
-	
+
 	if b.debug {
 		klog.Printf("%s,%s\n", b.statement, values)
 		klog.Printf("rderr:%v\n", err)
@@ -184,12 +184,11 @@ func (b *Builder[T]) Set(query string, args ...any) (int, error) {
 			"database": b.database,
 		})
 	}
-	db, err := GetMemoryDatabase(b.database)
+	db, err := getMemoryDatabase(b.database)
 	if klog.CheckError(err) {
 		return 0, err
 	}
 
-	
 	if b.whereQuery == "" {
 		return 0, errors.New("you should use Where before Update")
 	}
@@ -241,11 +240,11 @@ func (b *Builder[T]) Delete() (int, error) {
 			"database": b.database,
 		})
 	}
-	db, err := GetMemoryDatabase(b.database)
+	db, err := getMemoryDatabase(b.database)
 	if klog.CheckError(err) {
 		return 0, err
 	}
-	
+
 	b.statement = "DELETE FROM " + b.tableName
 	if b.whereQuery != "" {
 		b.statement += " WHERE " + b.whereQuery
@@ -293,11 +292,11 @@ func (b *Builder[T]) Drop() (int, error) {
 			"database": b.database,
 		})
 	}
-	db, err := GetMemoryDatabase(b.database)
+	db, err := getMemoryDatabase(b.database)
 	if klog.CheckError(err) {
 		return 0, err
 	}
-	
+
 	b.statement = "DROP TABLE " + b.tableName
 	var res sql.Result
 	if b.ctx != nil {
@@ -518,7 +517,7 @@ func (b *Builder[T]) queryS(query string, args ...any) ([]T, error) {
 	if b.database == "" {
 		b.database = databases[0].Name
 	}
-	db, err := GetMemoryDatabase(b.database)
+	db, err := getMemoryDatabase(b.database)
 	if klog.CheckError(err) {
 		return nil, err
 	}
@@ -528,7 +527,7 @@ func (b *Builder[T]) queryS(query string, args ...any) ([]T, error) {
 
 	stmt, err := db.Conn.Prepare(query)
 	if err != nil {
-		return nil,err
+		return nil, err
 	}
 	defer stmt.Close()
 	var rows *sql.Rows
@@ -568,7 +567,7 @@ func (b *Builder[T]) queryS(query string, args ...any) ([]T, error) {
 		}
 
 		if db.Dialect == MYSQL || db.Dialect == MARIA || db.Dialect == "mariadb" {
-			db.Dialect=MYSQL
+			db.Dialect = MYSQL
 			for i := range values {
 				if v, ok := values[i].([]byte); ok {
 					values[i] = string(v)
@@ -579,9 +578,9 @@ func (b *Builder[T]) queryS(query string, args ...any) ([]T, error) {
 		row := new(T)
 		if b.selected != "" && b.selected != "*" {
 			m := map[string]any{}
-			keys := strings.Split(b.selected,",")
+			keys := strings.Split(b.selected, ",")
 			for i, key := range keys {
-				m[key]=values[i]
+				m[key] = values[i]
 			}
 			err := kstrct.FillFromMap(row, m)
 			if err != nil {

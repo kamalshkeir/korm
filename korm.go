@@ -23,19 +23,19 @@ var (
 	// DefaultDB keep tracking of the first database connected
 	DefaultDB         = ""
 	useCache          = true
-	databases         = []DatabaseEntity{}
+	databases         = []databaseEntity{}
 	mModelTablename   = map[any]string{}
 	cacheGetAllTables = kmap.New[string, []string](false)
 	cachesOneM        = kmap.New[dbCache, map[string]any](false)
 	cachesAllM        = kmap.New[dbCache, []map[string]any](false)
 
-	onceDone = false
-	cachebus *ksbus.Bus
+	onceDone       = false
+	cachebus       *ksbus.Bus
 	switchBusMutex sync.Mutex
-	MaxOpenConns=10
-	MaxIdleConns=10
-	MaxLifetime=30 * time.Minute
-	MaxIdleTime=12 * time.Hour
+	MaxOpenConns   = 10
+	MaxIdleConns   = 10
+	MaxLifetime    = 30 * time.Minute
+	MaxIdleTime    = 12 * time.Hour
 )
 
 const (
@@ -48,20 +48,20 @@ const (
 	COCKROACH        = "cockroach"
 )
 
-type TableEntity struct {
-	Pk         string
-	Name       string
-	Columns    []string
+type tableEntity struct {
 	Types      map[string]string
 	ModelTypes map[string]string
 	Tags       map[string][]string
+	Columns    []string
+	Pk         string
+	Name       string
 }
 
-type DatabaseEntity struct {
-	Name      string
-	Conn      *sql.DB
-	Dialect   string
-	Tables    []TableEntity
+type databaseEntity struct {
+	Tables  []tableEntity
+	Name    string
+	Dialect string
+	Conn    *sql.DB
 }
 
 // NewDatabaseFromDSN the generic way to connect to all handled databases
@@ -72,25 +72,25 @@ func New(dbType, dbName string, dbDSN ...string) error {
 	}
 	options := ""
 	if len(dbDSN) > 0 {
-		if strings.Contains(dbDSN[0],"?") {
-			sp := strings.Split(dbDSN[0],"?")
-			dbDSN[0]=sp[0]
-			options=sp[1]
+		if strings.Contains(dbDSN[0], "?") {
+			sp := strings.Split(dbDSN[0], "?")
+			dbDSN[0] = sp[0]
+			options = sp[1]
 		}
 	}
 	switch dbType {
-	case POSTGRES,COCKROACH:
+	case POSTGRES, COCKROACH:
 		dbType = POSTGRES
 		if len(dbDSN) == 0 {
 			return errors.New("dbDSN for mysql cannot be empty")
 		}
-		dsn = "postgres://"+dbDSN[0]+"/"+dbName
+		dsn = "postgres://" + dbDSN[0] + "/" + dbName
 		if options != "" {
-			dsn+="?"+options
+			dsn += "?" + options
 		} else {
-			dsn+="?sslmode=disable"
+			dsn += "?sslmode=disable"
 		}
-	case MYSQL,MARIA, "mariadb":
+	case MYSQL, MARIA, "mariadb":
 		dbType = MYSQL
 		if len(dbDSN) == 0 {
 			return errors.New("dbDSN for mysql cannot be empty")
@@ -105,8 +105,8 @@ func New(dbType, dbName string, dbDSN ...string) error {
 			dsn = split[0] + "@" + "tcp(" + split[1] + ")/" + dbName
 		}
 		if options != "" {
-			dsn+="?"+options
-		} 
+			dsn += "?" + options
+		}
 	case SQLITE:
 		if dsn == "" {
 			dsn = "db.sqlite"
@@ -117,19 +117,19 @@ func New(dbType, dbName string, dbDSN ...string) error {
 			dsn = dbName
 		}
 		if options != "" {
-			dsn+="?"+options
+			dsn += "?" + options
 		} else {
 			dsn += "?_pragma=foreign_keys(1)"
 		}
 	default:
-		dbType=SQLITE
+		dbType = SQLITE
 		klog.Printf("%s not handled, choices are: postgres,mysql,sqlite,maria,coakroach\n", dbType)
 		dsn = dbName + ".sqlite"
 		if dsn == "" {
 			dsn = "db.sqlite"
 		}
 		if options != "" {
-			dsn+="?"+options
+			dsn += "?" + options
 		} else {
 			dsn += "?_pragma=foreign_keys(1)"
 		}
@@ -157,11 +157,11 @@ func New(dbType, dbName string, dbDSN ...string) error {
 	conn.SetConnMaxIdleTime(MaxIdleTime)
 
 	if !dbFound {
-		databases = append(databases, DatabaseEntity{
+		databases = append(databases, databaseEntity{
 			Name:    dbName,
 			Conn:    conn,
 			Dialect: dbType,
-			Tables:  []TableEntity{},
+			Tables:  []tableEntity{},
 		})
 	}
 	if !onceDone {
@@ -220,11 +220,11 @@ func NewFromConnection(dbType, dbName string, conn *sql.DB) error {
 	conn.SetConnMaxLifetime(MaxLifetime)
 	conn.SetConnMaxIdleTime(MaxIdleTime)
 	if !dbFound {
-		databases = append(databases, DatabaseEntity{
+		databases = append(databases, databaseEntity{
 			Name:    dbName,
 			Conn:    conn,
 			Dialect: dbType,
-			Tables:  []TableEntity{},
+			Tables:  []tableEntity{},
 		})
 	}
 	if !onceDone {
@@ -290,14 +290,13 @@ func DisableCache() {
 	useCache = false
 }
 
-
-func GetConnection(dbName ...string) (conn *sql.DB,ok bool) {
-	var db *DatabaseEntity
+func GetConnection(dbName ...string) (conn *sql.DB, ok bool) {
+	var db *databaseEntity
 	var err error
 	if len(dbName) > 0 {
-		db, err = GetMemoryDatabase(dbName[0])
+		db, err = getMemoryDatabase(dbName[0])
 	} else {
-		db, err = GetMemoryDatabase(databases[0].Name)
+		db, err = getMemoryDatabase(databases[0].Name)
 	}
 	if klog.CheckError(err) {
 		return nil, false
@@ -323,7 +322,7 @@ func GetAllTables(dbName ...string) []string {
 		}
 	}
 	tables := []string{}
-	db,err := GetMemoryDatabase(name)
+	db, err := getMemoryDatabase(name)
 	if err == nil {
 		for _, t := range db.Tables {
 			tables = append(tables, t.Name)
@@ -336,7 +335,7 @@ func GetAllTables(dbName ...string) []string {
 		}
 	}
 
-	conn,ok := GetConnection(name)
+	conn, ok := GetConnection(name)
 	if !ok {
 		klog.Printf("rdconnection is null\n")
 		return nil
@@ -403,7 +402,7 @@ func GetAllColumnsTypes(table string, dbName ...string) map[string]string {
 		dName = dbName[0]
 	}
 
-	tb, err := GetMemoryTable(table, dName)
+	tb, err := getMemoryTable(table, dName)
 	if err == nil {
 		if len(tb.Types) > 0 {
 			return tb.Types
@@ -411,7 +410,7 @@ func GetAllColumnsTypes(table string, dbName ...string) map[string]string {
 	}
 
 	dbType := databases[0].Dialect
-	conn,_ := GetConnection(dName)
+	conn, _ := GetConnection(dName)
 	for _, d := range databases {
 		if d.Name == dName {
 			dbType = d.Dialect
@@ -467,44 +466,31 @@ func GetAllColumnsTypes(table string, dbName ...string) map[string]string {
 	return columns
 }
 
-// GetMemoryTable get a table from memory for specified or first connected db
-func GetMemoryTable(tbName string, dbName ...string) (TableEntity, error) {
+// getMemoryTable get a table from memory for specified or first connected db
+func getMemoryTable(tbName string, dbName ...string) (tableEntity, error) {
 	dName := databases[0].Name
 	if len(dbName) > 0 {
 		dName = dbName[0]
 	}
-	db, err := GetMemoryDatabase(dName)
+	db, err := getMemoryDatabase(dName)
 	if err != nil {
-		return TableEntity{}, err
+		return tableEntity{}, err
 	}
 	for _, t := range db.Tables {
 		if t.Name == tbName {
 			return t, nil
 		}
 	}
-	return TableEntity{}, errors.New("nothing found")
+	return tableEntity{}, errors.New("nothing found")
 }
 
-// GetMemoryTable get all tables from memory for specified or first connected db
-func GetMemoryTables(dbName ...string) ([]TableEntity, error) {
-	dName := databases[0].Name
-	if len(dbName) > 0 {
-		dName = dbName[0]
-	}
-	db, err := GetMemoryDatabase(dName)
-	if err != nil {
-		return nil, err
-	}
-	return db.Tables, nil
-}
-
-// GetMemoryDatabases get all databases from memory
-func GetMemoryDatabases() []DatabaseEntity {
+// getMemoryDatabases get all databases from memory
+func getMemoryDatabases() []databaseEntity {
 	return databases
 }
 
-// GetMemoryDatabase return the first connected database korm.DefaultDatabase if dbName "" or "default" else the matched db
-func GetMemoryDatabase(dbName string) (*DatabaseEntity, error) {
+// getMemoryDatabase return the first connected database korm.DefaultDatabase if dbName "" or "default" else the matched db
+func getMemoryDatabase(dbName string) (*databaseEntity, error) {
 	if DefaultDB == "" {
 		DefaultDB = databases[0].Name
 	}

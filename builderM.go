@@ -288,7 +288,7 @@ func (b *BuilderM) Insert(fields_comma_separated string, fields_values ...any) (
 		})
 	}
 
-	db, err := GetMemoryDatabase(b.database)
+	db, err := getMemoryDatabase(b.database)
 	if err != nil {
 		return 0, err
 	}
@@ -356,7 +356,7 @@ func (b *BuilderM) Set(query string, args ...any) (int, error) {
 			"database": b.database,
 		})
 	}
-	db, err := GetMemoryDatabase(b.database)
+	db, err := getMemoryDatabase(b.database)
 	if err != nil {
 		return 0, err
 	}
@@ -407,7 +407,7 @@ func (b *BuilderM) Delete() (int, error) {
 			"database": b.database,
 		})
 	}
-	db, err := GetMemoryDatabase(b.database)
+	db, err := getMemoryDatabase(b.database)
 	if err != nil {
 		return 0, err
 	}
@@ -454,7 +454,7 @@ func (b *BuilderM) Drop() (int, error) {
 			"database": b.database,
 		})
 	}
-	db, err := GetMemoryDatabase(b.database)
+	db, err := getMemoryDatabase(b.database)
 	if err != nil {
 		return 0, err
 	}
@@ -480,7 +480,7 @@ func (b *BuilderM) queryM(statement string, args ...any) ([]map[string]interface
 	if b.database == "" {
 		b.database = databases[0].Name
 	}
-	db, err := GetMemoryDatabase(b.database)
+	db, err := getMemoryDatabase(b.database)
 	if err != nil {
 		return nil, err
 	}
@@ -540,7 +540,7 @@ func Query(dbName string, statement string, args ...any) ([]map[string]interface
 	if dbName == "" {
 		dbName = databases[0].Name
 	}
-	db, err := GetMemoryDatabase(dbName)
+	db, err := getMemoryDatabase(dbName)
 	if err != nil {
 		return nil, err
 	}

@@ -31,12 +31,12 @@ type dbCache struct {
 	args       string
 }
 
-// LinkModel link a struct model to a  db_table_name
-func LinkModel[T comparable](to_table_name string, db *DatabaseEntity) {
+// linkModel link a struct model to a  db_table_name
+func linkModel[T comparable](to_table_name string, db *databaseEntity) {
 	if db.Name == "" {
 		var err error
 		db.Name = databases[0].Name
-		db, err = GetMemoryDatabase(db.Name)
+		db, err = getMemoryDatabase(db.Name)
 		if klog.CheckError(err) {
 			return
 		}
@@ -61,14 +61,14 @@ func LinkModel[T comparable](to_table_name string, db *DatabaseEntity) {
 		}
 	}
 
-	diff := Difference(fields, cols)
+	diff := difference(fields, cols)
 	if pk == "" {
 		pk = "id"
 		ftypes["id"] = "int"
 		if !SliceContains(fields, "id") {
 			fields = append([]string{"id"}, fields...)
 		}
-		SliceRemove(&diff, "id")
+		sliceRemove(&diff, "id")
 	}
 
 	var wg sync.WaitGroup
@@ -94,7 +94,7 @@ func LinkModel[T comparable](to_table_name string, db *DatabaseEntity) {
 	}
 
 	if !tFound {
-		db.Tables = append(db.Tables, TableEntity{
+		db.Tables = append(db.Tables, tableEntity{
 			Name:       to_table_name,
 			Columns:    fields,
 			ModelTypes: ftypes,
@@ -106,7 +106,7 @@ func LinkModel[T comparable](to_table_name string, db *DatabaseEntity) {
 }
 
 // handleAddOrRemove handle sync with db when adding or removing from a struct auto migrated
-func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []string, db *DatabaseEntity, ftypes map[string]string, ftags map[string][]string, pk string) {
+func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []string, db *databaseEntity, ftypes map[string]string, ftags map[string][]string, pk string) {
 	if len(cols) > len(fields) { // extra column db
 		for _, d := range diff {
 			fileName := "drop_" + to_table_name + "_" + d + ".sql"
@@ -126,7 +126,7 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 				trigs := "DROP TRIGGER IF EXISTS " + to_table_name + "_update_trig"
 				if len(databases) > 1 && db.Name == "" {
 					ddb := kinput.Input(kinput.Blue, "> There are more than one database connected, enter database name: ")
-					conn,ok := GetConnection(ddb)
+					conn, ok := GetConnection(ddb)
 					if ok {
 						// triggers
 						if db.Dialect != MYSQL && db.Dialect != MARIA {
@@ -239,7 +239,7 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 
 				if len(databases) > 1 && db.Name == "" {
 					ddb := kinput.Input(kinput.Blue, "> There are more than one database connected, enter database name: ")
-					_,ok := GetConnection(ddb)
+					_, ok := GetConnection(ddb)
 					if ok {
 						// triggers
 						if db.Dialect != MYSQL && db.Dialect != MARIA {
@@ -536,7 +536,7 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 				if SliceContains([]string{"yes", "Y", "y"}, choice) {
 					if len(databases) > 1 && db.Name == "" {
 						ddb := kinput.Input(kinput.Blue, "> There are more than one database connected, database name:")
-						conn,ok := GetConnection(ddb)
+						conn, ok := GetConnection(ddb)
 						if ok {
 							_, err := conn.Exec(statement)
 							if klog.CheckError(err) {
@@ -594,7 +594,7 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 							klog.Printfs("grDone, '%s' added to '%s', you may want to restart your server\n", d, to_table_name)
 						}
 					} else {
-						conn,ok := GetConnection(db.Name)
+						conn, ok := GetConnection(db.Name)
 						if ok {
 							_, err := conn.Exec(statement)
 							if klog.CheckError(err) {
@@ -656,7 +656,7 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 
 					if len(databases) > 1 && db.Name == "" {
 						ddb := kinput.Input(kinput.Blue, "> There are more than one database connected, database name:")
-						_,ok := GetConnection(ddb)
+						_, ok := GetConnection(ddb)
 						if ok {
 							if !strings.HasSuffix(statement, ";") {
 								statement += ";"
@@ -708,7 +708,7 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 							}
 						}
 					} else {
-						_,ok := GetConnection(db.Name)
+						_, ok := GetConnection(db.Name)
 						if ok {
 							if !strings.HasSuffix(statement, ";") {
 								statement += ";"
@@ -844,7 +844,7 @@ func handleIndexes(to_table_name, colName string, indexes []string, mi *migratio
 }
 
 // handleRename handle sync with db when renaming fields struct
-func handleRename(to_table_name string, fields, cols, diff []string, db *DatabaseEntity, ftags map[string][]string, pk string) {
+func handleRename(to_table_name string, fields, cols, diff []string, db *databaseEntity, ftags map[string][]string, pk string) {
 	// rename field
 	old := []string{}
 	new := []string{}
@@ -873,7 +873,7 @@ func handleRename(to_table_name string, fields, cols, diff []string, db *Databas
 				statement := "ALTER TABLE " + to_table_name + " RENAME COLUMN " + old[0] + " TO " + new[0]
 				if len(databases) > 1 && db.Name == "" {
 					ddb := kinput.Input(kinput.Blue, "> There are more than one database connected, database name:")
-					conn,ok := GetConnection(ddb)
+					conn, ok := GetConnection(ddb)
 					if ok {
 						if Debug {
 							klog.Printf("ylstatement:%s\n", statement)
@@ -910,7 +910,7 @@ func handleRename(to_table_name string, fields, cols, diff []string, db *Databas
 							statement := "ALTER TABLE " + to_table_name + " RENAME COLUMN " + o + " TO " + n
 							if len(databases) > 1 && db.Name == "" {
 								ddb := kinput.Input(kinput.Blue, "> There are more than one database connected, database name:")
-								conn,ok := GetConnection(ddb)
+								conn, ok := GetConnection(ddb)
 								if ok {
 									if Debug {
 										klog.Printf("statement:%s\n", statement)
@@ -925,7 +925,7 @@ func handleRename(to_table_name string, fields, cols, diff []string, db *Databas
 								if Debug {
 									klog.Printf("statement:%s\n", statement)
 								}
-								conn,ok := GetConnection(db.Name)
+								conn, ok := GetConnection(db.Name)
 								if ok {
 									_, err := conn.Exec(statement)
 									if klog.CheckError(err) {
@@ -995,48 +995,14 @@ func adaptPlaceholdersToDialect(query *string, dialect string) *string {
 
 func handleCache(data map[string]any) {
 	switch data["type"] {
-	case "create","delete","update":
-		if v,ok := data["table"];ok {
-			dbName := data["database"].(string)
-			go func() {
-				cachesAllM.Range(func(key dbCache, value []map[string]any) {
-					if key.table == v && key.database == dbName {
-						go cachesAllM.Delete(key)
-					}
-				})
-				cachesAllS.Range(func(key dbCache, value any) {
-					if key.table == v && key.database == dbName {
-						go cachesAllS.Delete(key)
-					}
-				})
-				cachesOneM.Range(func(key dbCache, value map[string]any) {
-					if key.table == v && key.database == dbName {
-						go cachesOneM.Delete(key)
-					}
-				})
-				cachesOneS.Range(func(key dbCache, value any) {
-					if key.table == v && key.database == dbName {
-						go cachesOneS.Delete(key)
-					}
-				})
-			}()			
-		} else {
-			go func() {
-				cachesAllM.Flush()
-				cachesAllS.Flush()
-				cachesOneM.Flush()
-				cachesOneS.Flush()
-			}()
-		}
-	case "drop":
+	case "create", "delete", "update":
 		go func() {
-			cacheGetAllTables.Flush()
 			cachesAllM.Flush()
 			cachesAllS.Flush()
 			cachesOneM.Flush()
 			cachesOneS.Flush()
 		}()
-	case "clean":
+	case "drop", "clean":
 		go func() {
 			cacheGetAllTables.Flush()
 			cachesAllM.Flush()
@@ -1073,7 +1039,6 @@ func encodeHex(dst []byte, uuid [16]byte) {
 	hex.Encode(dst[24:], uuid[10:])
 }
 
-
 func RunEvery(t time.Duration, function any) {
 	//Usage : go RunEvery(2 * time.Second,func(){})
 	fn, ok := function.(func())
@@ -1101,7 +1066,7 @@ func SliceContains[T comparable](elems []T, vs ...T) bool {
 	return false
 }
 
-func Difference[T comparable](slice1 []T, slice2 []T) []T {
+func difference[T comparable](slice1 []T, slice2 []T) []T {
 	var diff []T
 
 	// Loop two times, first to find slice1 strings not in slice2,
@@ -1129,7 +1094,7 @@ func Difference[T comparable](slice1 []T, slice2 []T) []T {
 	return diff
 }
 
-func SliceRemove[T comparable](slice *[]T, elemsToRemove ...T) {
+func sliceRemove[T comparable](slice *[]T, elemsToRemove ...T) {
 	for i, elem := range *slice {
 		for _, e := range elemsToRemove {
 			if e == elem {
