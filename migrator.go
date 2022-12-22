@@ -11,7 +11,7 @@ import (
 	"github.com/kamalshkeir/klog"
 )
 
-var MigrationAutoCheck = true
+var migrationAutoCheck = true
 
 func checkUpdatedAtTrigger(dialect, tableName, col, pk string) map[string][]string {
 	triggers := map[string][]string{}
@@ -36,84 +36,6 @@ func checkUpdatedAtTrigger(dialect, tableName, col, pk string) map[string][]stri
 		return nil
 	}
 	return triggers
-}
-
-func AddTrigger(onTable, col, bf_af_UpdateInsertDelete string, ofColumn, stmt string, forEachRow bool, whenEachRow string, dbName ...string) {
-	stat := []string{}
-	if len(dbName) == 0 {
-		dbName = append(dbName, databases[0].Name)
-	}
-	if strings.Contains(strings.ToLower(ofColumn), "of") {
-		ofColumn = strings.ReplaceAll(strings.ToLower(ofColumn), "of", "")
-	}
-	var dialect = ""
-	db, err := getMemoryDatabase(dbName[0])
-	if !klog.CheckError(err) {
-		dialect = db.Dialect
-	}
-	switch dialect {
-	case "sqlite", "sqlite3", "":
-		if ofColumn != "" {
-			ofColumn = " OF " + col
-		}
-		st := "CREATE TRIGGER IF NOT EXISTS " + onTable + "_trig_" + col + " "
-		st += bf_af_UpdateInsertDelete + ofColumn + " ON " + onTable
-		st += " BEGIN " + stmt + ";End;"
-		stat = append(stat, st)
-	case POSTGRES, "coakroach", "pg", "coakroachdb":
-		if ofColumn != "" {
-			ofColumn = " OF " + col
-		}
-		name := onTable + "_trig_" + col
-		st := "CREATE OR REPLACE FUNCTION " + name + "_func() RETURNS trigger AS $$"
-		st += " BEGIN " + stmt + ";RETURN NEW;"
-		st += "END;$$ LANGUAGE plpgsql;"
-		stat = append(stat, st)
-		trigCreate := "CREATE OR REPLACE TRIGGER " + name
-		trigCreate += " " + bf_af_UpdateInsertDelete + ofColumn + " ON public." + onTable
-		trigCreate += " FOR EACH ROW EXECUTE PROCEDURE " + name + "_func();"
-		stat = append(stat, trigCreate)
-	case MYSQL, MARIA:
-		stat = append(stat, "DROP TRIGGER "+onTable+"_trig_"+col+";")
-		st := "CREATE TRIGGER " + onTable + "_trig_" + col + " "
-		st += bf_af_UpdateInsertDelete + " ON " + onTable
-		st += " FOR EACH ROW " + stmt + ";"
-		stat = append(stat, st)
-	default:
-		return
-	}
-
-	if Debug {
-		klog.Printf("statement: %s \n", stat)
-	}
-
-	for _, s := range stat {
-		err := ExecSQL(dbName[0], s)
-		if err != nil {
-			if !StringContains(err.Error(), "Trigger does not exist") {
-				klog.Printf("rdcould not add trigger %v\n", err)
-				return
-			}
-		}
-	}
-}
-
-func DropTrigger(onField, tableName string, dbName ...string) {
-	stat := "DROP TRIGGER " + tableName + "_trig_" + onField + ";"
-	if Debug {
-		klog.Printf("yl%s\n", stat)
-	}
-	n := databases[0].Name
-	if len(dbName) > 0 {
-		n = dbName[0]
-	}
-	err := ExecSQL(n, stat)
-	if err != nil {
-		if !StringContains(err.Error(), "Trigger does not exist") {
-			return
-		}
-		klog.Printf("rderr:%v\n", err)
-	}
 }
 
 func autoMigrate[T comparable](db *databaseEntity, tableName string, execute bool) (string, error) {
@@ -185,11 +107,22 @@ func autoMigrate[T comparable](db *databaseEntity, tableName string, execute boo
 			case "Time":
 				handleMigrationTime(mi)
 			default:
-				klog.Printf("%s of type %s not handled\n", fName, ty)
+				isM2M := false
+				if tags, ok := mFieldName_Tags[fName]; ok {
+					for _, tag := range tags {
+						if strings.Contains(tag, "m2m") {
+							isM2M = true
+						}
+					}
+				}
+				if !isM2M {
+					klog.Printf("rd%s of type %s not handled\n", fName, ty)
+				}
 			}
 		}
 	}
-	statement := prepareCreateStatement(tableName, res, fkeys, cols, db, mFieldName_Tags)
+	statement := prepareCreateStatement(tableName, res, fkeys, cols)
+	fmt.Println(statement)
 	var triggers map[string][]string
 	tbFound := false
 
@@ -254,7 +187,7 @@ func autoMigrate[T comparable](db *databaseEntity, tableName string, execute boo
 						klog.Printfs("trigger updated_at %s: %s\n", tableName, st)
 					}
 					if execute {
-						err := ExecSQL(db.Name, st)
+						err := Exec(db.Name, st)
 						if klog.CheckError(err) {
 							klog.Printfs("rdtrigger updated_at %s: %s\n", tableName, st)
 							return "", err
@@ -339,8 +272,8 @@ func autoMigrate[T comparable](db *databaseEntity, tableName string, execute boo
 			}
 		}
 	}
-	if execute {
-		klog.Printfs("gr %s migrated successfully, restart the server\n", tableName)
+	if execute && Debug {
+		klog.Printfs("gr %s migrated\n", tableName)
 	}
 	toReturnQuery := strings.Join(toReturnstats, ";")
 	return toReturnQuery, nil
@@ -379,7 +312,7 @@ func AutoMigrate[T comparable](tableName string, dbName ...string) error {
 
 	tbFoundLocal := false
 	if len(db.Tables) == 0 {
-		if tbFoundDB && MigrationAutoCheck {
+		if tbFoundDB && migrationAutoCheck {
 			// found db not local
 			linkModel[T](tableName, db)
 			return nil
@@ -400,7 +333,7 @@ func AutoMigrate[T comparable](tableName string, dbName ...string) error {
 		}
 	}
 
-	if MigrationAutoCheck && (tbFoundDB || tbFoundLocal) {
+	if migrationAutoCheck && (tbFoundDB || tbFoundLocal) {
 		linkModel[T](tableName, db)
 		return nil
 	} else {
@@ -1087,7 +1020,7 @@ func handleMigrationTime(mi *migrationInput) {
 	}
 }
 
-func prepareCreateStatement(tbName string, fields map[string]string, fkeys, cols []string, db *databaseEntity, ftags map[string][]string) string {
+func prepareCreateStatement(tbName string, fields map[string]string, fkeys, cols []string) string {
 	var strBuilder strings.Builder
 	strBuilder.WriteString("CREATE TABLE IF NOT EXISTS ")
 	strBuilder.WriteString(tbName + " (")

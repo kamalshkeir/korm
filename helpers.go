@@ -136,7 +136,7 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 										if db.Dialect == POSTGRES {
 											trigs += "ON " + to_table_name
 										}
-										err := ExecSQL(db.Name, trigs)
+										err := Exec(db.Name, trigs)
 										if klog.CheckError(err) {
 											return
 										}
@@ -189,7 +189,7 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 										if db.Dialect == POSTGRES {
 											trigs += "ON " + to_table_name
 										}
-										err := ExecSQL(db.Name, trigs)
+										err := Exec(db.Name, trigs)
 										if klog.CheckError(err) {
 											return
 										}
@@ -359,13 +359,24 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 			}
 		}
 	} else if len(cols) < len(fields) { // missing column db
+	loop:
 		for _, d := range diff {
 			fileName := "add_" + to_table_name + "_" + d + ".sql"
-			if v, ok := ftags[d]; ok && v[0] == "-" || d == pk {
-				continue
+			if v, ok := ftags[d]; ok {
+				if v[0] == "-" || d == pk {
+					continue loop
+				}
+				for _, vv := range v {
+					if strings.Contains(vv, "m2m") {
+						continue loop
+					} else {
+						fmt.Println("no:", vv)
+					}
+				}
+				continue loop
 			}
 			if _, err := os.Stat("migrations/" + fileName); err == nil {
-				continue
+				continue loop
 			}
 			klog.Printfs("⚠️ column '%s' is missing from the database table '%s'\n", d, to_table_name)
 			choice, err := kinput.String(kinput.Yellow, "> do you want to add '"+d+"' to the database ?, you can also generate the query using 'g' (Y/g/n):")
@@ -527,7 +538,7 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 						}
 					}
 				default:
-					klog.Printf("case not handled:%s\n", ty)
+					klog.Printf("rdcase not handled, type is:%s\n", ty)
 					return
 				}
 

@@ -116,11 +116,24 @@ func (b *Builder[T]) Insert(model *T) (int, error) {
 			klog.Printf("rd%vnot found in fields\n")
 			return 0, errors.New("field not found")
 		}
-		if SliceContains(mtags[name], "autoinc", "pk", "-") {
-			ignored = append(ignored, i)
+
+		if tags, ok := mtags[name]; ok {
+			for _, tag := range tags {
+				switch tag {
+				case "autoinc", "pk", "-":
+					ignored = append(ignored, i)
+				default:
+					if strings.Contains(tag, "m2m") {
+						ignored = append(ignored, i)
+					} else {
+						placeholdersSlice = append(placeholdersSlice, "?")
+					}
+				}
+			}
 		} else {
 			placeholdersSlice = append(placeholdersSlice, "?")
 		}
+
 	}
 
 	cum := 0
@@ -152,9 +165,11 @@ func (b *Builder[T]) Insert(model *T) (int, error) {
 
 	if b.debug {
 		klog.Printf("%s,%s\n", b.statement, values)
-		klog.Printf("rderr:%v\n", err)
 	}
 	if err != nil {
+		if b.debug {
+			klog.Printf("rderr:%v\n", err)
+		}
 		return affectedRows, err
 	}
 	rows, err := res.RowsAffected()
@@ -162,6 +177,314 @@ func (b *Builder[T]) Insert(model *T) (int, error) {
 		return int(rows), err
 	}
 	return int(rows), nil
+}
+
+func (b *Builder[T]) AddRelated(relatedTable string, whereRelatedTable string, whereRelatedArgs ...any) (int, error) {
+	if b.tableName == "" {
+		tName := getTableName[T]()
+		if tName == "" {
+			return 0, errors.New("unable to find tableName from model, restart the app if you just migrated")
+		}
+		b.tableName = tName
+	}
+	if b.database == "" {
+		b.database = databases[0].Name
+	}
+
+	db, _ := getMemoryDatabase(b.database)
+
+	relationTableName := "m2m_" + b.tableName + "-" + b.database + "-" + relatedTable
+	if _, ok := relationsMap.Get("m2m_" + b.tableName + "-" + b.database + "-" + relatedTable); !ok {
+		relationTableName = "m2m_" + relatedTable + "-" + b.database + "-" + b.tableName
+		if _, ok2 := relationsMap.Get("m2m_" + relatedTable + "-" + b.database + "-" + b.tableName); !ok2 {
+			return 0, fmt.Errorf("no relations many to many between theses 2 tables: %s, %s", b.tableName, relatedTable)
+		}
+	}
+
+	cols := ""
+	wherecols := ""
+	inOrder := false
+	if strings.HasPrefix(relationTableName, "m2m_"+b.tableName) {
+		inOrder = true
+		relationTableName = "m2m_" + b.tableName + "_" + relatedTable
+		cols = b.tableName + "_id," + relatedTable + "_id"
+		wherecols = b.tableName + "_id = ? and " + relatedTable + "_id = ?"
+	} else if strings.HasPrefix(relationTableName, "m2m_"+relatedTable) {
+		relationTableName = "m2m_" + relatedTable + "_" + b.tableName
+		cols = relatedTable + "_id," + b.tableName + "_id"
+		wherecols = relatedTable + "_id = ? and " + b.tableName + "_id = ?"
+	}
+	memoryRelatedTable, err := getMemoryTable(relatedTable)
+	if err != nil {
+		return 0, fmt.Errorf("memory table not found:" + relatedTable)
+	}
+	memoryTypedTable, err := getMemoryTable(b.tableName)
+	if err != nil {
+		return 0, fmt.Errorf("memory table not found:" + relatedTable)
+	}
+	ids := make([]any, 4)
+
+	data, err := Table(relatedTable).Where(whereRelatedTable, whereRelatedArgs...).One()
+	if err != nil {
+		return 0, err
+	}
+	if v, ok := data[memoryRelatedTable.Pk]; ok {
+		if inOrder {
+			ids[1] = v
+			ids[3] = v
+		} else {
+			ids[0] = v
+			ids[2] = v
+		}
+	}
+	// get the typed model
+	if b.whereQuery == "" {
+		return 0, fmt.Errorf("you must specify a where for the typed struct")
+	}
+	typedModel, err := Table(b.tableName).Where(b.whereQuery, b.args...).One()
+	if err != nil {
+		return 0, err
+	}
+	if v, ok := typedModel[memoryTypedTable.Pk]; ok {
+		if inOrder {
+			ids[0] = v
+			ids[2] = v
+		} else {
+			ids[1] = v
+			ids[3] = v
+		}
+	}
+	stat := "INSERT INTO " + relationTableName + "(" + cols + ") SELECT ?,? WHERE NOT EXISTS (SELECT * FROM " + relationTableName + " WHERE " + wherecols + ");"
+	adaptPlaceholdersToDialect(&stat, db.Dialect)
+	err = Exec(b.database, stat, ids...)
+	if err != nil {
+		return 0, err
+	}
+	return 1, nil
+}
+
+func (b *Builder[T]) DeleteRelated(relatedTable string, whereRelatedTable string, whereRelatedArgs ...any) (int, error) {
+	if b.tableName == "" {
+		tName := getTableName[T]()
+		if tName == "" {
+			return 0, errors.New("unable to find tableName from model, restart the app if you just migrated")
+		}
+		b.tableName = tName
+	}
+	if b.database == "" {
+		b.database = databases[0].Name
+	}
+
+	relationTableName := "m2m_" + b.tableName + "-" + b.database + "-" + relatedTable
+	if _, ok := relationsMap.Get("m2m_" + b.tableName + "-" + b.database + "-" + relatedTable); !ok {
+		relationTableName = "m2m_" + relatedTable + "-" + b.database + "-" + b.tableName
+		if _, ok2 := relationsMap.Get("m2m_" + relatedTable + "-" + b.database + "-" + b.tableName); !ok2 {
+			return 0, fmt.Errorf("no relations many to many between theses 2 tables: %s, %s", b.tableName, relatedTable)
+		}
+	}
+
+	wherecols := ""
+	inOrder := false
+	if strings.HasPrefix(relationTableName, "m2m_"+b.tableName) {
+		inOrder = true
+		relationTableName = "m2m_" + b.tableName + "_" + relatedTable
+		wherecols = b.tableName + "_id = ? and " + relatedTable + "_id = ?"
+	} else if strings.HasPrefix(relationTableName, "m2m_"+relatedTable) {
+		relationTableName = "m2m_" + relatedTable + "_" + b.tableName
+		wherecols = relatedTable + "_id = ? and " + b.tableName + "_id = ?"
+	}
+	memoryRelatedTable, err := getMemoryTable(relatedTable)
+	if err != nil {
+		return 0, fmt.Errorf("memory table not found:" + relatedTable)
+	}
+	memoryTypedTable, err := getMemoryTable(b.tableName)
+	if err != nil {
+		return 0, fmt.Errorf("memory table not found:" + relatedTable)
+	}
+	ids := make([]any, 2)
+
+	data, err := Table(relatedTable).Where(whereRelatedTable, whereRelatedArgs...).One()
+	if err != nil {
+		return 0, err
+	}
+	if v, ok := data[memoryRelatedTable.Pk]; ok {
+		if inOrder {
+			ids[1] = v
+		} else {
+			ids[0] = v
+		}
+	}
+	// get the typed model
+	if b.whereQuery == "" {
+		return 0, fmt.Errorf("you must specify a where for the typed struct")
+	}
+	typedModel, err := Table(b.tableName).Where(b.whereQuery, b.args...).One()
+	if err != nil {
+		return 0, err
+	}
+	if v, ok := typedModel[memoryTypedTable.Pk]; ok {
+		if inOrder {
+			ids[0] = v
+		} else {
+			ids[1] = v
+		}
+	}
+	n, err := Table(relationTableName).Debug().Where(wherecols, ids...).Delete()
+	if err != nil {
+		return 0, err
+	}
+	return n, nil
+}
+
+func (b *Builder[T]) GetRelated(relatedTable string, dest any) error {
+	if b.tableName == "" {
+		tName := getTableName[T]()
+		if tName == "" {
+			return fmt.Errorf("unable to find tableName from model, restart the app if you just migrated")
+		}
+		b.tableName = tName
+	}
+	if b.database == "" {
+		b.database = databases[0].Name
+	}
+
+	relationTableName := "m2m_" + b.tableName + "-" + b.database + "-" + relatedTable
+	if _, ok := relationsMap.Get("m2m_" + b.tableName + "-" + b.database + "-" + relatedTable); !ok {
+		relationTableName = "m2m_" + relatedTable + "-" + b.database + "-" + b.tableName
+		if _, ok2 := relationsMap.Get("m2m_" + relatedTable + "-" + b.database + "-" + b.tableName); !ok2 {
+			return fmt.Errorf("no relations many to many between theses 2 tables: %s, %s", b.tableName, relatedTable)
+		}
+	}
+
+	if strings.HasPrefix(relationTableName, "m2m_"+b.tableName) {
+		relationTableName = "m2m_" + b.tableName + "_" + relatedTable
+	} else if strings.HasPrefix(relationTableName, "m2m_"+relatedTable) {
+		relationTableName = "m2m_" + relatedTable + "_" + b.tableName
+	}
+
+	// get the typed model
+	if b.whereQuery == "" {
+		return fmt.Errorf("you must specify a where query like 'email = ? and username like ...' for structs")
+	}
+	b.whereQuery = strings.TrimSpace(b.whereQuery)
+	if b.selected != "" {
+		if !strings.Contains(b.selected, b.tableName) && !strings.Contains(b.selected, relatedTable) {
+			if strings.Contains(b.selected, ",") {
+				sp := strings.Split(b.selected, ",")
+				for i := range sp {
+					sp[i] = b.tableName + "." + sp[i]
+				}
+				b.selected = strings.Join(sp, ",")
+			} else {
+				b.selected = b.tableName + "." + b.selected
+			}
+		}
+		b.statement = "SELECT " + b.selected + " FROM " + relatedTable
+		fmt.Println(b.statement)
+	} else {
+		b.statement = "SELECT " + relatedTable + ".* FROM " + relatedTable
+	}
+
+	b.statement += " JOIN " + relationTableName + " ON " + relatedTable + ".id = " + relationTableName + "." + relatedTable + "_id"
+	b.statement += " JOIN " + b.tableName + " ON " + b.tableName + ".id = " + relationTableName + "." + b.tableName + "_id"
+	b.statement += " WHERE " + b.whereQuery
+	if b.orderBys != "" {
+		b.statement += " " + b.orderBys
+	}
+	if b.limit > 0 {
+		i := strconv.Itoa(b.limit)
+		b.statement += " LIMIT " + i
+		if b.page > 0 {
+			o := strconv.Itoa((b.page - 1) * b.limit)
+			b.statement += " OFFSET " + o
+		}
+	}
+	if b.debug {
+		klog.Printf("statement:%s\n", b.statement)
+		klog.Printf("args:%v\n", b.args)
+	}
+	err := Table(relationTableName).queryS(dest, b.statement, b.args...)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (b *Builder[T]) JoinRelated(relatedTable string, dest any) error {
+	if b.tableName == "" {
+		tName := getTableName[T]()
+		if tName == "" {
+			return fmt.Errorf("unable to find tableName from model, restart the app if you just migrated")
+		}
+		b.tableName = tName
+	}
+	if b.database == "" {
+		b.database = databases[0].Name
+	}
+
+	relationTableName := "m2m_" + b.tableName + "-" + b.database + "-" + relatedTable
+	if _, ok := relationsMap.Get("m2m_" + b.tableName + "-" + b.database + "-" + relatedTable); !ok {
+		relationTableName = "m2m_" + relatedTable + "-" + b.database + "-" + b.tableName
+		if _, ok2 := relationsMap.Get("m2m_" + relatedTable + "-" + b.database + "-" + b.tableName); !ok2 {
+			return fmt.Errorf("no relations many to many between theses 2 tables: %s, %s", b.tableName, relatedTable)
+		}
+	}
+
+	if strings.HasPrefix(relationTableName, "m2m_"+b.tableName) {
+		relationTableName = "m2m_" + b.tableName + "_" + relatedTable
+	} else if strings.HasPrefix(relationTableName, "m2m_"+relatedTable) {
+		relationTableName = "m2m_" + relatedTable + "_" + b.tableName
+	}
+
+	// get the typed model
+	if b.whereQuery == "" {
+		return fmt.Errorf("you must specify a where for the typed struct")
+	}
+	b.whereQuery = strings.TrimSpace(b.whereQuery)
+	if b.selected != "" {
+		if !strings.Contains(b.selected, b.tableName) && !strings.Contains(b.selected, relatedTable) {
+			if strings.Contains(b.selected, ",") {
+				sp := strings.Split(b.selected, ",")
+				for i := range sp {
+					sp[i] = b.tableName + "." + sp[i]
+				}
+				b.selected = strings.Join(sp, ",")
+			} else {
+				b.selected = b.tableName + "." + b.selected
+			}
+		}
+		b.statement = "SELECT " + b.selected + " FROM " + relatedTable
+		fmt.Println(b.statement)
+	} else {
+		b.statement = "SELECT " + relatedTable + ".*," + b.tableName + ".* FROM " + relatedTable
+	}
+
+	b.statement += " JOIN " + relationTableName + " ON " + relatedTable + ".id = " + relationTableName + "." + relatedTable + "_id"
+	b.statement += " JOIN " + b.tableName + " ON " + b.tableName + ".id = " + relationTableName + "." + b.tableName + "_id"
+	if !strings.Contains(b.whereQuery, b.tableName) {
+		return fmt.Errorf("you should specify table name like : %s.id = ? , instead of %s", b.tableName, b.whereQuery)
+	}
+	b.statement += " WHERE " + b.whereQuery
+	if b.orderBys != "" {
+		b.statement += " " + b.orderBys
+	}
+	if b.limit > 0 {
+		i := strconv.Itoa(b.limit)
+		b.statement += " LIMIT " + i
+		if b.page > 0 {
+			o := strconv.Itoa((b.page - 1) * b.limit)
+			b.statement += " OFFSET " + o
+		}
+	}
+	if b.debug {
+		klog.Printf("statement:%s\n", b.statement)
+		klog.Printf("args:%v\n", b.args)
+	}
+	err := Table(relationTableName).queryS(dest, b.statement, b.args...)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // Set usage: Set("email = ? AND is_admin = ?","example@mail.com",true)
@@ -325,6 +648,26 @@ func (b *Builder[T]) Select(columns ...string) *Builder[T] {
 
 func (b *Builder[T]) Where(query string, args ...any) *Builder[T] {
 	b.whereQuery = query
+	if strings.Contains(query, ",") {
+		sp := strings.Split(query, ",")
+		for i := range sp {
+			if !strings.HasPrefix(sp[i], b.tableName) {
+				sp[i] = b.tableName + "." + sp[i] + " = ?"
+				if !strings.Contains(query, "?") {
+					sp[i] += " = ?"
+				}
+			}
+		}
+		b.whereQuery = strings.Join(sp, ",")
+	} else {
+		if !strings.HasPrefix(query, b.tableName) {
+			b.whereQuery = b.tableName + "." + query
+		}
+		if !strings.Contains(query, "?") {
+			b.whereQuery += " = ?"
+		}
+	}
+
 	b.args = append(b.args, args...)
 	b.order = append(b.order, "where")
 	return b
@@ -357,13 +700,32 @@ func (b *Builder[T]) Page(pageNumber int) *Builder[T] {
 func (b *Builder[T]) OrderBy(fields ...string) *Builder[T] {
 	b.orderBys = "ORDER BY "
 	orders := []string{}
+
 	for _, f := range fields {
+		addTableName := false
+		if b.tableName != "" {
+			if !strings.Contains(f, b.tableName) {
+				addTableName = true
+			}
+		}
 		if strings.HasPrefix(f, "+") {
-			orders = append(orders, f[1:]+" ASC")
+			if addTableName {
+				orders = append(orders, b.tableName+"."+f[1:]+" ASC")
+			} else {
+				orders = append(orders, f[1:]+" ASC")
+			}
 		} else if strings.HasPrefix(f, "-") {
-			orders = append(orders, f[1:]+" DESC")
+			if addTableName {
+				orders = append(orders, b.tableName+"."+f[1:]+" DESC")
+			} else {
+				orders = append(orders, f[1:]+" DESC")
+			}
 		} else {
-			orders = append(orders, f+" ASC")
+			if addTableName {
+				orders = append(orders, b.tableName+"."+f+" ASC")
+			} else {
+				orders = append(orders, f+" ASC")
+			}
 		}
 	}
 	b.orderBys += strings.Join(orders, ",")

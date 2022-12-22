@@ -1,5 +1,5 @@
 <div align="center">
-	<h1 style="color:blue;font-size:clamp(30px,12vw,100px);padding-bottom:0;">KORM</h1>
+	<h1 style="font-size:clamp(50px,15vw,100px);padding-bottom:0;">KORM</h1>
 	<h3 style="color:#dddd00;font-size:clamp(20px,4vw,40px);">
 	<a href="#benchmarks" style="text-decoration:none;color:#dddd00">The Blazingly Fast ORM</a></h3>
 	<img src="https://img.shields.io/github/go-mod/go-version/kamalshkeir/korm" width="auto" height="20px">
@@ -30,6 +30,7 @@
 
 
 #### It come with :
+- New: handle [many to many](#manytomany-relationships-example) relationships 
 - [Interactive Shell](#interactive-shell), to CRUD in your databases `go run main.go dbshell` or `go run main.go mongoshell` for mongo
 - Network Bus allowing you to send and recv data in realtime using pubsub websockets between your ORMs, so you can decide how you data will be distributed between different databases, see [Example](#example-with-bus-between-2-korm) .
 - [AutoMigrate](#automigrate) directly from struct, for mongo it will only link the struct to the tableName, allowing usage of BuilderS. For all sql, whenever you add or remove a field from a migrated struct, you will get a prompt proposing to add the column for the table in the database or remove a column, you can also only generate the query without execute, and then you can use the shell to migrate the generated file
@@ -56,6 +57,13 @@
 go get -u github.com/kamalshkeir/korm@latest // sql ORM
 ```
 
+# Drivers moved outside this package to not get them all in your go.mod file
+```sh
+go get github.com/kamalshkeir/sqlitedriver
+go get github.com/kamalshkeir/pgdriver
+go get github.com/kamalshkeir/mysqldriver
+```
+
 ```sh
 go get -u github.com/kamalshkeir/kormongo@latest // Mongo ORM
 ```
@@ -65,19 +73,17 @@ go get -u github.com/kamalshkeir/kormongo@latest // Mongo ORM
 // mongodb
 err := kormongo.New("dbmongo", "localhost:27017")
 // sqlite
-sqlitedriver.Use() // load sqlite driver
+sqlitedriver.Use() // load sqlite driver --> go get github.com/kamalshkeir/sqlitedriver
 err := korm.New(korm.SQLITE, "db") // Connect
 // postgres, coakroach
-pgdriver.Use() // load postgres driver
+pgdriver.Use() // load postgres driver  --> go get github.com/kamalshkeir/pgdriver
 err := korm.New(korm.POSTGRES,"dbName", "localhost:5432") // Connect
 // mysql, maria
-mysqldriver.Use() // load mysql driver
+mysqldriver.Use() // load mysql driver  --> go get github.com/kamalshkeir/mysqldriver
 err := korm.New(korm.MYSQL,"dbName","localhost:3306") // Connect
 
-korm.ShutdownDatabases(databasesName ...string) error
+korm.Shutdown(databasesName ...string) error
 kormongo.ShutdownDatabases(databasesName ...string) error
-...
-...
 ```
 
 ### AutoMigrate 
@@ -157,10 +163,11 @@ func GetMemoryTable(tbName string, dbName ...string) (TableEntity, error)
 func GetMemoryTables(dbName ...string) ([]TableEntity, error)
 func GetMemoryDatabases() []DatabaseEntity
 func GetMemoryDatabase(dbName string) (*DatabaseEntity, error)
-func ShutdownDatabases(databasesName ...string) error
+func Shutdown(databasesName ...string) error
 func FlushCache()
-func DisableCheck() // Korm Only
+func DisableCheck() // Korm Only, disable struct check on change to add or remove column
 func DisableCache()
+func ManyToMany(table1, table2 string, dbName ...string) error // add table relation m2m 
 ```
 
 #### Builder `map[string]any`:
@@ -175,6 +182,10 @@ func (b *BuilderM) Limit(limit int) *BuilderM
 func (b *BuilderM) Page(pageNumber int) *BuilderM
 func (b *BuilderM) OrderBy(fields ...string) *BuilderM
 func (b *BuilderM) Context(ctx context.Context) *BuilderM
+func (b *BuilderM) AddRelated(relatedTable string, whereRelatedTable string, whereRelatedArgs ...any) (int, error) // finisher
+func (b *BuilderM) GetRelated(relatedTable string, dest *[]map[string]any) error // finisher
+func (b *BuilderM) JoinRelated(relatedTable string, dest *[]map[string]any) error // finisher
+func (b *BuilderM) DeleteRelated(relatedTable string, whereRelatedTable string, whereRelatedArgs ...any) (int, error) // finisher
 func (b *BuilderM) Debug() *BuilderM // show executed queries for migrations
 func (b *BuilderM) All() ([]map[string]any, error) // finisher
 func (b *BuilderM) One() (map[string]any, error) // finisher
@@ -183,7 +194,7 @@ func (b *BuilderM) Set(query string, args ...any) (int, error) // finisher
 func (b *BuilderM) Delete() (int, error) // finisher
 func (b *BuilderM) Drop() (int, error) // finisher
 func Query(dbName string, statement string, args ...any) ([]map[string]interface{}, error) // finisher SQL Only
-func ExecSQL(dbName, query string, args ...any) error // SQL Only
+func Exec(dbName, query string, args ...any) error // SQL Only
 
 Examples:
 
@@ -236,6 +247,10 @@ func (b *Builder[T]) Drop() (int, error)
 func (b *Builder[T]) Select(columns ...string) *Builder[T]
 func (b *Builder[T]) Where(query string, args ...any) *Builder[T]
 func (b *Builder[T]) Query(query string, args ...any) *Builder[T]
+func (b *Builder[T]) AddRelated(relatedTable string, whereRelatedTable string, whereRelatedArgs ...any) (int, error)
+func (b *Builder[T]) DeleteRelated(relatedTable string, whereRelatedTable string, whereRelatedArgs ...any) (int, error)
+func (b *Builder[T]) GetRelated(relatedTable string, dest any) error
+func (b *Builder[T]) JoinRelated(relatedTable string, dest any) error
 func (b *Builder[T]) Limit(limit int) *Builder[T]
 func (b *Builder[T]) Context(ctx context.Context) *Builder[T]
 func (b *Builder[T]) Page(pageNumber int) *Builder[T]
@@ -292,7 +307,7 @@ import (
 )
 
 func main() {
-	err := korm.NewDatabaseFromDSN(korm.SQLITE,"db1")
+	err := korm.New(korm.SQLITE,"db1")
 	if klog.CheckError(err) {return}
 
 	
@@ -337,7 +352,7 @@ import (
 )
 
 func main() {
-	err := korm.NewDatabaseFromDSN(korm.SQLITE,"db2")
+	err := korm.New(korm.SQLITE,"db2")
 	if klog.CheckError(err) {return}
 
 	
@@ -365,6 +380,81 @@ func main() {
 	// OR generate certificates let's encrypt for a domain name, check https://github.com/kamalshkeir/ksbus for more infos
 	bus.RunAutoTLS(domainName string, subDomains ...string)
 }
+```
+
+
+# ManyToMany Relationships Example
+
+```go
+type Class struct {
+	Id          uint   `korm:"pk"`
+	Name        string `korm:"size:100"`
+	IsAvailable bool
+	CreatedAt   time.Time `korm:"now"`
+}
+
+type Student struct {
+	Id        uint      `korm:"pk"`
+	Name      string    `korm:"size:100"`
+	CreatedAt time.Time `korm:"now"`
+}
+
+type Teacher struct {
+	Id        uint      `korm:"pk"`
+	Name      string    `korm:"size:100"`
+	CreatedAt time.Time `korm:"now"`
+}
+
+
+// migrate
+func migrate() {
+	err := korm.AutoMigrate[Class]("classes")
+	if klog.CheckError(err) {
+		return
+	}
+	err = korm.AutoMigrate[Student]("students")
+	if klog.CheckError(err) {
+		return
+	}
+	err = korm.AutoMigrate[Teacher]("teachers")
+	if klog.CheckError(err) {
+		return
+	}
+	err = korm.ManyToMany("classes", "students")
+	if klog.CheckError(err) {
+		return
+	}
+}
+
+// korm.ManyToMany create relation table named m2m_table1_table2
+
+// then you can use it like so to get related data
+
+// get related to map to struct
+std := []Student{}
+err = korm.Model[Class]().Where("name = ?", "Math").Select("name").OrderBy("-name").Limit(1).GetRelated("students", &std)
+
+// get related to map
+std := []map[string]any{}
+err = korm.Table("classes").Where("name = ?", "Math").Select("name").OrderBy("-name").Limit(1).GetRelated("students", &std)
+
+// join related to map
+std := []map[string]any{}
+err = korm.Table("classes").Where("name = ?", "Math").JoinRelated("students", &std)
+
+// join related to map
+std := []Student{}
+err = korm.Model[Class]().Where("name = ?", "Math").JoinRelated("students", &std)
+
+// to add relation
+_, err = korm.Model[Class]().AddRelated("students", "name = ?", "hisName")
+_, err = korm.Model[Student]().AddRelated("classes", "name = ?", "French")
+_, err = korm.Table("students").AddRelated("classes", "name = ?", "French")
+
+// delete relation
+_, err = korm.Model[Class]().Where("name = ?", "Math").DeleteRelated("students", "name = ?", "hisName")
+_, err = korm.Table("classes").Where("name = ?", "Math").DeleteRelated("students", "name = ?", "hisName")
+
 ```
 
 

@@ -20,14 +20,15 @@ var (
 	Debug = false
 	// FlushCacheEvery execute korm.FlushCache() every 30 min by default, you should not worry about it, but useful that you can change it
 	FlushCacheEvery = 30 * time.Minute
-	// DefaultDB keep tracking of the first database connected
-	DefaultDB         = ""
+	// defaultDB keep tracking of the first database connected
+	defaultDB         = ""
 	useCache          = true
 	databases         = []databaseEntity{}
 	mModelTablename   = map[any]string{}
 	cacheGetAllTables = kmap.New[string, []string](false)
 	cachesOneM        = kmap.New[dbCache, map[string]any](false)
 	cachesAllM        = kmap.New[dbCache, []map[string]any](false)
+	relationsMap      = kmap.New[string, struct{}](false)
 
 	onceDone       = false
 	cachebus       *ksbus.Bus
@@ -38,14 +39,16 @@ var (
 	MaxIdleTime    = 12 * time.Hour
 )
 
+type Dialect = string
+
 const (
-	MIGRATION_FOLDER = "migrations"
-	CACHE_TOPIC      = "internal-db-cache"
-	SQLITE           = "sqlite"
-	POSTGRES         = "postgres"
-	MYSQL            = "mysql"
-	MARIA            = "maria"
-	COCKROACH        = "cockroach"
+	MIGRATION_FOLDER         = "migrations"
+	CACHE_TOPIC              = "internal-db-cache"
+	SQLITE           Dialect = "sqlite"
+	POSTGRES         Dialect = "postgres"
+	MYSQL            Dialect = "mysql"
+	MARIA            Dialect = "maria"
+	COCKROACH        Dialect = "cockroach"
 )
 
 type tableEntity struct {
@@ -65,10 +68,10 @@ type databaseEntity struct {
 }
 
 // NewDatabaseFromDSN the generic way to connect to all handled databases
-func New(dbType, dbName string, dbDSN ...string) error {
+func New(dbType Dialect, dbName string, dbDSN ...string) error {
 	var dsn string
-	if DefaultDB == "" {
-		DefaultDB = dbName
+	if defaultDB == "" {
+		defaultDB = dbName
 	}
 	options := ""
 	if len(dbDSN) > 0 {
@@ -135,7 +138,7 @@ func New(dbType, dbName string, dbDSN ...string) error {
 		}
 	}
 
-	conn, err := sql.Open(dbType, dsn)
+	conn, err := sql.Open(string(dbType), dsn)
 	if klog.CheckError(err) {
 		return err
 	}
@@ -188,6 +191,107 @@ func New(dbType, dbName string, dbDSN ...string) error {
 	return nil
 }
 
+func ManyToMany(table1, table2 string, dbName ...string) error {
+	fkeys := []string{}
+	autoinc := ""
+	def := getMemoryDatabases()[0]
+	mdbName := def.Name
+	dbType := def.Dialect
+	if len(dbName) > 0 {
+		mdbName = dbName[0]
+		dben, err := getMemoryDatabase(dbName[0])
+		if err != nil {
+			dbType = dben.Dialect
+		}
+	}
+
+	defer func() {
+		relationsMap.Set("m2m_"+table1+"-"+mdbName+"-"+table2, struct{}{})
+	}()
+
+	if _, ok := relationsMap.Get("m2m_" + table1 + "-" + mdbName + "-" + table2); ok {
+		return nil
+	}
+
+	tables := GetAllTables(mdbName)
+	if len(tables) == 0 {
+		return errors.New("databse is empty")
+	}
+	for _, t := range tables {
+		if t == table1+"_"+table2 || t == table2+"_"+table1 {
+			return nil
+		}
+	}
+	switch dbType {
+	case SQLITE, "":
+		autoinc = "INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT"
+	case POSTGRES, COCKROACH:
+		autoinc = "SERIAL NOT NULL PRIMARY KEY"
+	case MYSQL, MARIA:
+		autoinc = "INTEGER NOT NULL PRIMARY KEY AUTO_INCREMENT"
+	default:
+		klog.Printf("dialect can be sqlite, postgres, coakroach or mysql,maria only, not %s\n", dbType)
+	}
+	//klog.Printfs("many to many field:%v\n", tableName+"_"+table)
+	//klog.Printfs("table: %v, fields: %v, fkeys: %v, cols: %v, ftags:%v \n", tableName+"_"+table, res, fkeys, cols, mFieldName_Tags)
+
+	fkeys = append(fkeys, foreignkeyStat(table1+"_id", table1, "cascade", "cascade"))
+	fkeys = append(fkeys, foreignkeyStat(table2+"_id", table2, "cascade", "cascade"))
+	st := prepareCreateStatement(
+		"m2m_"+table1+"_"+table2,
+		map[string]string{
+			"id":           autoinc,
+			table1 + "_id": "INTEGER",
+			table2 + "_id": "INTEGER",
+		},
+		fkeys,
+		[]string{"id", table1 + "_id", table2 + "_id"},
+	)
+	if Debug {
+		klog.Printfs("yl%s\n", st)
+	}
+	err := Exec(mdbName, st)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// foreignkeyStat options are : "cascade","donothing", "noaction","setnull", "null","setdefault", "default"
+func foreignkeyStat(fName, toTable, onDelete, onUpdate string) string {
+	toPk := "id"
+	if strings.Contains(toTable, ".") {
+		sp := strings.Split(toTable, ".")
+		if len(sp) == 2 {
+			toPk = sp[1]
+		}
+	}
+	fkey := "FOREIGN KEY (" + fName + ") REFERENCES " + toTable + "(" + toPk + ")"
+	switch onDelete {
+	case "cascade":
+		fkey += " ON DELETE CASCADE"
+	case "donothing", "noaction":
+		fkey += " ON DELETE NO ACTION"
+	case "setnull", "null":
+		fkey += " ON DELETE SET NULL"
+	case "setdefault", "default":
+		fkey += " ON DELETE SET DEFAULT"
+	}
+
+	switch onUpdate {
+	case "cascade":
+		fkey += " ON UPDATE CASCADE"
+	case "donothing", "noaction":
+		fkey += " ON UPDATE NO ACTION"
+	case "setnull", "null":
+		fkey += " ON UPDATE SET NULL"
+	case "setdefault", "default":
+		fkey += " ON UPDATE SET DEFAULT"
+	}
+	return fkey
+}
+
 // NewSQLDatabaseFromConnection register a new database from connection, without the need for a dsn, if you are already connected to it
 func NewFromConnection(dbType, dbName string, conn *sql.DB) error {
 	if strings.HasPrefix(dbType, "cockroach") {
@@ -196,8 +300,8 @@ func NewFromConnection(dbType, dbName string, conn *sql.DB) error {
 	if dbType == MARIA || dbType == "mariadb" {
 		dbType = MYSQL
 	}
-	if DefaultDB == "" {
-		DefaultDB = dbName
+	if defaultDB == "" {
+		defaultDB = dbName
 	}
 	err := conn.Ping()
 	if klog.CheckError(err) {
@@ -282,7 +386,7 @@ func FlushCache() {
 
 // DisableCheck disable struct check for migrations on execution
 func DisableCheck() {
-	MigrationAutoCheck = false
+	migrationAutoCheck = false
 }
 
 // DisableCache disable the cache system, if you are having problem with it, you can korm.FlushCache on command too
@@ -491,13 +595,13 @@ func getMemoryDatabases() []databaseEntity {
 
 // getMemoryDatabase return the first connected database korm.DefaultDatabase if dbName "" or "default" else the matched db
 func getMemoryDatabase(dbName string) (*databaseEntity, error) {
-	if DefaultDB == "" {
-		DefaultDB = databases[0].Name
+	if defaultDB == "" {
+		defaultDB = databases[0].Name
 	}
 	switch dbName {
 	case "", "default":
 		for i := range databases {
-			if databases[i].Name == DefaultDB {
+			if databases[i].Name == defaultDB {
 				return &databases[i], nil
 			}
 		}
@@ -512,11 +616,11 @@ func getMemoryDatabase(dbName string) (*databaseEntity, error) {
 	}
 }
 
-// ShutdownDatabases shutdown many database
-func ShutdownDatabases(databasesName ...string) error {
-	if len(databasesName) > 0 {
+// Shutdown shutdown many database
+func Shutdown(dbNames ...string) error {
+	if len(dbNames) > 0 {
 		for _, db := range databases {
-			if SliceContains(databasesName, db.Name) {
+			if SliceContains(dbNames, db.Name) {
 				if err := db.Conn.Close(); err != nil {
 					return err
 				}
@@ -530,5 +634,83 @@ func ShutdownDatabases(databasesName ...string) error {
 			}
 		}
 		return nil
+	}
+}
+
+func AddTrigger(onTable, col, bf_af_UpdateInsertDelete string, ofColumn, stmt string, forEachRow bool, whenEachRow string, dbName ...string) {
+	stat := []string{}
+	if len(dbName) == 0 {
+		dbName = append(dbName, databases[0].Name)
+	}
+	if strings.Contains(strings.ToLower(ofColumn), "of") {
+		ofColumn = strings.ReplaceAll(strings.ToLower(ofColumn), "of", "")
+	}
+	var dialect = ""
+	db, err := getMemoryDatabase(dbName[0])
+	if !klog.CheckError(err) {
+		dialect = db.Dialect
+	}
+	switch dialect {
+	case "sqlite", "sqlite3", "":
+		if ofColumn != "" {
+			ofColumn = " OF " + col
+		}
+		st := "CREATE TRIGGER IF NOT EXISTS " + onTable + "_trig_" + col + " "
+		st += bf_af_UpdateInsertDelete + ofColumn + " ON " + onTable
+		st += " BEGIN " + stmt + ";End;"
+		stat = append(stat, st)
+	case POSTGRES, "coakroach", "pg", "coakroachdb":
+		if ofColumn != "" {
+			ofColumn = " OF " + col
+		}
+		name := onTable + "_trig_" + col
+		st := "CREATE OR REPLACE FUNCTION " + name + "_func() RETURNS trigger AS $$"
+		st += " BEGIN " + stmt + ";RETURN NEW;"
+		st += "END;$$ LANGUAGE plpgsql;"
+		stat = append(stat, st)
+		trigCreate := "CREATE OR REPLACE TRIGGER " + name
+		trigCreate += " " + bf_af_UpdateInsertDelete + ofColumn + " ON public." + onTable
+		trigCreate += " FOR EACH ROW EXECUTE PROCEDURE " + name + "_func();"
+		stat = append(stat, trigCreate)
+	case MYSQL, MARIA:
+		stat = append(stat, "DROP TRIGGER "+onTable+"_trig_"+col+";")
+		st := "CREATE TRIGGER " + onTable + "_trig_" + col + " "
+		st += bf_af_UpdateInsertDelete + " ON " + onTable
+		st += " FOR EACH ROW " + stmt + ";"
+		stat = append(stat, st)
+	default:
+		return
+	}
+
+	if Debug {
+		klog.Printf("statement: %s \n", stat)
+	}
+
+	for _, s := range stat {
+		err := Exec(dbName[0], s)
+		if err != nil {
+			if !StringContains(err.Error(), "Trigger does not exist") {
+				klog.Printf("rdcould not add trigger %v\n", err)
+				return
+			}
+		}
+	}
+}
+
+func DropTrigger(onField, tableName string, dbName ...string) {
+	stat := "DROP TRIGGER " + tableName + "_trig_" + onField + ";"
+	if Debug {
+		klog.Printf("yl%s\n", stat)
+	}
+	n := databases[0].Name
+	if len(dbName) > 0 {
+		n = dbName[0]
+	}
+	err := Exec(n, stat)
+	if err != nil {
+		if !StringContains(err.Error(), "Trigger does not exist") {
+			return
+		}
+		klog.Printf("rderr:%v\n", err)
 	}
 }
