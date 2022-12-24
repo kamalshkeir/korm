@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/kamalshkeir/klog"
+	"github.com/kamalshkeir/kstrct"
 )
 
 var migrationAutoCheck = true
@@ -51,9 +52,8 @@ func autoMigrate[T comparable](db *databaseEntity, tableName string, execute boo
 	for i := 0; i < s.NumField(); i++ {
 		f := s.Field(i)
 		fname := typeOfT.Field(i).Name
-		fname = ToSnakeCase(fname)
+		fname = kstrct.ToSnakeCase(fname)
 		ftype := f.Type()
-		cols = append(cols, fname)
 		mFieldName_Type[fname] = ftype.Name()
 		if ftag, ok := typeOfT.Field(i).Tag.Lookup("korm"); ok {
 			tags := strings.Split(ftag, ";")
@@ -62,11 +62,18 @@ func autoMigrate[T comparable](db *databaseEntity, tableName string, execute boo
 					pk = fname
 				} else if fname == "id" {
 					pk = fname
+				} else if ftag == "-" {
+					continue
 				}
 				tags[i] = strings.TrimSpace(tags[i])
 			}
 			mFieldName_Tags[fname] = tags
+		} else if ftag, ok := typeOfT.Field(i).Tag.Lookup("kstrct"); ok {
+			if ftag == "-" {
+				continue
+			}
 		}
+		cols = append(cols, fname)
 	}
 	if pk == "" {
 		cols = append([]string{"id"}, cols...)
@@ -122,7 +129,6 @@ func autoMigrate[T comparable](db *databaseEntity, tableName string, execute boo
 		}
 	}
 	statement := prepareCreateStatement(tableName, res, fkeys, cols)
-	fmt.Println(statement)
 	var triggers map[string][]string
 	tbFound := false
 

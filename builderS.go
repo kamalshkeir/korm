@@ -91,10 +91,8 @@ func (b *Builder[T]) Insert(model *T) (int, error) {
 		b.database = databases[0].Name
 	}
 	if useCache {
-		go cachebus.Publish(CACHE_TOPIC, map[string]any{
-			"type":     "create",
-			"table":    b.tableName,
-			"database": b.database,
+		cachebus.Publish(CACHE_TOPIC, map[string]any{
+			"type": "create",
 		})
 	}
 	db, err := getMemoryDatabase(b.database)
@@ -118,17 +116,21 @@ func (b *Builder[T]) Insert(model *T) (int, error) {
 		}
 
 		if tags, ok := mtags[name]; ok {
+			ig := false
 			for _, tag := range tags {
 				switch tag {
 				case "autoinc", "pk", "-":
-					ignored = append(ignored, i)
+					ig = true
 				default:
 					if strings.Contains(tag, "m2m") {
-						ignored = append(ignored, i)
-					} else {
-						placeholdersSlice = append(placeholdersSlice, "?")
+						ig = true
 					}
 				}
+			}
+			if ig {
+				ignored = append(ignored, i)
+			} else {
+				placeholdersSlice = append(placeholdersSlice, "?")
 			}
 		} else {
 			placeholdersSlice = append(placeholdersSlice, "?")
@@ -144,7 +146,6 @@ func (b *Builder[T]) Insert(model *T) (int, error) {
 		values = append(values[:ii], values[ii+1:]...)
 		cum++
 	}
-
 	placeholders := strings.Join(placeholdersSlice, ",")
 	fields_comma_separated := strings.Join(names, ",")
 	var affectedRows int
@@ -380,7 +381,6 @@ func (b *Builder[T]) GetRelated(relatedTable string, dest any) error {
 			}
 		}
 		b.statement = "SELECT " + b.selected + " FROM " + relatedTable
-		fmt.Println(b.statement)
 	} else {
 		b.statement = "SELECT " + relatedTable + ".* FROM " + relatedTable
 	}
@@ -454,7 +454,6 @@ func (b *Builder[T]) JoinRelated(relatedTable string, dest any) error {
 			}
 		}
 		b.statement = "SELECT " + b.selected + " FROM " + relatedTable
-		fmt.Println(b.statement)
 	} else {
 		b.statement = "SELECT " + relatedTable + ".*," + b.tableName + ".* FROM " + relatedTable
 	}
@@ -501,10 +500,8 @@ func (b *Builder[T]) Set(query string, args ...any) (int, error) {
 		b.database = databases[0].Name
 	}
 	if useCache {
-		go cachebus.Publish(CACHE_TOPIC, map[string]any{
-			"type":     "update",
-			"table":    b.tableName,
-			"database": b.database,
+		cachebus.Publish(CACHE_TOPIC, map[string]any{
+			"type": "update",
 		})
 	}
 	db, err := getMemoryDatabase(b.database)
@@ -557,10 +554,8 @@ func (b *Builder[T]) Delete() (int, error) {
 		b.database = databases[0].Name
 	}
 	if useCache {
-		go cachebus.Publish(CACHE_TOPIC, map[string]any{
-			"type":     "delete",
-			"table":    b.tableName,
-			"database": b.database,
+		cachebus.Publish(CACHE_TOPIC, map[string]any{
+			"type": "delete",
 		})
 	}
 	db, err := getMemoryDatabase(b.database)
@@ -609,10 +604,8 @@ func (b *Builder[T]) Drop() (int, error) {
 		b.database = databases[0].Name
 	}
 	if useCache {
-		go cachebus.Publish(CACHE_TOPIC, map[string]any{
-			"type":     "drop",
-			"table":    b.tableName,
-			"database": b.database,
+		cachebus.Publish(CACHE_TOPIC, map[string]any{
+			"type": "drop",
 		})
 	}
 	db, err := getMemoryDatabase(b.database)
@@ -938,10 +931,10 @@ func (b *Builder[T]) queryS(query string, args ...any) ([]T, error) {
 		}
 
 		row := new(T)
+
 		if b.selected != "" && b.selected != "*" {
 			m := map[string]any{}
-			keys := strings.Split(b.selected, ",")
-			for i, key := range keys {
+			for i, key := range strings.Split(b.selected, ",") {
 				m[key] = values[i]
 			}
 			err := kstrct.FillFromMap(row, m)
@@ -949,7 +942,11 @@ func (b *Builder[T]) queryS(query string, args ...any) ([]T, error) {
 				return nil, err
 			}
 		} else {
-			err := kstrct.FillFromValues(row, values...)
+			m := map[string]any{}
+			for i, key := range cols {
+				m[key] = values[i]
+			}
+			err := kstrct.FillFromMap(row, m)
 			if err != nil {
 				return nil, err
 			}

@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"reflect"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/kamalshkeir/kinput"
 	"github.com/kamalshkeir/klog"
+	"github.com/kamalshkeir/kstrct"
 )
 
 type dbCache struct {
@@ -369,8 +369,6 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 				for _, vv := range v {
 					if strings.Contains(vv, "m2m") {
 						continue loop
-					} else {
-						fmt.Println("no:", vv)
 					}
 				}
 				continue loop
@@ -974,7 +972,7 @@ func getStructInfos[T comparable](strctt *T) (fields []string, fValues map[strin
 	for i := 0; i < s.NumField(); i++ {
 		f := s.Field(i)
 		fname := typeOfT.Field(i).Name
-		fname = ToSnakeCase(fname)
+		fname = kstrct.ToSnakeCase(fname)
 		fvalue := f.Interface()
 		ftype := f.Type().Name()
 
@@ -1054,7 +1052,7 @@ func RunEvery(t time.Duration, function any) {
 	//Usage : go RunEvery(2 * time.Second,func(){})
 	fn, ok := function.(func())
 	if !ok {
-		fmt.Println("ERROR : fn is not a function")
+		klog.Printf("rdERROR : fn is not a function\n")
 		return
 	}
 
@@ -1113,37 +1111,6 @@ func sliceRemove[T comparable](slice *[]T, elemsToRemove ...T) {
 			}
 		}
 	}
-}
-
-var matchFirstCap = regexp.MustCompile("(.)([A-Z][a-z]+)")
-var matchAllCap = regexp.MustCompile("([a-z0-9])([A-Z])")
-
-func ToSnakeCase(str string) string {
-	snake := matchFirstCap.ReplaceAllString(str, "${1}_${2}")
-	snake = matchAllCap.ReplaceAllString(snake, "${1}_${2}")
-	return strings.ToLower(snake)
-}
-
-func SnakeCaseToTitle(str string) (camelCase string) {
-	//snake_case to camelCase
-	isToUpper := false
-	for k, v := range str {
-		if k == 0 {
-			camelCase = strings.ToUpper(string(str[0]))
-		} else {
-			if isToUpper {
-				camelCase += strings.ToUpper(string(v))
-				isToUpper = false
-			} else {
-				if v == '_' {
-					isToUpper = true
-				} else {
-					camelCase += string(v)
-				}
-			}
-		}
-	}
-	return
 }
 
 func StringContains(s string, subs ...string) bool {

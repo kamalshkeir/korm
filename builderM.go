@@ -320,10 +320,8 @@ func (b *BuilderM) Insert(fields_comma_separated string, fields_values ...any) (
 		b.database = databases[0].Name
 	}
 	if useCache {
-		go cachebus.Publish(CACHE_TOPIC, map[string]any{
-			"type":     "create",
-			"table":    b.tableName,
-			"database": b.database,
+		cachebus.Publish(CACHE_TOPIC, map[string]any{
+			"type": "create",
 		})
 	}
 
@@ -389,10 +387,8 @@ func (b *BuilderM) Set(query string, args ...any) (int, error) {
 		b.database = databases[0].Name
 	}
 	if useCache {
-		go cachebus.Publish(CACHE_TOPIC, map[string]any{
-			"type":     "update",
-			"table":    b.tableName,
-			"database": b.database,
+		cachebus.Publish(CACHE_TOPIC, map[string]any{
+			"type": "update",
 		})
 	}
 	db, err := getMemoryDatabase(b.database)
@@ -440,10 +436,8 @@ func (b *BuilderM) Delete() (int, error) {
 		b.database = databases[0].Name
 	}
 	if useCache {
-		go cachebus.Publish(CACHE_TOPIC, map[string]any{
-			"type":     "delete",
-			"table":    b.tableName,
-			"database": b.database,
+		cachebus.Publish(CACHE_TOPIC, map[string]any{
+			"type": "delete",
 		})
 	}
 	db, err := getMemoryDatabase(b.database)
@@ -488,9 +482,7 @@ func (b *BuilderM) Drop() (int, error) {
 	}
 	if useCache {
 		cachebus.Publish(CACHE_TOPIC, map[string]any{
-			"type":     "drop",
-			"table":    b.tableName,
-			"database": b.database,
+			"type": "drop",
 		})
 	}
 	db, err := getMemoryDatabase(b.database)
@@ -635,7 +627,6 @@ func Exec(dbName, query string, args ...any) error {
 	}
 	_, err := conn.Exec(query, args...)
 	if err != nil {
-		fmt.Println(query, args)
 		return err
 	}
 	return nil
@@ -761,7 +752,6 @@ func (b *BuilderM) GetRelated(relatedTable string, dest *[]map[string]any) error
 			}
 		}
 		b.statement = "SELECT " + b.selected + " FROM " + relatedTable
-		fmt.Println(b.statement)
 	} else {
 		b.statement = "SELECT " + relatedTable + ".* FROM " + relatedTable
 	}
@@ -836,7 +826,6 @@ func (b *BuilderM) JoinRelated(relatedTable string, dest *[]map[string]any) erro
 			}
 		}
 		b.statement = "SELECT " + b.selected + " FROM " + relatedTable
-		fmt.Println(b.statement)
 	} else {
 		b.statement = "SELECT " + relatedTable + ".*," + b.tableName + ".* FROM " + relatedTable
 	}

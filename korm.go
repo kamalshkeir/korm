@@ -19,7 +19,7 @@ var (
 	// Debug when true show extra useful logs for queries executed for migrations and queries statements
 	Debug = false
 	// FlushCacheEvery execute korm.FlushCache() every 30 min by default, you should not worry about it, but useful that you can change it
-	FlushCacheEvery = 30 * time.Minute
+	FlushCacheEvery = 10 * time.Minute
 	// defaultDB keep tracking of the first database connected
 	defaultDB         = ""
 	useCache          = true
