@@ -36,7 +36,7 @@ func linkModel[T comparable](to_table_name string, db *databaseEntity) {
 	if db.Name == "" {
 		var err error
 		db.Name = databases[0].Name
-		db, err = getMemoryDatabase(db.Name)
+		db, err = GetMemoryDatabase(db.Name)
 		if klog.CheckError(err) {
 			return
 		}

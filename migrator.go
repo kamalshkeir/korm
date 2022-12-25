@@ -294,13 +294,13 @@ func AutoMigrate[T comparable](tableName string, dbName ...string) error {
 	dbname := ""
 	if len(dbName) == 1 {
 		dbname = dbName[0]
-		db, err = getMemoryDatabase(dbname)
+		db, err = GetMemoryDatabase(dbname)
 		if err != nil || db == nil {
 			return errors.New("database not found")
 		}
 	} else if len(dbName) == 0 {
 		dbname = databases[0].Name
-		db, err = getMemoryDatabase(dbname)
+		db, err = GetMemoryDatabase(dbname)
 		if err != nil || db == nil {
 			return errors.New("database not found")
 		}

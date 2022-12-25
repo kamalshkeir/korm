@@ -325,7 +325,7 @@ func (b *BuilderM) Insert(fields_comma_separated string, fields_values ...any) (
 		})
 	}
 
-	db, err := getMemoryDatabase(b.database)
+	db, err := GetMemoryDatabase(b.database)
 	if err != nil {
 		return 0, err
 	}
@@ -391,7 +391,7 @@ func (b *BuilderM) Set(query string, args ...any) (int, error) {
 			"type": "update",
 		})
 	}
-	db, err := getMemoryDatabase(b.database)
+	db, err := GetMemoryDatabase(b.database)
 	if err != nil {
 		return 0, err
 	}
@@ -440,7 +440,7 @@ func (b *BuilderM) Delete() (int, error) {
 			"type": "delete",
 		})
 	}
-	db, err := getMemoryDatabase(b.database)
+	db, err := GetMemoryDatabase(b.database)
 	if err != nil {
 		return 0, err
 	}
@@ -485,7 +485,7 @@ func (b *BuilderM) Drop() (int, error) {
 			"type": "drop",
 		})
 	}
-	db, err := getMemoryDatabase(b.database)
+	db, err := GetMemoryDatabase(b.database)
 	if err != nil {
 		return 0, err
 	}
@@ -511,7 +511,7 @@ func (b *BuilderM) queryM(statement string, args ...any) ([]map[string]interface
 	if b.database == "" {
 		b.database = databases[0].Name
 	}
-	db, err := getMemoryDatabase(b.database)
+	db, err := GetMemoryDatabase(b.database)
 	if err != nil {
 		return nil, err
 	}
@@ -571,7 +571,7 @@ func Query(dbName string, statement string, args ...any) ([]map[string]interface
 	if dbName == "" {
 		dbName = databases[0].Name
 	}
-	db, err := getMemoryDatabase(dbName)
+	db, err := GetMemoryDatabase(dbName)
 	if err != nil {
 		return nil, err
 	}
@@ -640,7 +640,7 @@ func (b *BuilderM) AddRelated(relatedTable string, whereRelatedTable string, whe
 		b.database = databases[0].Name
 	}
 
-	db, _ := getMemoryDatabase(b.database)
+	db, _ := GetMemoryDatabase(b.database)
 
 	relationTableName := "m2m_" + b.tableName + "-" + b.database + "-" + relatedTable
 	if _, ok := relationsMap.Get("m2m_" + b.tableName + "-" + b.database + "-" + relatedTable); !ok {
@@ -663,11 +663,11 @@ func (b *BuilderM) AddRelated(relatedTable string, whereRelatedTable string, whe
 		cols = relatedTable + "_id," + b.tableName + "_id"
 		wherecols = relatedTable + "_id = ? and " + b.tableName + "_id = ?"
 	}
-	memoryRelatedTable, err := getMemoryTable(relatedTable)
+	memoryRelatedTable, err := GetMemoryTable(relatedTable)
 	if err != nil {
 		return 0, fmt.Errorf("memory table not found:" + relatedTable)
 	}
-	memoryTypedTable, err := getMemoryTable(b.tableName)
+	memoryTypedTable, err := GetMemoryTable(b.tableName)
 	if err != nil {
 		return 0, fmt.Errorf("memory table not found:" + relatedTable)
 	}
@@ -885,11 +885,11 @@ func (b *BuilderM) DeleteRelated(relatedTable string, whereRelatedTable string, 
 		relationTableName = "m2m_" + relatedTable + "_" + b.tableName
 		wherecols = relatedTable + "_id = ? and " + b.tableName + "_id = ?"
 	}
-	memoryRelatedTable, err := getMemoryTable(relatedTable)
+	memoryRelatedTable, err := GetMemoryTable(relatedTable)
 	if err != nil {
 		return 0, fmt.Errorf("memory table not found:" + relatedTable)
 	}
-	memoryTypedTable, err := getMemoryTable(b.tableName)
+	memoryTypedTable, err := GetMemoryTable(b.tableName)
 	if err != nil {
 		return 0, fmt.Errorf("memory table not found:" + relatedTable)
 	}
@@ -921,7 +921,7 @@ func (b *BuilderM) DeleteRelated(relatedTable string, whereRelatedTable string, 
 			ids[1] = v
 		}
 	}
-	n, err := Table(relationTableName).Debug().Where(wherecols, ids...).Delete()
+	n, err := Table(relationTableName).Where(wherecols, ids...).Delete()
 	if err != nil {
 		return 0, err
 	}
@@ -932,7 +932,7 @@ func (b *BuilderM) queryS(strct any, statement string, args ...any) error {
 	if b.database == "" {
 		b.database = databases[0].Name
 	}
-	db, err := getMemoryDatabase(b.database)
+	db, err := GetMemoryDatabase(b.database)
 	if err != nil {
 		return err
 	}

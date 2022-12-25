@@ -76,7 +76,7 @@ func InitShell() bool {
 		fmt.Printf(yellow, helpS)
 		return true
 	case "dbshell":
-		databases := getMemoryDatabases()
+		databases := GetMemoryDatabases()
 		var conn *sql.DB
 		if len(databases) > 1 {
 			fmt.Printf(yellow, "-----------------------------------")
@@ -123,7 +123,7 @@ func InitShell() bool {
 					fmt.Printf(green, "migrated successfully")
 				}
 			case "databases":
-				fmt.Printf(green, getMemoryDatabases())
+				fmt.Printf(green, GetMemoryDatabases())
 			case "use":
 				db := kinput.Input(kinput.Blue, "database name: ")
 				usedDB = db

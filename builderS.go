@@ -70,7 +70,7 @@ func (b *Builder[T]) Database(dbName string) *Builder[T] {
 	if b.database == "" {
 		b.database = databases[0].Name
 	}
-	db, err := getMemoryDatabase(b.database)
+	db, err := GetMemoryDatabase(b.database)
 	if klog.CheckError(err) {
 		b.database = databases[0].Name
 	} else {
@@ -95,7 +95,7 @@ func (b *Builder[T]) Insert(model *T) (int, error) {
 			"type": "create",
 		})
 	}
-	db, err := getMemoryDatabase(b.database)
+	db, err := GetMemoryDatabase(b.database)
 	if klog.CheckError(err) {
 		return 0, err
 	}
@@ -192,7 +192,7 @@ func (b *Builder[T]) AddRelated(relatedTable string, whereRelatedTable string, w
 		b.database = databases[0].Name
 	}
 
-	db, _ := getMemoryDatabase(b.database)
+	db, _ := GetMemoryDatabase(b.database)
 
 	relationTableName := "m2m_" + b.tableName + "-" + b.database + "-" + relatedTable
 	if _, ok := relationsMap.Get("m2m_" + b.tableName + "-" + b.database + "-" + relatedTable); !ok {
@@ -215,11 +215,11 @@ func (b *Builder[T]) AddRelated(relatedTable string, whereRelatedTable string, w
 		cols = relatedTable + "_id," + b.tableName + "_id"
 		wherecols = relatedTable + "_id = ? and " + b.tableName + "_id = ?"
 	}
-	memoryRelatedTable, err := getMemoryTable(relatedTable)
+	memoryRelatedTable, err := GetMemoryTable(relatedTable)
 	if err != nil {
 		return 0, fmt.Errorf("memory table not found:" + relatedTable)
 	}
-	memoryTypedTable, err := getMemoryTable(b.tableName)
+	memoryTypedTable, err := GetMemoryTable(b.tableName)
 	if err != nil {
 		return 0, fmt.Errorf("memory table not found:" + relatedTable)
 	}
@@ -294,11 +294,11 @@ func (b *Builder[T]) DeleteRelated(relatedTable string, whereRelatedTable string
 		relationTableName = "m2m_" + relatedTable + "_" + b.tableName
 		wherecols = relatedTable + "_id = ? and " + b.tableName + "_id = ?"
 	}
-	memoryRelatedTable, err := getMemoryTable(relatedTable)
+	memoryRelatedTable, err := GetMemoryTable(relatedTable)
 	if err != nil {
 		return 0, fmt.Errorf("memory table not found:" + relatedTable)
 	}
-	memoryTypedTable, err := getMemoryTable(b.tableName)
+	memoryTypedTable, err := GetMemoryTable(b.tableName)
 	if err != nil {
 		return 0, fmt.Errorf("memory table not found:" + relatedTable)
 	}
@@ -330,7 +330,7 @@ func (b *Builder[T]) DeleteRelated(relatedTable string, whereRelatedTable string
 			ids[1] = v
 		}
 	}
-	n, err := Table(relationTableName).Debug().Where(wherecols, ids...).Delete()
+	n, err := Table(relationTableName).Where(wherecols, ids...).Delete()
 	if err != nil {
 		return 0, err
 	}
@@ -504,7 +504,7 @@ func (b *Builder[T]) Set(query string, args ...any) (int, error) {
 			"type": "update",
 		})
 	}
-	db, err := getMemoryDatabase(b.database)
+	db, err := GetMemoryDatabase(b.database)
 	if klog.CheckError(err) {
 		return 0, err
 	}
@@ -558,7 +558,7 @@ func (b *Builder[T]) Delete() (int, error) {
 			"type": "delete",
 		})
 	}
-	db, err := getMemoryDatabase(b.database)
+	db, err := GetMemoryDatabase(b.database)
 	if klog.CheckError(err) {
 		return 0, err
 	}
@@ -608,7 +608,7 @@ func (b *Builder[T]) Drop() (int, error) {
 			"type": "drop",
 		})
 	}
-	db, err := getMemoryDatabase(b.database)
+	db, err := GetMemoryDatabase(b.database)
 	if klog.CheckError(err) {
 		return 0, err
 	}
@@ -872,7 +872,7 @@ func (b *Builder[T]) queryS(query string, args ...any) ([]T, error) {
 	if b.database == "" {
 		b.database = databases[0].Name
 	}
-	db, err := getMemoryDatabase(b.database)
+	db, err := GetMemoryDatabase(b.database)
 	if klog.CheckError(err) {
 		return nil, err
 	}
@@ -932,24 +932,19 @@ func (b *Builder[T]) queryS(query string, args ...any) ([]T, error) {
 
 		row := new(T)
 
+		m := map[string]any{}
 		if b.selected != "" && b.selected != "*" {
-			m := map[string]any{}
 			for i, key := range strings.Split(b.selected, ",") {
 				m[key] = values[i]
 			}
-			err := kstrct.FillFromMap(row, m)
-			if err != nil {
-				return nil, err
-			}
 		} else {
-			m := map[string]any{}
 			for i, key := range cols {
 				m[key] = values[i]
 			}
-			err := kstrct.FillFromMap(row, m)
-			if err != nil {
-				return nil, err
-			}
+		}
+		err = kstrct.FillFromMap(row, m)
+		if err != nil {
+			return nil, err
 		}
 		res = append(res, *row)
 	}

@@ -194,12 +194,12 @@ func New(dbType Dialect, dbName string, dbDSN ...string) error {
 func ManyToMany(table1, table2 string, dbName ...string) error {
 	fkeys := []string{}
 	autoinc := ""
-	def := getMemoryDatabases()[0]
+	def := GetMemoryDatabases()[0]
 	mdbName := def.Name
 	dbType := def.Dialect
 	if len(dbName) > 0 {
 		mdbName = dbName[0]
-		dben, err := getMemoryDatabase(dbName[0])
+		dben, err := GetMemoryDatabase(dbName[0])
 		if err != nil {
 			dbType = dben.Dialect
 		}
@@ -398,9 +398,9 @@ func GetConnection(dbName ...string) (conn *sql.DB, ok bool) {
 	var db *databaseEntity
 	var err error
 	if len(dbName) > 0 {
-		db, err = getMemoryDatabase(dbName[0])
+		db, err = GetMemoryDatabase(dbName[0])
 	} else {
-		db, err = getMemoryDatabase(databases[0].Name)
+		db, err = GetMemoryDatabase(databases[0].Name)
 	}
 	if klog.CheckError(err) {
 		return nil, false
@@ -426,7 +426,7 @@ func GetAllTables(dbName ...string) []string {
 		}
 	}
 	tables := []string{}
-	db, err := getMemoryDatabase(name)
+	db, err := GetMemoryDatabase(name)
 	if err == nil {
 		for _, t := range db.Tables {
 			tables = append(tables, t.Name)
@@ -506,7 +506,7 @@ func GetAllColumnsTypes(table string, dbName ...string) map[string]string {
 		dName = dbName[0]
 	}
 
-	tb, err := getMemoryTable(table, dName)
+	tb, err := GetMemoryTable(table, dName)
 	if err == nil {
 		if len(tb.Types) > 0 {
 			return tb.Types
@@ -570,13 +570,13 @@ func GetAllColumnsTypes(table string, dbName ...string) map[string]string {
 	return columns
 }
 
-// getMemoryTable get a table from memory for specified or first connected db
-func getMemoryTable(tbName string, dbName ...string) (tableEntity, error) {
+// GetMemoryTable get a table from memory for specified or first connected db
+func GetMemoryTable(tbName string, dbName ...string) (tableEntity, error) {
 	dName := databases[0].Name
 	if len(dbName) > 0 {
 		dName = dbName[0]
 	}
-	db, err := getMemoryDatabase(dName)
+	db, err := GetMemoryDatabase(dName)
 	if err != nil {
 		return tableEntity{}, err
 	}
@@ -588,13 +588,13 @@ func getMemoryTable(tbName string, dbName ...string) (tableEntity, error) {
 	return tableEntity{}, errors.New("nothing found")
 }
 
-// getMemoryDatabases get all databases from memory
-func getMemoryDatabases() []databaseEntity {
+// GetMemoryDatabases get all databases from memory
+func GetMemoryDatabases() []databaseEntity {
 	return databases
 }
 
-// getMemoryDatabase return the first connected database korm.DefaultDatabase if dbName "" or "default" else the matched db
-func getMemoryDatabase(dbName string) (*databaseEntity, error) {
+// GetMemoryDatabase return the first connected database korm.DefaultDatabase if dbName "" or "default" else the matched db
+func GetMemoryDatabase(dbName string) (*databaseEntity, error) {
 	if defaultDB == "" {
 		defaultDB = databases[0].Name
 	}
@@ -646,7 +646,7 @@ func AddTrigger(onTable, col, bf_af_UpdateInsertDelete string, ofColumn, stmt st
 		ofColumn = strings.ReplaceAll(strings.ToLower(ofColumn), "of", "")
 	}
 	var dialect = ""
-	db, err := getMemoryDatabase(dbName[0])
+	db, err := GetMemoryDatabase(dbName[0])
 	if !klog.CheckError(err) {
 		dialect = db.Dialect
 	}
