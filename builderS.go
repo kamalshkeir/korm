@@ -15,6 +15,7 @@ import (
 
 var cachesOneS = kmap.New[dbCache, any](false)
 var cachesAllS = kmap.New[dbCache, any](false)
+var errModelNotFound = errors.New("unable to find tableName from model, restart the app if you just migrated")
 
 type Builder[T comparable] struct {
 	debug      bool
@@ -40,7 +41,6 @@ func Model[T comparable](tableName ...string) *Builder[T] {
 			mModelTablename[*new(T)] = tableName[0]
 			tName = tableName[0]
 		} else {
-			klog.Printf("rdunable to find tableName from model, restart the app if you just migrated\n")
 			return nil
 		}
 	}
@@ -56,7 +56,6 @@ func BuilderStruct[T comparable](tableName ...string) *Builder[T] {
 			mModelTablename[*new(T)] = tableName[0]
 			tName = tableName[0]
 		} else {
-			klog.Printf("rdunable to find tableName from model, restart the app if you just migrated\n")
 			return nil
 		}
 	}
@@ -71,7 +70,7 @@ func (b *Builder[T]) Database(dbName string) *Builder[T] {
 		b.database = databases[0].Name
 	}
 	db, err := GetMemoryDatabase(b.database)
-	if klog.CheckError(err) {
+	if err != nil {
 		b.database = databases[0].Name
 	} else {
 		b.database = db.Name
@@ -80,12 +79,8 @@ func (b *Builder[T]) Database(dbName string) *Builder[T] {
 }
 
 func (b *Builder[T]) Insert(model *T) (int, error) {
-	if b.tableName == "" {
-		tName := getTableName[T]()
-		if tName == "" {
-			return 0, errors.New("unable to find tableName from model, restart the app if you just migrated")
-		}
-		b.tableName = tName
+	if b == nil || b.tableName == "" {
+		return 0, errModelNotFound
 	}
 	if b.database == "" {
 		b.database = databases[0].Name
@@ -100,10 +95,10 @@ func (b *Builder[T]) Insert(model *T) (int, error) {
 		return 0, err
 	}
 
-	names, mvalues, _, mtags := getStructInfos(model)
+	names, mvalues, _, mtags := getStructInfos(model, true)
 	values := []any{}
 	if len(names) < len(mvalues) {
-		return 0, errors.New("there is more values than fields")
+		return 0, errors.New("more values than fields")
 	}
 	placeholdersSlice := []string{}
 	ignored := []int{}
@@ -181,12 +176,8 @@ func (b *Builder[T]) Insert(model *T) (int, error) {
 }
 
 func (b *Builder[T]) AddRelated(relatedTable string, whereRelatedTable string, whereRelatedArgs ...any) (int, error) {
-	if b.tableName == "" {
-		tName := getTableName[T]()
-		if tName == "" {
-			return 0, errors.New("unable to find tableName from model, restart the app if you just migrated")
-		}
-		b.tableName = tName
+	if b == nil || b.tableName == "" {
+		return 0, errModelNotFound
 	}
 	if b.database == "" {
 		b.database = databases[0].Name
@@ -265,12 +256,8 @@ func (b *Builder[T]) AddRelated(relatedTable string, whereRelatedTable string, w
 }
 
 func (b *Builder[T]) DeleteRelated(relatedTable string, whereRelatedTable string, whereRelatedArgs ...any) (int, error) {
-	if b.tableName == "" {
-		tName := getTableName[T]()
-		if tName == "" {
-			return 0, errors.New("unable to find tableName from model, restart the app if you just migrated")
-		}
-		b.tableName = tName
+	if b == nil || b.tableName == "" {
+		return 0, errModelNotFound
 	}
 	if b.database == "" {
 		b.database = databases[0].Name
@@ -338,12 +325,8 @@ func (b *Builder[T]) DeleteRelated(relatedTable string, whereRelatedTable string
 }
 
 func (b *Builder[T]) GetRelated(relatedTable string, dest any) error {
-	if b.tableName == "" {
-		tName := getTableName[T]()
-		if tName == "" {
-			return fmt.Errorf("unable to find tableName from model, restart the app if you just migrated")
-		}
-		b.tableName = tName
+	if b == nil || b.tableName == "" {
+		return errModelNotFound
 	}
 	if b.database == "" {
 		b.database = databases[0].Name
@@ -411,12 +394,8 @@ func (b *Builder[T]) GetRelated(relatedTable string, dest any) error {
 }
 
 func (b *Builder[T]) JoinRelated(relatedTable string, dest any) error {
-	if b.tableName == "" {
-		tName := getTableName[T]()
-		if tName == "" {
-			return fmt.Errorf("unable to find tableName from model, restart the app if you just migrated")
-		}
-		b.tableName = tName
+	if b == nil || b.tableName == "" {
+		return errModelNotFound
 	}
 	if b.database == "" {
 		b.database = databases[0].Name
@@ -488,13 +467,8 @@ func (b *Builder[T]) JoinRelated(relatedTable string, dest any) error {
 
 // Set usage: Set("email = ? AND is_admin = ?","example@mail.com",true)
 func (b *Builder[T]) Set(query string, args ...any) (int, error) {
-	if b.tableName == "" {
-		tName := getTableName[T]()
-		if tName == "" {
-			klog.Printf("rdunable to find tableName from model\n")
-			return 0, errors.New("unable to find tableName from model")
-		}
-		b.tableName = tName
+	if b == nil || b.tableName == "" {
+		return 0, errModelNotFound
 	}
 	if b.database == "" {
 		b.database = databases[0].Name
@@ -542,13 +516,8 @@ func (b *Builder[T]) Set(query string, args ...any) (int, error) {
 }
 
 func (b *Builder[T]) Delete() (int, error) {
-	if b.tableName == "" {
-		tName := getTableName[T]()
-		if tName == "" {
-			klog.Printf("unable to find tableName from model\n")
-			return 0, errors.New("unable to find tableName from model")
-		}
-		b.tableName = tName
+	if b == nil || b.tableName == "" {
+		return 0, errModelNotFound
 	}
 	if b.database == "" {
 		b.database = databases[0].Name
@@ -593,12 +562,8 @@ func (b *Builder[T]) Delete() (int, error) {
 }
 
 func (b *Builder[T]) Drop() (int, error) {
-	if b.tableName == "" {
-		tName := getTableName[T]()
-		if tName == "" {
-			return 0, errors.New("unable to find tableName from model")
-		}
-		b.tableName = tName
+	if b == nil || b.tableName == "" {
+		return 0, errModelNotFound
 	}
 	if b.database == "" {
 		b.database = databases[0].Name
@@ -732,11 +697,11 @@ func (b *Builder[T]) Debug() *Builder[T] {
 }
 
 func (b *Builder[T]) All() ([]T, error) {
+	if b == nil || b.tableName == "" {
+		return nil, errModelNotFound
+	}
 	if b.database == "" {
 		b.database = databases[0].Name
-	}
-	if b.tableName == "" {
-		return nil, errors.New("error: this model is not linked, execute korm.AutoMigrate before")
 	}
 	c := dbCache{
 		database:   b.database,
@@ -800,11 +765,11 @@ func (b *Builder[T]) All() ([]T, error) {
 }
 
 func (b *Builder[T]) One() (T, error) {
+	if b == nil || b.tableName == "" {
+		return *new(T), errModelNotFound
+	}
 	if b.database == "" {
 		b.database = databases[0].Name
-	}
-	if b.tableName == "" {
-		return *new(T), errors.New("error: this model is not linked, execute korm.AutoMigrate first")
 	}
 	c := dbCache{
 		database:   b.database,
@@ -869,6 +834,9 @@ func (b *Builder[T]) One() (T, error) {
 }
 
 func (b *Builder[T]) queryS(query string, args ...any) ([]T, error) {
+	if b == nil || b.tableName == "" {
+		return nil, errModelNotFound
+	}
 	if b.database == "" {
 		b.database = databases[0].Name
 	}

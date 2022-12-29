@@ -170,7 +170,7 @@ func New(dbType Dialect, dbName string, dbDSN ...string) error {
 	if !onceDone {
 		if useCache {
 			cachebus = ksbus.New()
-			cachebus.Subscribe(CACHE_TOPIC, func(data map[string]any, ch ksbus.Channel) {
+			cachebus.Subscribe(CACHE_TOPIC, func(data map[string]any, _ ksbus.Channel) {
 				handleCache(data)
 			})
 			go RunEvery(FlushCacheEvery, func() {
@@ -334,7 +334,7 @@ func NewFromConnection(dbType, dbName string, conn *sql.DB) error {
 	if !onceDone {
 		if useCache {
 			cachebus = ksbus.New()
-			cachebus.Subscribe(CACHE_TOPIC, func(data map[string]any, ch ksbus.Channel) { handleCache(data) })
+			cachebus.Subscribe(CACHE_TOPIC, func(data map[string]any, _ ksbus.Channel) { handleCache(data) })
 			go RunEvery(FlushCacheEvery, func() {
 				cachebus.Publish(CACHE_TOPIC, map[string]any{
 					"type": "clean",
@@ -357,7 +357,7 @@ func WithBus(bus *ksbus.Server) *ksbus.Server {
 	cachebus = bus.Bus
 	switchBusMutex.Unlock()
 	if useCache {
-		cachebus.Subscribe(CACHE_TOPIC, func(data map[string]any, ch ksbus.Channel) { handleCache(data) })
+		cachebus.Subscribe(CACHE_TOPIC, func(data map[string]any, _ ksbus.Channel) { handleCache(data) })
 		go RunEvery(FlushCacheEvery, func() {
 			cachebus.Publish(CACHE_TOPIC, map[string]any{
 				"type": "clean",
@@ -428,15 +428,7 @@ func GetAllTables(dbName ...string) []string {
 	tables := []string{}
 	db, err := GetMemoryDatabase(name)
 	if err == nil {
-		for _, t := range db.Tables {
-			tables = append(tables, t.Name)
-		}
-		if len(tables) > 0 {
-			if useCache {
-				cacheGetAllTables.Set(name, tables)
-			}
-			return tables
-		}
+		return nil
 	}
 
 	conn, ok := GetConnection(name)
@@ -637,7 +629,7 @@ func Shutdown(dbNames ...string) error {
 	}
 }
 
-func AddTrigger(onTable, col, bf_af_UpdateInsertDelete string, ofColumn, stmt string, forEachRow bool, whenEachRow string, dbName ...string) {
+func AddTrigger(onTable, col, bf_af_UpdateInsertDelete string, ofColumn, stmt string, dbName ...string) {
 	stat := []string{}
 	if len(dbName) == 0 {
 		dbName = append(dbName, databases[0].Name)

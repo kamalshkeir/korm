@@ -14,7 +14,7 @@ import (
 
 var migrationAutoCheck = true
 
-func checkUpdatedAtTrigger(dialect, tableName, col, pk string) map[string][]string {
+func checkUpdatedAtTrigger(dialect, tableName, col string) map[string][]string {
 	triggers := map[string][]string{}
 	t := "datetime('now','localtime')"
 	if dialect == "sqlite" {
@@ -152,7 +152,7 @@ func autoMigrate[T comparable](db *databaseEntity, tableName string, execute boo
 		for col, tags := range mFieldName_Tags {
 			for _, tag := range tags {
 				if tag == "update" {
-					triggers = checkUpdatedAtTrigger(db.Dialect, tableName, col, pk)
+					triggers = checkUpdatedAtTrigger(db.Dialect, tableName, col)
 				}
 			}
 		}

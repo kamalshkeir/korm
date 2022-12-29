@@ -189,7 +189,7 @@ func (b *BuilderM) DeleteRelated(relatedTable string, whereRelatedTable string, 
 func (b *BuilderM) Debug() *BuilderM // show executed queries for migrations
 func (b *BuilderM) All() ([]map[string]any, error) // finisher
 func (b *BuilderM) One() (map[string]any, error) // finisher
-func (b *BuilderM) Insert(fields_comma_separated string, fields_values ...any) (int, error) // finisher
+func (b *BuilderM) Insert(rowData map[string]any) (int, error) // finisher
 func (b *BuilderM) Set(query string, args ...any) (int, error) // finisher
 func (b *BuilderM) Delete() (int, error) // finisher
 func (b *BuilderM) Drop() (int, error) // finisher
@@ -208,14 +208,12 @@ sliceMapStringAny,err := korm.Table("users")
 // INSERT
 uuid,_ := korm.GenerateUUID()
 hashedPass,_ := hash.GenerateHash("password")
-korm.Model[models.User]().Insert(
-	"uuid,email,password,is_admin,image,created_at",
-	uuid,
-	"test@example.com",
-	hashedPass,
-	false,
-	"",
-	time.Now())
+
+korm.Model[models.User]().Insert(map[string]any{
+	"uuid":uuid,
+	"email:"test@example.com",
+	...
+})
 
 //if using more than one db
 korm.Database("dbNameHere").Table("tableName").Where("id = ? AND email = ?",1,"test@example.com").All() 

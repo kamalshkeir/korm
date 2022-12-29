@@ -527,7 +527,7 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 						if ts, ok := ftags[d]; ok {
 							for _, t := range ts {
 								if t == "update" {
-									v := checkUpdatedAtTrigger(db.Dialect, to_table_name, d, pk)
+									v := checkUpdatedAtTrigger(db.Dialect, to_table_name, d)
 									for _, stmts := range v {
 										trigs = stmts
 									}
@@ -961,7 +961,7 @@ func getTableName[T comparable]() string {
 }
 
 // getStructInfos very useful to access all struct fields data using reflect package
-func getStructInfos[T comparable](strctt *T) (fields []string, fValues map[string]any, fTypes map[string]string, fTags map[string][]string) {
+func getStructInfos[T comparable](strctt *T, ignoreZeroValues ...bool) (fields []string, fValues map[string]any, fTypes map[string]string, fTags map[string][]string) {
 	fields = []string{}
 	fValues = map[string]any{}
 	fTypes = map[string]string{}
@@ -976,6 +976,13 @@ func getStructInfos[T comparable](strctt *T) (fields []string, fValues map[strin
 		fvalue := f.Interface()
 		ftype := f.Type().Name()
 
+		if len(ignoreZeroValues) > 0 && ignoreZeroValues[0] && strings.Contains(ftype, "Time") {
+			if v, ok := fvalue.(time.Time); ok {
+				if v.IsZero() {
+					continue
+				}
+			}
+		}
 		fields = append(fields, fname)
 		fTypes[fname] = ftype
 		fValues[fname] = fvalue
@@ -1004,16 +1011,8 @@ func adaptPlaceholdersToDialect(query *string, dialect string) *string {
 
 func handleCache(data map[string]any) {
 	switch data["type"] {
-	case "create", "delete", "update":
+	case "create", "delete", "update", "drop", "clean":
 		go func() {
-			cachesAllM.Flush()
-			cachesAllS.Flush()
-			cachesOneM.Flush()
-			cachesOneS.Flush()
-		}()
-	case "drop", "clean":
-		go func() {
-			cacheGetAllTables.Flush()
 			cachesAllM.Flush()
 			cachesAllS.Flush()
 			cachesOneM.Flush()
@@ -1024,17 +1023,17 @@ func handleCache(data map[string]any) {
 	}
 }
 
-func GenerateUUID() (string, error) {
+func GenerateUUID() string {
 	var uuid [16]byte
 	_, err := io.ReadFull(rand.Reader, uuid[:])
 	if err != nil {
-		return "", err
+		return ""
 	}
 	uuid[6] = (uuid[6] & 0x0f) | 0x40 // Version 4
 	uuid[8] = (uuid[8] & 0x3f) | 0x80 // Variant is 10
 	var buf [36]byte
 	encodeHex(buf[:], uuid)
-	return string(buf[:]), nil
+	return string(buf[:])
 }
 func encodeHex(dst []byte, uuid [16]byte) {
 	hex.Encode(dst, uuid[:4])

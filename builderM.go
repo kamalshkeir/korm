@@ -312,7 +312,7 @@ func (b *BuilderM) One() (map[string]any, error) {
 	return models[0], nil
 }
 
-func (b *BuilderM) Insert(fields_comma_separated string, fields_values ...any) (int, error) {
+func (b *BuilderM) Insert(rowData map[string]any) (int, error) {
 	if b.tableName == "" {
 		return 0, errors.New("unable to find table, try db.Table before")
 	}
@@ -330,44 +330,42 @@ func (b *BuilderM) Insert(fields_comma_separated string, fields_values ...any) (
 		return 0, err
 	}
 
-	split := strings.Split(fields_comma_separated, ",")
-	if len(split) != len(fields_values) {
-		return 0, errors.New("fields and fields_values doesn't have the same length")
-	}
 	placeholdersSlice := []string{}
-	for i := range split {
+	keys := []string{}
+	values := []any{}
+	count := 0
+	for k, v := range rowData {
 		switch db.Dialect {
 		case POSTGRES, SQLITE:
-			placeholdersSlice = append(placeholdersSlice, "$"+strconv.Itoa(i+1))
+			placeholdersSlice = append(placeholdersSlice, "$"+strconv.Itoa(count+1))
 		case MYSQL, MARIA, "mariadb":
 			placeholdersSlice = append(placeholdersSlice, "?")
 		default:
 			return 0, errors.New("database is neither sqlite, postgres or mysql")
 		}
+		keys = append(keys, k)
+		values = append(values, v)
+		count++
 	}
 	placeholders := strings.Join(placeholdersSlice, ",")
 	var affectedRows int
 
 	stat := strings.Builder{}
 	stat.WriteString("INSERT INTO " + b.tableName + " (")
-	stat.WriteString(fields_comma_separated)
+	stat.WriteString(strings.Join(keys, ","))
 	stat.WriteString(") VALUES (")
 	stat.WriteString(placeholders)
 	stat.WriteString(")")
 	statement := stat.String()
-	if b.debug {
-		klog.Printf("ylstatement:%s\n", b.statement)
-		klog.Printf("ylargs:%v\n", b.args)
-	}
 	var res sql.Result
 	if b.ctx != nil {
-		res, err = db.Conn.ExecContext(b.ctx, statement, fields_values...)
+		res, err = db.Conn.ExecContext(b.ctx, statement, values...)
 	} else {
-		res, err = db.Conn.Exec(statement, fields_values...)
+		res, err = db.Conn.Exec(statement, values...)
 	}
 	if err != nil {
-		if Debug {
-			klog.Printf("ylstatement: %s\nfields_values: %v \n", statement, fields_values)
+		if b.debug {
+			klog.Printf("ylstatement: %s\nvalues: %v \n", statement, values)
 			klog.Printf("rderr:%v\n", err)
 		}
 		return affectedRows, err
