@@ -166,7 +166,7 @@ func (b *BuilderM) All() ([]map[string]any, error) {
 		args:       fmt.Sprintf("%v", b.args...),
 	}
 	if useCache {
-		if v, ok := cachesAllM.Get(c); ok {
+		if v, ok := cacheAllM.Get(c); ok {
 			return v, nil
 		}
 	}
@@ -212,7 +212,7 @@ func (b *BuilderM) All() ([]map[string]any, error) {
 		return nil, err
 	}
 	if useCache {
-		cachesAllM.Set(c, models)
+		cacheAllM.Set(c, models)
 	}
 	return models, nil
 }
@@ -440,7 +440,6 @@ func (b *BuilderM) BulkInsert(rowsData ...map[string]any) (int, error) {
 	return len(rowsData), nil
 }
 
-// Set usage: Set("email,is_admin","example@mail.com",true) or Set("email = ? AND is_admin = ?","example@mail.com",true) or Set("email = ?, is_admin = ?","example@mail.com",1)
 func (b *BuilderM) Set(query string, args ...any) (int, error) {
 	if b.tableName == "" {
 		return 0, errors.New("unable to find model, try db.Table before")
@@ -637,7 +636,11 @@ func (b *BuilderM) AddRelated(relatedTable string, whereRelatedTable string, whe
 	if b.database == "" {
 		b.database = databases[0].Name
 	}
-
+	if useCache {
+		cachebus.Publish(CACHE_TOPIC, map[string]any{
+			"type": "create",
+		})
+	}
 	db, _ := GetMemoryDatabase(b.database)
 
 	relationTableName := "m2m_" + b.tableName + "-" + b.database + "-" + relatedTable
@@ -870,7 +873,11 @@ func (b *BuilderM) DeleteRelated(relatedTable string, whereRelatedTable string, 
 	if b.database == "" {
 		b.database = databases[0].Name
 	}
-
+	if useCache {
+		cachebus.Publish(CACHE_TOPIC, map[string]any{
+			"type": "delete",
+		})
+	}
 	relationTableName := "m2m_" + b.tableName + "-" + b.database + "-" + relatedTable
 	if _, ok := relationsMap.Get("m2m_" + b.tableName + "-" + b.database + "-" + relatedTable); !ok {
 		relationTableName = "m2m_" + relatedTable + "-" + b.database + "-" + b.tableName

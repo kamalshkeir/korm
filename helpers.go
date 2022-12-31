@@ -1117,12 +1117,21 @@ func adaptWhereQuery(query *string, tableName ...string) {
 
 func handleCache(data map[string]any) {
 	switch data["type"] {
-	case "create", "delete", "update", "drop", "clean":
+	case "create", "delete", "update":
 		go func() {
-			cachesAllM.Flush()
-			cachesAllS.Flush()
+			cacheAllM.Flush()
+			cacheAllS.Flush()
 			cachesOneM.Flush()
-			cachesOneS.Flush()
+			cacheOneS.Flush()
+		}()
+	case "drop", "clean":
+		go func() {
+			cacheAllM.Flush()
+			cacheAllS.Flush()
+			cachesOneM.Flush()
+			cacheOneS.Flush()
+			cacheAllTables.Flush()
+			cacheAllCols.Flush()
 		}()
 	default:
 		klog.Printf("CACHE DB: default case triggered %v \n", data)

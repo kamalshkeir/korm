@@ -13,8 +13,8 @@ import (
 	"github.com/kamalshkeir/kstrct"
 )
 
-var cachesOneS = kmap.New[dbCache, any](false)
-var cachesAllS = kmap.New[dbCache, any](false)
+var cacheOneS = kmap.New[dbCache, any](false)
+var cacheAllS = kmap.New[dbCache, any](false)
 var errModelNotFound = errors.New("unable to find tableName from model, restart the app if you just migrated")
 
 type Builder[T comparable] struct {
@@ -299,6 +299,11 @@ func (b *Builder[T]) AddRelated(relatedTable string, whereRelatedTable string, w
 	if b.database == "" {
 		b.database = databases[0].Name
 	}
+	if useCache {
+		cachebus.Publish(CACHE_TOPIC, map[string]any{
+			"type": "create",
+		})
+	}
 
 	db, _ := GetMemoryDatabase(b.database)
 
@@ -384,7 +389,11 @@ func (b *Builder[T]) DeleteRelated(relatedTable string, whereRelatedTable string
 	if b.database == "" {
 		b.database = databases[0].Name
 	}
-
+	if useCache {
+		cachebus.Publish(CACHE_TOPIC, map[string]any{
+			"type": "delete",
+		})
+	}
 	relationTableName := "m2m_" + b.tableName + "-" + b.database + "-" + relatedTable
 	if _, ok := relationsMap.Get("m2m_" + b.tableName + "-" + b.database + "-" + relatedTable); !ok {
 		relationTableName = "m2m_" + relatedTable + "-" + b.database + "-" + b.tableName
@@ -823,7 +832,7 @@ func (b *Builder[T]) All() ([]T, error) {
 		args:       fmt.Sprintf("%v", b.args...),
 	}
 	if useCache {
-		if v, ok := cachesAllS.Get(c); ok {
+		if v, ok := cacheAllS.Get(c); ok {
 			return v.([]T), nil
 		}
 	}
@@ -865,7 +874,7 @@ func (b *Builder[T]) All() ([]T, error) {
 		return nil, err
 	}
 	if useCache {
-		cachesAllS.Set(c, models)
+		cacheAllS.Set(c, models)
 	}
 	return models, nil
 }
@@ -891,7 +900,7 @@ func (b *Builder[T]) One() (T, error) {
 		args:       fmt.Sprintf("%v", b.args...),
 	}
 	if useCache {
-		if v, ok := cachesOneS.Get(c); ok {
+		if v, ok := cacheOneS.Get(c); ok {
 			return v.(T), nil
 		}
 	}
@@ -934,7 +943,7 @@ func (b *Builder[T]) One() (T, error) {
 		return *new(T), err
 	}
 	if useCache {
-		cachesOneS.Set(c, models[0])
+		cacheOneS.Set(c, models[0])
 	}
 	return models[0], nil
 }

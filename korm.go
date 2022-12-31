@@ -27,7 +27,9 @@ var (
 	databases       = []databaseEntity{}
 	mModelTablename = map[any]string{}
 	cachesOneM      = kmap.New[dbCache, map[string]any](false)
-	cachesAllM      = kmap.New[dbCache, []map[string]any](false)
+	cacheAllM       = kmap.New[dbCache, []map[string]any](false)
+	cacheAllTables  = kmap.New[string, []string](false)
+	cacheAllCols    = kmap.New[string, map[string]string](false)
 	relationsMap    = kmap.New[string, struct{}](false)
 
 	onceDone       = false
@@ -420,6 +422,13 @@ func GetAllTables(dbName ...string) []string {
 	} else {
 		name = dbName[0]
 	}
+
+	if useCache {
+		if v, ok := cacheAllTables.Get(name); ok {
+			return v
+		}
+	}
+
 	tables := []string{}
 	db, err := GetMemoryDatabase(name)
 	if err != nil {
@@ -472,7 +481,10 @@ func GetAllTables(dbName ...string) []string {
 		}
 	default:
 		klog.Printf("rddatabase type not supported, should be sqlite, postgres, coakroach, maria or mysql")
-		os.Exit(0)
+		return nil
+	}
+	if useCache {
+		cacheAllTables.Set(name, tables)
 	}
 	return tables
 }
@@ -483,33 +495,27 @@ func GetAllColumnsTypes(table string, dbName ...string) map[string]string {
 	if len(dbName) > 0 {
 		dName = dbName[0]
 	}
-
-	tb, err := GetMemoryTable(table, dName)
-	if err == nil {
-		if len(tb.Types) > 0 {
-			return tb.Types
+	if useCache {
+		if v, ok := cacheAllCols.Get(dName + table); ok {
+			return v
 		}
 	}
 
-	dbType := databases[0].Dialect
-	conn, _ := GetConnection(dName)
-	for _, d := range databases {
-		if d.Name == dName {
-			dbType = d.Dialect
-			conn = d.Conn
-		}
+	db, err := GetMemoryDatabase(dName)
+	if err != nil {
+		return nil
 	}
 
 	var statement string
 	columns := map[string]string{}
-	switch dbType {
+	switch db.Dialect {
 	case POSTGRES:
 		statement = "SELECT column_name,data_type FROM information_schema.columns WHERE table_name = '" + table + "'"
 	case MYSQL, MARIA:
-		statement = "SELECT column_name,data_type FROM information_schema.columns WHERE table_name = '" + table + "' AND TABLE_SCHEMA = '" + databases[0].Name + "'"
+		statement = "SELECT column_name,data_type FROM information_schema.columns WHERE table_name = '" + table + "' AND TABLE_SCHEMA = '" + db.Name + "'"
 	default:
 		statement = "PRAGMA table_info(" + table + ");"
-		row, err := conn.Query(statement)
+		row, err := db.Conn.Query(statement)
 		if klog.CheckError(err) {
 			return nil
 		}
@@ -527,10 +533,13 @@ func GetAllColumnsTypes(table string, dbName ...string) map[string]string {
 			}
 			columns[singleColName] = singleColType
 		}
+		if useCache {
+			cacheAllCols.Set(dName+table, columns)
+		}
 		return columns
 	}
 
-	row, err := conn.Query(statement)
+	row, err := db.Conn.Query(statement)
 
 	if klog.CheckError(err) {
 		return nil
@@ -544,6 +553,9 @@ func GetAllColumnsTypes(table string, dbName ...string) map[string]string {
 			return nil
 		}
 		columns[singleColName] = singleColType
+	}
+	if useCache {
+		cacheAllCols.Set(dName+table, columns)
 	}
 	return columns
 }
