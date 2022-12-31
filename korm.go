@@ -194,18 +194,18 @@ func New(dbType Dialect, dbName string, dbDSN ...string) error {
 }
 
 func ManyToMany(table1, table2 string, dbName ...string) error {
-	fkeys := []string{}
-	autoinc := ""
-	def := GetMemoryDatabases()[0]
-	mdbName := def.Name
-	dbType := def.Dialect
+	var err error
+	mdbName := databases[0].Name
 	if len(dbName) > 0 {
 		mdbName = dbName[0]
-		dben, err := GetMemoryDatabase(dbName[0])
-		if err != nil {
-			dbType = dben.Dialect
-		}
 	}
+	dben, err := GetMemoryDatabase(mdbName)
+	if err != nil {
+		return fmt.Errorf("database not found:%v", err)
+	}
+
+	fkeys := []string{}
+	autoinc := ""
 
 	defer func() {
 		relationsMap.Set("m2m_"+table1+"-"+mdbName+"-"+table2, struct{}{})
@@ -217,14 +217,14 @@ func ManyToMany(table1, table2 string, dbName ...string) error {
 
 	tables := GetAllTables(mdbName)
 	if len(tables) == 0 {
-		return errors.New("databse is empty")
+		return fmt.Errorf("databse is empty: %v", tables)
 	}
 	for _, t := range tables {
 		if t == table1+"_"+table2 || t == table2+"_"+table1 {
 			return nil
 		}
 	}
-	switch dbType {
+	switch dben.Dialect {
 	case SQLITE, "":
 		autoinc = "INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT"
 	case POSTGRES, COCKROACH:
@@ -232,7 +232,7 @@ func ManyToMany(table1, table2 string, dbName ...string) error {
 	case MYSQL, MARIA:
 		autoinc = "INTEGER NOT NULL PRIMARY KEY AUTO_INCREMENT"
 	default:
-		klog.Printf("dialect can be sqlite, postgres, coakroach or mysql,maria only, not %s\n", dbType)
+		klog.Printf("dialect can be sqlite, postgres, coakroach or mysql,maria only, not %s\n", dben.Dialect)
 	}
 	//klog.Printfs("many to many field:%v\n", tableName+"_"+table)
 	//klog.Printfs("table: %v, fields: %v, fkeys: %v, cols: %v, ftags:%v \n", tableName+"_"+table, res, fkeys, cols, mFieldName_Tags)
@@ -252,11 +252,20 @@ func ManyToMany(table1, table2 string, dbName ...string) error {
 	if Debug {
 		klog.Printfs("yl%s\n", st)
 	}
-	err := Exec(mdbName, st)
+	err = Exec(dben.Name, st)
 	if err != nil {
 		return err
 	}
-
+	dben.Tables = append(dben.Tables, tableEntity{
+		Types: map[string]string{
+			"id":           "uint",
+			table1 + "_id": "uint",
+			table2 + "_id": "uint",
+		},
+		Columns: []string{"id", table1 + "_id", table2 + "_id"},
+		Name:    "m2m_" + table1 + "_" + table2,
+		Pk:      "id",
+	})
 	return nil
 }
 
@@ -422,18 +431,19 @@ func GetAllTables(dbName ...string) []string {
 	} else {
 		name = dbName[0]
 	}
-
-	if useCache {
-		if v, ok := cacheAllTables.Get(name); ok {
-			return v
-		}
-	}
-
-	tables := []string{}
 	db, err := GetMemoryDatabase(name)
 	if err != nil {
 		return nil
 	}
+	if useCache {
+		if v, ok := cacheAllTables.Get(name); ok {
+			if len(v) == len(db.Tables) {
+				return v
+			}
+		}
+	}
+
+	tables := []string{}
 
 	switch db.Dialect {
 	case POSTGRES:
@@ -466,11 +476,12 @@ func GetAllTables(dbName ...string) []string {
 			tables = append(tables, table)
 		}
 	case SQLITE, "":
-		rows, err := db.Conn.Query(`SELECT name FROM sqlite_schema WHERE type ='table' AND name NOT LIKE 'sqlite_%';`)
+		rows, err := db.Conn.Query(`SELECT name FROM sqlite_master WHERE type ='table' AND name NOT LIKE 'sqlite_%';`)
 		if klog.CheckError(err) {
 			return nil
 		}
 		defer rows.Close()
+
 		for rows.Next() {
 			var table string
 			err := rows.Scan(&table)
@@ -483,9 +494,10 @@ func GetAllTables(dbName ...string) []string {
 		klog.Printf("rddatabase type not supported, should be sqlite, postgres, coakroach, maria or mysql")
 		return nil
 	}
-	if useCache {
+	if useCache && len(tables) > 0 {
 		cacheAllTables.Set(name, tables)
 	}
+
 	return tables
 }
 

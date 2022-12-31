@@ -54,7 +54,7 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@v1.2.7 // latest sql ORM
+go get -u github.com/kamalshkeir/korm@v1.2.8 // latest version
 ```
 
 # Drivers moved outside this package to not get them all in your go.mod file

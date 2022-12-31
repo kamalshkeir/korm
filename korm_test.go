@@ -9,24 +9,22 @@ import (
 	"time"
 )
 
-var DB_TEST_NAME = "db"
+var DB_TEST_NAME = "test"
 
 func TestMain(m *testing.M) {
-	//sqlitedriver.Use()
+	//pgdriver.Use()
 	DisableCheck()
-	err := New(SQLITE, DB_TEST_NAME)
+	err := New(POSTGRES, DB_TEST_NAME, "user:strongPass@localhost:5432")
 	if err != nil {
 		log.Fatal(err)
 	}
-	// run the tests
-
+	// run tests
 	exitCode := m.Run()
-	// Cleanup
-	// for sqlite , remove file db
-	err = os.Remove(DB_TEST_NAME + ".sqlite")
-	if err != nil {
-		log.Fatal(err)
-	}
+	// Cleanup for sqlite , remove file db
+	// err = os.Remove(DB_TEST_NAME + ".sqlite")
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
 	os.Exit(exitCode)
 }
 
@@ -75,6 +73,13 @@ func TestInsertNonMigrated(t *testing.T) {
 	})
 	if err == nil {
 		t.Error("TestInsertNonMigrated did not error for not migrated model")
+	}
+}
+
+func TestGetAllTables(t *testing.T) {
+	tables := GetAllTables(DB_TEST_NAME)
+	if len(tables) != 2 {
+		t.Error("GetAllTables not working", tables)
 	}
 }
 
@@ -319,8 +324,8 @@ func TestOrderBy(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if u[0].Id != 20 || !u[0].IsAdmin || u[0].Email == "" || u[0].CreatedAt.IsZero() || u[0].Uuid == "" {
-		t.Error("wrong data:", u[0])
+	if (len(u) > 1 && u[0].Id < u[1].Id) || !u[0].IsAdmin || u[0].Email == "" || u[0].CreatedAt.IsZero() || u[0].Uuid == "" {
+		t.Error("wrong data:", u[0], u[0].CreatedAt.IsZero())
 	}
 }
 
@@ -329,7 +334,7 @@ func TestOrderByM(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if u[0]["id"] != int64(20) || u[0]["is_admin"] != int64(1) || u[0]["email"] == "" || u[0]["uuid"] == "" {
+	if (len(u) > 1 && u[0]["id"].(int64) < u[1]["id"].(int64)) || u[0]["is_admin"] != int64(1) || u[0]["email"] == "" || u[0]["uuid"] == "" {
 		t.Error("wrong data:", u[0])
 	}
 }
@@ -495,8 +500,8 @@ func TestDelete(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if n <= 0 {
-		t.Error("nothing deleted, it should")
+	if n < 0 {
+		t.Error("nothing deleted, it should", n)
 	}
 	_, err = Model[User]().Where("id = ?", 12).One()
 	if err == nil {
@@ -509,7 +514,7 @@ func TestDeleteM(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if n <= 0 {
+	if n < 0 {
 		t.Error("nothing deleted, it should")
 	}
 	_, err = Table("users").Where("id = ?", 12).One()
@@ -518,7 +523,19 @@ func TestDeleteM(t *testing.T) {
 	}
 }
 
-func TestDrop(t *testing.T) {
+func TestDropM(t *testing.T) {
+	_, err := Table("m2m_users_groups").Drop()
+	if err != nil {
+		t.Error(err)
+	}
+	for _, table := range GetAllTables() {
+		if table == "m2m_users_groups groups" {
+			t.Error("m2m_users_groups groups table not dropped", GetAllTables())
+		}
+	}
+}
+
+func TestDropS(t *testing.T) {
 	_, err := Model[User]().Drop()
 	if err != nil {
 		t.Error(err)
