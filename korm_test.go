@@ -19,6 +19,7 @@ func TestMain(m *testing.M) {
 		log.Fatal(err)
 	}
 	// run the tests
+
 	exitCode := m.Run()
 	// Cleanup
 	// for sqlite , remove file db
@@ -26,7 +27,6 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	// Exit
 	os.Exit(exitCode)
 }
 
@@ -105,20 +105,22 @@ func TestInsertUsersAndGroups(t *testing.T) {
 			CreatedAt: time.Now(),
 		})
 		if err != nil {
-			t.Log(err)
+			t.Error(err)
 		}
 	}
-	_, err := Model[Group]().Insert(&Group{
+	_, err := Model[Group]().BulkInsert(&Group{
 		Name: "admin",
-	})
+	}, &Group{Name: "normal"})
 	if err != nil {
-		t.Log(err)
+		t.Error(err)
 	}
-	_, err = Model[Group]().Insert(&Group{
-		Name: "normal",
+	_, err = Table("groups").BulkInsert(map[string]any{
+		"name": "another",
+	}, map[string]any{
+		"name": "last",
 	})
 	if err != nil {
-		t.Log(err)
+		t.Error(err)
 	}
 }
 

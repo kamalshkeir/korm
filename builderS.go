@@ -180,6 +180,118 @@ func (b *Builder[T]) Insert(model *T) (int, error) {
 	return int(rows), nil
 }
 
+func (b *Builder[T]) BulkInsert(models ...*T) (int, error) {
+	if b == nil || b.tableName == "" {
+		return 0, errModelNotFound
+	}
+	if b.database == "" {
+		b.database = databases[0].Name
+	}
+	if useCache {
+		cachebus.Publish(CACHE_TOPIC, map[string]any{
+			"type": "create",
+		})
+	}
+	db, err := GetMemoryDatabase(b.database)
+	if err != nil {
+		return 0, err
+	}
+	tx, err := db.Conn.BeginTx(context.Background(), &sql.TxOptions{})
+	if err != nil {
+		return 0, err
+	}
+	for mm := range models {
+		names, mvalues, _, mtags := getStructInfos(models[mm], true)
+		if len(names) < len(mvalues) {
+			return 0, errors.New("more values than fields")
+		}
+		placeholdersSlice := []string{}
+		values := []any{}
+		ignored := []int{}
+		for i, name := range names {
+			if v, ok := mvalues[name]; ok {
+				if v == true {
+					v = 1
+				} else if v == false {
+					v = 0
+				}
+				values = append(values, v)
+			} else {
+				klog.Printf("rd%vnot found in fields\n")
+				return 0, errors.New("field not found")
+			}
+
+			if tags, ok := mtags[name]; ok {
+				ig := false
+				for _, tag := range tags {
+					switch tag {
+					case "autoinc", "pk", "-":
+						ig = true
+					default:
+						if strings.Contains(tag, "m2m") {
+							ig = true
+						}
+					}
+				}
+				if ig {
+					ignored = append(ignored, i)
+				} else {
+					placeholdersSlice = append(placeholdersSlice, "?")
+				}
+			} else {
+				placeholdersSlice = append(placeholdersSlice, "?")
+			}
+		}
+		cum := 0
+		for _, ign := range ignored {
+			ii := ign - cum
+			delete(mvalues, names[ii])
+			names = append(names[:ii], names[ii+1:]...)
+			values = append(values[:ii], values[ii+1:]...)
+			cum++
+		}
+		ph := strings.Join(placeholdersSlice, ",")
+		fields_comma_separated := strings.Join(names, ",")
+		stat := strings.Builder{}
+		stat.WriteString("INSERT INTO " + b.tableName + " (")
+		stat.WriteString(fields_comma_separated)
+		stat.WriteString(") VALUES (")
+		stat.WriteString(ph)
+		stat.WriteString(");")
+		statem := stat.String()
+		adaptPlaceholdersToDialect(&statem, db.Dialect)
+		if b.debug {
+			klog.Printf("%s,%s\n", statem, values)
+		}
+		var res sql.Result
+		if b.ctx != nil {
+			res, err = tx.ExecContext(b.ctx, statem, values...)
+		} else {
+			res, err = tx.Exec(statem, values...)
+		}
+		if err != nil {
+			errRoll := tx.Rollback()
+			if errRoll != nil {
+				return 0, errRoll
+			}
+			return 0, err
+		}
+		rows, err := res.RowsAffected()
+		if err != nil {
+			errRoll := tx.Rollback()
+			if errRoll != nil {
+				return 0, errRoll
+			}
+			return int(rows), err
+		}
+	}
+	err = tx.Commit()
+	if err != nil {
+		return 0, err
+	}
+	return len(models), nil
+}
+
 func (b *Builder[T]) AddRelated(relatedTable string, whereRelatedTable string, whereRelatedArgs ...any) (int, error) {
 	if b == nil || b.tableName == "" {
 		return 0, errModelNotFound

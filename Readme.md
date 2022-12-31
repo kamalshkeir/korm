@@ -54,7 +54,7 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@v1.2.5 // latest sql ORM
+go get -u github.com/kamalshkeir/korm@v1.2.6 // latest sql ORM
 ```
 
 # Drivers moved outside this package to not get them all in your go.mod file
@@ -190,6 +190,7 @@ func (b *BuilderM) Debug() *BuilderM // show executed queries for migrations
 func (b *BuilderM) All() ([]map[string]any, error) // finisher
 func (b *BuilderM) One() (map[string]any, error) // finisher
 func (b *BuilderM) Insert(rowData map[string]any) (int, error) // finisher
+func (b *BuilderM) BulkInsert(rowsData ...map[string]any) (int, error) // finisher
 func (b *BuilderM) Set(query string, args ...any) (int, error) // finisher
 func (b *BuilderM) Delete() (int, error) // finisher
 func (b *BuilderM) Drop() (int, error) // finisher
@@ -244,6 +245,7 @@ func Model[T comparable](tableName ...string) *Builder[T] // you get the idea
 func BuilderStruct[T comparable](tableName ...string) *Builder[T] 
 func (b *Builder[T]) Database(dbName string) *Builder[T]
 func (b *Builder[T]) Insert(model *T) (int, error)
+func (b *Builder[T]) BulkInsert(models ...*T) (int, error)
 func (b *Builder[T]) Set(query string, args ...any) (int, error)
 func (b *Builder[T]) Delete() (int, error)
 func (b *Builder[T]) Drop() (int, error)

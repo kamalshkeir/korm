@@ -352,6 +352,94 @@ func (b *BuilderM) Insert(rowData map[string]any) (int, error) {
 	return int(rows), nil
 }
 
+func (b *BuilderM) BulkInsert(rowsData ...map[string]any) (int, error) {
+	if b.tableName == "" {
+		return 0, errors.New("unable to find table, try db.Table before")
+	}
+	if b.database == "" {
+		b.database = databases[0].Name
+	}
+	if useCache {
+		cachebus.Publish(CACHE_TOPIC, map[string]any{
+			"type": "create",
+		})
+	}
+
+	db, err := GetMemoryDatabase(b.database)
+	if err != nil {
+		return 0, err
+	}
+
+	tx, err := db.Conn.BeginTx(context.Background(), &sql.TxOptions{})
+	if err != nil {
+		return 0, err
+	}
+
+	for ii := range rowsData {
+		placeholdersSlice := []string{}
+		keys := []string{}
+		values := []any{}
+		count := 0
+		for k, v := range rowsData[ii] {
+			switch db.Dialect {
+			case POSTGRES, SQLITE:
+				placeholdersSlice = append(placeholdersSlice, "$"+strconv.Itoa(count+1))
+			case MYSQL, MARIA, "mariadb":
+				placeholdersSlice = append(placeholdersSlice, "?")
+			default:
+				return 0, errors.New("database is neither sqlite, postgres or mysql")
+			}
+			keys = append(keys, k)
+			if v == true {
+				v = 1
+			} else if v == false {
+				v = 0
+			}
+			values = append(values, v)
+			count++
+		}
+		placeholders := strings.Join(placeholdersSlice, ",")
+
+		stat := strings.Builder{}
+		stat.WriteString("INSERT INTO " + b.tableName + " (")
+		stat.WriteString(strings.Join(keys, ","))
+		stat.WriteString(") VALUES (")
+		stat.WriteString(placeholders)
+		stat.WriteString(")")
+		statement := stat.String()
+		var res sql.Result
+		if b.debug {
+			klog.Printf("%s,%s\n", statement, values)
+		}
+		if b.ctx != nil {
+			res, err = tx.ExecContext(b.ctx, statement, values...)
+		} else {
+			res, err = tx.Exec(statement, values...)
+		}
+		if err != nil {
+			errRoll := tx.Rollback()
+			if errRoll != nil {
+				return 0, errRoll
+			}
+			return 0, err
+		}
+		_, err := res.RowsAffected()
+		if err != nil {
+			errRoll := tx.Rollback()
+			if errRoll != nil {
+				return 0, errRoll
+			}
+			return 0, err
+		}
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return 0, err
+	}
+	return len(rowsData), nil
+}
+
 // Set usage: Set("email,is_admin","example@mail.com",true) or Set("email = ? AND is_admin = ?","example@mail.com",true) or Set("email = ?, is_admin = ?","example@mail.com",1)
 func (b *BuilderM) Set(query string, args ...any) (int, error) {
 	if b.tableName == "" {
