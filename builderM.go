@@ -48,53 +48,23 @@ func (b *BuilderM) Database(dbName string) *BuilderM {
 }
 
 func (b *BuilderM) Select(columns ...string) *BuilderM {
-	if b.tableName == "" {
-		klog.Printf("rdUse .Table before .Select\n")
-		return nil
-	}
-	s := []string{}
-	s = append(s, columns...)
-	b.selected = strings.Join(s, ",")
+	b.selected = strings.Join(columns, ",")
 	b.order = append(b.order, "select")
 	return b
 }
 
 func (b *BuilderM) Where(query string, args ...any) *BuilderM {
-	if b.tableName == "" {
-		klog.Printf("rdUse korm.Table before .Where\n")
-		return nil
-	}
+	adaptWhereQuery(&query, b.tableName)
+	adaptTrueFalseArgs(&args)
 	b.whereQuery = query
-	if strings.Contains(query, ",") {
-		sp := strings.Split(query, ",")
-		for i := range sp {
-			if !strings.HasPrefix(sp[i], b.tableName) {
-				sp[i] = b.tableName + "." + sp[i] + " = ?"
-				if !strings.Contains(query, "?") {
-					sp[i] += " = ?"
-				}
-			}
-		}
-		b.whereQuery = strings.Join(sp, ",")
-	} else {
-		if !strings.HasPrefix(query, b.tableName) {
-			b.whereQuery = b.tableName + "." + query
-		}
-		if !strings.Contains(query, "?") {
-			b.whereQuery += " = ?"
-		}
-	}
 	b.args = append(b.args, args...)
 	b.order = append(b.order, "where")
 	return b
 }
 
 func (b *BuilderM) Query(query string, args ...any) *BuilderM {
-	if b.tableName == "" {
-		klog.Printf("rdUse db.Table before Query\n")
-		return nil
-	}
 	b.query = query
+	adaptTrueFalseArgs(&args)
 	b.args = append(b.args, args...)
 	b.order = append(b.order, "query")
 	return b
@@ -344,6 +314,11 @@ func (b *BuilderM) Insert(rowData map[string]any) (int, error) {
 			return 0, errors.New("database is neither sqlite, postgres or mysql")
 		}
 		keys = append(keys, k)
+		if v == true {
+			v = 1
+		} else if v == false {
+			v = 0
+		}
 		values = append(values, v)
 		count++
 	}
@@ -377,6 +352,7 @@ func (b *BuilderM) Insert(rowData map[string]any) (int, error) {
 	return int(rows), nil
 }
 
+// Set usage: Set("email,is_admin","example@mail.com",true) or Set("email = ? AND is_admin = ?","example@mail.com",true) or Set("email = ?, is_admin = ?","example@mail.com",1)
 func (b *BuilderM) Set(query string, args ...any) (int, error) {
 	if b.tableName == "" {
 		return 0, errors.New("unable to find model, try db.Table before")
@@ -396,8 +372,9 @@ func (b *BuilderM) Set(query string, args ...any) (int, error) {
 	if b.whereQuery == "" {
 		return 0, errors.New("you should use Where before Update")
 	}
-
+	adaptWhereQuery(&query)
 	b.statement = "UPDATE " + b.tableName + " SET " + query + " WHERE " + b.whereQuery
+	adaptTrueFalseArgs(&args)
 	adaptPlaceholdersToDialect(&b.statement, db.Dialect)
 	args = append(args, b.args...)
 	if b.debug {
@@ -565,71 +542,6 @@ func (b *BuilderM) queryM(statement string, args ...any) ([]map[string]interface
 	return listMap, nil
 }
 
-func Query(dbName string, statement string, args ...any) ([]map[string]interface{}, error) {
-	if dbName == "" {
-		dbName = databases[0].Name
-	}
-	db, err := GetMemoryDatabase(dbName)
-	if err != nil {
-		return nil, err
-	}
-	adaptPlaceholdersToDialect(&statement, db.Dialect)
-
-	var rows *sql.Rows
-	rows, err = db.Conn.Query(statement, args...)
-	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("queryM: no data found")
-	} else if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	columns, err := rows.Columns()
-	if err != nil {
-		return nil, err
-	}
-
-	models := make([]interface{}, len(columns))
-	modelsPtrs := make([]interface{}, len(columns))
-
-	listMap := make([]map[string]interface{}, 0)
-
-	for rows.Next() {
-		for i := range models {
-			models[i] = &modelsPtrs[i]
-		}
-
-		err := rows.Scan(models...)
-		if err != nil {
-			return nil, err
-		}
-
-		m := map[string]interface{}{}
-		for i := range columns {
-			if v, ok := modelsPtrs[i].([]byte); ok {
-				modelsPtrs[i] = string(v)
-			}
-			m[columns[i]] = modelsPtrs[i]
-		}
-		listMap = append(listMap, m)
-	}
-	if len(listMap) == 0 {
-		return nil, errors.New("no data found")
-	}
-	return listMap, nil
-}
-
-func Exec(dbName, query string, args ...any) error {
-	conn, ok := GetConnection(dbName)
-	if !ok {
-		return errors.New("no connection found")
-	}
-	_, err := conn.Exec(query, args...)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 func (b *BuilderM) AddRelated(relatedTable string, whereRelatedTable string, whereRelatedArgs ...any) (int, error) {
 	if b.tableName == "" {
 		return 0, errors.New("unable to find model, try korm.AutoMigrate before")
@@ -661,6 +573,7 @@ func (b *BuilderM) AddRelated(relatedTable string, whereRelatedTable string, whe
 		cols = relatedTable + "_id," + b.tableName + "_id"
 		wherecols = relatedTable + "_id = ? and " + b.tableName + "_id = ?"
 	}
+
 	memoryRelatedTable, err := GetMemoryTable(relatedTable)
 	if err != nil {
 		return 0, fmt.Errorf("memory table not found:" + relatedTable)
@@ -670,7 +583,8 @@ func (b *BuilderM) AddRelated(relatedTable string, whereRelatedTable string, whe
 		return 0, fmt.Errorf("memory table not found:" + relatedTable)
 	}
 	ids := make([]any, 4)
-
+	adaptTrueFalseArgs(&whereRelatedArgs)
+	adaptWhereQuery(&whereRelatedTable, relatedTable)
 	data, err := Table(relatedTable).Where(whereRelatedTable, whereRelatedArgs...).One()
 	if err != nil {
 		return 0, err
@@ -703,6 +617,10 @@ func (b *BuilderM) AddRelated(relatedTable string, whereRelatedTable string, whe
 	}
 	stat := "INSERT INTO " + relationTableName + "(" + cols + ") SELECT ?,? WHERE NOT EXISTS (SELECT * FROM " + relationTableName + " WHERE " + wherecols + ");"
 	adaptPlaceholdersToDialect(&stat, db.Dialect)
+	if b.debug {
+		klog.Printf("ylstatement:%s\n", stat)
+		klog.Printf("ylargs:%v\n", ids)
+	}
 	err = Exec(b.database, stat, ids...)
 	if err != nil {
 		return 0, err
@@ -892,7 +810,8 @@ func (b *BuilderM) DeleteRelated(relatedTable string, whereRelatedTable string, 
 		return 0, fmt.Errorf("memory table not found:" + relatedTable)
 	}
 	ids := make([]any, 2)
-
+	adaptTrueFalseArgs(&whereRelatedArgs)
+	adaptWhereQuery(&whereRelatedTable, relatedTable)
 	data, err := Table(relatedTable).Where(whereRelatedTable, whereRelatedArgs...).One()
 	if err != nil {
 		return 0, err

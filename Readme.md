@@ -54,7 +54,7 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@v1.2.3 // latest sql ORM
+go get -u github.com/kamalshkeir/korm@v1.2.5 // latest sql ORM
 ```
 
 # Drivers moved outside this package to not get them all in your go.mod file
@@ -219,6 +219,9 @@ korm.Model[models.User]().Insert(map[string]any{
 korm.Database("dbNameHere").Table("tableName").Where("id = ? AND email = ?",1,"test@example.com").All() 
 
 // where
+Where("id = ? AND email = ?",1,"test@example.com") // this work
+Where("id,email",1,"test@example.com") // and this work
+
 korm.Table("tableName").Where("id = ? AND email = ?",1,"test@example.com").One() // SQL
 kormongo.Table("tableName").Where("id, email",1,"test@example.com").One() // Mongo
 
@@ -230,7 +233,9 @@ kormongo.Table("tableName").Where("id,email", 1, "test@example.com").Delete() //
 korm.Table("tableName").Drop()
 
 // update
-korm.Table("tableName").Where("id = ?",1).Set("email = ?","new@example.com") // SQL
+korm.Table("tableName").Where("id = ?",1).Set("email = ?","new@example.com") // SQL 
+korm.Table("tableName").Where("id",1).Set("email","new@example.com") // orSQL 
+
 korm.Table("tableName").Where("id",1).Set("email","new@example.com") // Mongo
 ```
 #### Builder `Struct`:

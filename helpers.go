@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"testing"
 	"time"
 
 	"github.com/kamalshkeir/kinput"
@@ -1007,6 +1008,111 @@ func adaptPlaceholdersToDialect(query *string, dialect string) *string {
 		*query = strings.Join(split, "")
 	}
 	return query
+}
+
+func adaptTrueFalseArgs(args *[]any) {
+	for i := range *args {
+		if (*args)[i] == true {
+			(*args)[i] = 1
+		} else if (*args)[i] == false {
+			(*args)[i] = 0
+		}
+	}
+}
+
+func Benchmark(f func(), name string, iterations int) {
+	// Start the timer
+	start := time.Now()
+
+	// Run the function multiple times
+	var allocs int64
+	for i := 0; i < iterations; i++ {
+		allocs += int64(testing.AllocsPerRun(1, f))
+	}
+
+	// Stop the timer and calculate the elapsed time
+	elapsed := time.Since(start)
+
+	// Calculate the number of operations per second
+	opsPerSec := float64(iterations) / elapsed.Seconds()
+
+	// Calculate the number of allocations per operation
+	allocsPerOp := float64(allocs) / float64(iterations)
+
+	// Print the results
+	fmt.Println("---------------------------")
+	fmt.Println("Function", name)
+	fmt.Printf("Operations per second: %f\n", opsPerSec)
+	fmt.Printf("Allocations per operation: %f\n", allocsPerOp)
+	fmt.Println("---------------------------")
+}
+
+func adaptWhereQuery(query *string, tableName ...string) {
+	tbName := ""
+	if len(tableName) > 0 {
+		tbName = tableName[0]
+	}
+	*query = strings.ToLower(*query)
+	q := []rune(*query)
+	hasQuestionMark := false
+	for i := range q {
+		if q[i] == '?' {
+			hasQuestionMark = true
+			break
+		}
+	}
+
+	if !hasQuestionMark {
+		var b strings.Builder
+		fieldStart := -1
+		for i, c := range q {
+			if c == ',' || c == ' ' || c == '|' {
+				if fieldStart >= 0 {
+					if tbName != "" {
+						b.WriteString(tbName)
+						b.WriteString(".")
+					}
+					b.WriteString(string(q[fieldStart:i]))
+					b.WriteString(" = ?")
+					if i < len(q)-1 {
+						if c == '|' {
+							b.WriteString(" OR ")
+						} else {
+							b.WriteString(" AND ")
+						}
+					}
+					fieldStart = -1
+				}
+			} else if fieldStart < 0 {
+				fieldStart = i
+			}
+		}
+		if fieldStart >= 0 {
+			if tbName != "" {
+				b.WriteString(tbName)
+				b.WriteString(".")
+			}
+			b.WriteString(string(q[fieldStart:]))
+			b.WriteString(" = ?")
+		}
+		*query = b.String()
+	} else {
+		spAnd := strings.Split(*query, "and")
+		tbToAdd := false
+		for i := range spAnd {
+			spOr := strings.Split(spAnd[i], "or")
+			for j := range spOr {
+				if tbToAdd || (tbName != "" && !strings.HasPrefix(spOr[j], tbName)) {
+					if !tbToAdd {
+						tbToAdd = true
+					}
+					spOr[j] = tbName + "." + strings.TrimSpace(spOr[j])
+				}
+				spAnd[i] = strings.Join(spOr, " OR ")
+			}
+		}
+		*query = strings.Join(spAnd, " AND ")
+	}
 }
 
 func handleCache(data map[string]any) {

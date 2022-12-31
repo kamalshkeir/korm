@@ -3,6 +3,7 @@ package korm
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -21,14 +22,13 @@ var (
 	// FlushCacheEvery execute korm.FlushCache() every 30 min by default, you should not worry about it, but useful that you can change it
 	FlushCacheEvery = 10 * time.Minute
 	// defaultDB keep tracking of the first database connected
-	defaultDB         = ""
-	useCache          = true
-	databases         = []databaseEntity{}
-	mModelTablename   = map[any]string{}
-	cacheGetAllTables = kmap.New[string, []string](false)
-	cachesOneM        = kmap.New[dbCache, map[string]any](false)
-	cachesAllM        = kmap.New[dbCache, []map[string]any](false)
-	relationsMap      = kmap.New[string, struct{}](false)
+	defaultDB       = ""
+	useCache        = true
+	databases       = []databaseEntity{}
+	mModelTablename = map[any]string{}
+	cachesOneM      = kmap.New[dbCache, map[string]any](false)
+	cachesAllM      = kmap.New[dbCache, []map[string]any](false)
+	relationsMap    = kmap.New[string, struct{}](false)
 
 	onceDone       = false
 	cachebus       *ksbus.Bus
@@ -420,26 +420,15 @@ func GetAllTables(dbName ...string) []string {
 	} else {
 		name = dbName[0]
 	}
-	if useCache {
-		if v, ok := cacheGetAllTables.Get(name); ok {
-			return v
-		}
-	}
 	tables := []string{}
 	db, err := GetMemoryDatabase(name)
-	if err == nil {
-		return nil
-	}
-
-	conn, ok := GetConnection(name)
-	if !ok {
-		klog.Printf("rdconnection is null\n")
+	if err != nil {
 		return nil
 	}
 
 	switch db.Dialect {
 	case POSTGRES:
-		rows, err := conn.Query(`SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname NOT IN ('pg_catalog','information_schema','crdb_internal','pg_extension') AND tableowner != 'node'`)
+		rows, err := db.Conn.Query(`SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname NOT IN ('pg_catalog','information_schema','crdb_internal','pg_extension') AND tableowner != 'node'`)
 		if klog.CheckError(err) {
 			return nil
 		}
@@ -453,7 +442,7 @@ func GetAllTables(dbName ...string) []string {
 			tables = append(tables, table)
 		}
 	case MYSQL, MARIA:
-		rows, err := conn.Query("SELECT table_name,table_schema FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE' AND table_schema ='" + name + "'")
+		rows, err := db.Conn.Query("SELECT table_name,table_schema FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE' AND table_schema ='" + name + "'")
 		if klog.CheckError(err) {
 			return nil
 		}
@@ -468,7 +457,7 @@ func GetAllTables(dbName ...string) []string {
 			tables = append(tables, table)
 		}
 	case SQLITE, "":
-		rows, err := conn.Query(`SELECT name FROM sqlite_schema WHERE type ='table' AND name NOT LIKE 'sqlite_%';`)
+		rows, err := db.Conn.Query(`SELECT name FROM sqlite_schema WHERE type ='table' AND name NOT LIKE 'sqlite_%';`)
 		if klog.CheckError(err) {
 			return nil
 		}
@@ -484,9 +473,6 @@ func GetAllTables(dbName ...string) []string {
 	default:
 		klog.Printf("rddatabase type not supported, should be sqlite, postgres, coakroach, maria or mysql")
 		os.Exit(0)
-	}
-	if useCache {
-		cacheGetAllTables.Set(name, tables)
 	}
 	return tables
 }
@@ -705,4 +691,70 @@ func DropTrigger(onField, tableName string, dbName ...string) {
 		}
 		klog.Printf("rderr:%v\n", err)
 	}
+}
+
+func Query(dbName string, statement string, args ...any) ([]map[string]interface{}, error) {
+	if dbName == "" {
+		dbName = databases[0].Name
+	}
+	db, err := GetMemoryDatabase(dbName)
+	if err != nil {
+		return nil, err
+	}
+	adaptPlaceholdersToDialect(&statement, db.Dialect)
+	adaptTrueFalseArgs(&args)
+	var rows *sql.Rows
+	rows, err = db.Conn.Query(statement, args...)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("queryM: no data found")
+	} else if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	columns, err := rows.Columns()
+	if err != nil {
+		return nil, err
+	}
+
+	models := make([]interface{}, len(columns))
+	modelsPtrs := make([]interface{}, len(columns))
+
+	listMap := make([]map[string]interface{}, 0)
+
+	for rows.Next() {
+		for i := range models {
+			models[i] = &modelsPtrs[i]
+		}
+
+		err := rows.Scan(models...)
+		if err != nil {
+			return nil, err
+		}
+
+		m := map[string]interface{}{}
+		for i := range columns {
+			if v, ok := modelsPtrs[i].([]byte); ok {
+				modelsPtrs[i] = string(v)
+			}
+			m[columns[i]] = modelsPtrs[i]
+		}
+		listMap = append(listMap, m)
+	}
+	if len(listMap) == 0 {
+		return nil, errors.New("no data found")
+	}
+	return listMap, nil
+}
+
+func Exec(dbName, query string, args ...any) error {
+	conn, ok := GetConnection(dbName)
+	if !ok {
+		return errors.New("no connection found")
+	}
+	adaptTrueFalseArgs(&args)
+	_, err := conn.Exec(query, args...)
+	if err != nil {
+		return err
+	}
+	return nil
 }

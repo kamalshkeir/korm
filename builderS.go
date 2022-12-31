@@ -104,6 +104,11 @@ func (b *Builder[T]) Insert(model *T) (int, error) {
 	ignored := []int{}
 	for i, name := range names {
 		if v, ok := mvalues[name]; ok {
+			if v == true {
+				v = 1
+			} else if v == false {
+				v = 0
+			}
 			values = append(values, v)
 		} else {
 			klog.Printf("rd%vnot found in fields\n")
@@ -215,7 +220,8 @@ func (b *Builder[T]) AddRelated(relatedTable string, whereRelatedTable string, w
 		return 0, fmt.Errorf("memory table not found:" + relatedTable)
 	}
 	ids := make([]any, 4)
-
+	adaptTrueFalseArgs(&whereRelatedArgs)
+	adaptWhereQuery(&whereRelatedTable, relatedTable)
 	data, err := Table(relatedTable).Where(whereRelatedTable, whereRelatedArgs...).One()
 	if err != nil {
 		return 0, err
@@ -248,6 +254,10 @@ func (b *Builder[T]) AddRelated(relatedTable string, whereRelatedTable string, w
 	}
 	stat := "INSERT INTO " + relationTableName + "(" + cols + ") SELECT ?,? WHERE NOT EXISTS (SELECT * FROM " + relationTableName + " WHERE " + wherecols + ");"
 	adaptPlaceholdersToDialect(&stat, db.Dialect)
+	if b.debug {
+		klog.Printf("statement:%s\n", stat)
+		klog.Printf("args:%v\n", ids)
+	}
 	err = Exec(b.database, stat, ids...)
 	if err != nil {
 		return 0, err
@@ -290,7 +300,8 @@ func (b *Builder[T]) DeleteRelated(relatedTable string, whereRelatedTable string
 		return 0, fmt.Errorf("memory table not found:" + relatedTable)
 	}
 	ids := make([]any, 2)
-
+	adaptTrueFalseArgs(&whereRelatedArgs)
+	adaptWhereQuery(&whereRelatedTable, relatedTable)
 	data, err := Table(relatedTable).Where(whereRelatedTable, whereRelatedArgs...).One()
 	if err != nil {
 		return 0, err
@@ -465,7 +476,7 @@ func (b *Builder[T]) JoinRelated(relatedTable string, dest any) error {
 	return nil
 }
 
-// Set usage: Set("email = ? AND is_admin = ?","example@mail.com",true)
+// Set usage: Set("email,is_admin","example@mail.com",true) or Set("email = ? AND is_admin = ?","example@mail.com",true) or Set("email = ?, is_admin = ?","example@mail.com",true)
 func (b *Builder[T]) Set(query string, args ...any) (int, error) {
 	if b == nil || b.tableName == "" {
 		return 0, errModelNotFound
@@ -486,8 +497,10 @@ func (b *Builder[T]) Set(query string, args ...any) (int, error) {
 	if b.whereQuery == "" {
 		return 0, errors.New("you should use Where before Update")
 	}
-
+	adaptWhereQuery(&query)
 	b.statement = "UPDATE " + b.tableName + " SET " + query + " WHERE " + b.whereQuery
+	adaptTrueFalseArgs(&args)
+
 	adaptPlaceholdersToDialect(&b.statement, db.Dialect)
 	args = append(args, b.args...)
 	if b.debug {
@@ -597,35 +610,15 @@ func (b *Builder[T]) Drop() (int, error) {
 
 // Select usage: Select("email","password")
 func (b *Builder[T]) Select(columns ...string) *Builder[T] {
-	s := []string{}
-	s = append(s, columns...)
-	b.selected = strings.Join(s, ",")
+	b.selected = strings.Join(columns, ",")
 	b.order = append(b.order, "select")
 	return b
 }
 
 func (b *Builder[T]) Where(query string, args ...any) *Builder[T] {
+	adaptWhereQuery(&query, b.tableName)
+	adaptTrueFalseArgs(&args)
 	b.whereQuery = query
-	if strings.Contains(query, ",") {
-		sp := strings.Split(query, ",")
-		for i := range sp {
-			if !strings.HasPrefix(sp[i], b.tableName) {
-				sp[i] = b.tableName + "." + sp[i] + " = ?"
-				if !strings.Contains(query, "?") {
-					sp[i] += " = ?"
-				}
-			}
-		}
-		b.whereQuery = strings.Join(sp, ",")
-	} else {
-		if !strings.HasPrefix(query, b.tableName) {
-			b.whereQuery = b.tableName + "." + query
-		}
-		if !strings.Contains(query, "?") {
-			b.whereQuery += " = ?"
-		}
-	}
-
 	b.args = append(b.args, args...)
 	b.order = append(b.order, "where")
 	return b
@@ -633,6 +626,7 @@ func (b *Builder[T]) Where(query string, args ...any) *Builder[T] {
 
 func (b *Builder[T]) Query(query string, args ...any) *Builder[T] {
 	b.query = query
+	adaptTrueFalseArgs(&args)
 	b.args = append(b.args, args...)
 	b.order = append(b.order, "query")
 	return b

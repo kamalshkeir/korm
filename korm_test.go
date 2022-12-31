@@ -9,10 +9,11 @@ import (
 	"time"
 )
 
-var DB_TEST_NAME = "testdb"
+var DB_TEST_NAME = "db"
 
 func TestMain(m *testing.M) {
 	//sqlitedriver.Use()
+	DisableCheck()
 	err := New(SQLITE, DB_TEST_NAME)
 	if err != nil {
 		log.Fatal(err)
@@ -20,10 +21,7 @@ func TestMain(m *testing.M) {
 	// run the tests
 	exitCode := m.Run()
 	// Cleanup
-	err = Shutdown(DB_TEST_NAME)
-	if err != nil {
-		log.Fatal(err)
-	}
+	// for sqlite , remove file db
 	err = os.Remove(DB_TEST_NAME + ".sqlite")
 	if err != nil {
 		log.Fatal(err)
@@ -42,6 +40,11 @@ type User struct {
 	UpdatedAt time.Time `korm:"update"`
 }
 
+type Group struct {
+	Id   uint `korm:"pk"`
+	Name string
+}
+
 type UserNotMigrated struct {
 	Id        uint   `korm:"pk"`
 	Uuid      string `korm:"size:40;iunique"`
@@ -54,6 +57,10 @@ type UserNotMigrated struct {
 
 func TestMigrate(t *testing.T) {
 	err := AutoMigrate[User]("users")
+	if err != nil {
+		t.Error(err)
+	}
+	err = AutoMigrate[Group]("groups")
 	if err != nil {
 		t.Error(err)
 	}
@@ -71,7 +78,23 @@ func TestInsertNonMigrated(t *testing.T) {
 	}
 }
 
-func TestInsert(t *testing.T) {
+func TestManyToMany(t *testing.T) {
+	err := ManyToMany("users", "groups")
+	if err != nil {
+		t.Error(err)
+	}
+	found := false
+	for _, t := range GetAllTables() {
+		if t == "m2m_users_groups" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("m2m_users_groups has not been created:", GetAllTables())
+	}
+}
+
+func TestInsertUsersAndGroups(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		iString := strconv.Itoa(i)
 		_, err := Model[User]().Insert(&User{
@@ -83,6 +106,102 @@ func TestInsert(t *testing.T) {
 		})
 		if err != nil {
 			t.Log(err)
+		}
+	}
+	_, err := Model[Group]().Insert(&Group{
+		Name: "admin",
+	})
+	if err != nil {
+		t.Log(err)
+	}
+	_, err = Model[Group]().Insert(&Group{
+		Name: "normal",
+	})
+	if err != nil {
+		t.Log(err)
+	}
+}
+
+func TestAddRelatedS(t *testing.T) {
+	_, err := Model[Group]().Where("name = ?", "admin").AddRelated("users", "id = ?", 1)
+	if err != nil {
+		t.Error(err)
+	}
+	_, err = Model[Group]().Where("name = ?", "admin").AddRelated("users", "id = ?", 2)
+	if err != nil {
+		t.Error(err)
+	}
+}
+
+func TestAddRelatedM(t *testing.T) {
+	_, err := Table("users").Where("id = ?", 3).AddRelated("groups", "name = ?", "admin")
+	if err != nil {
+		t.Error(err)
+	}
+	_, err = Table("users").Where("id = ?", 4).AddRelated("groups", "name = ?", "admin")
+	if err != nil {
+		t.Error(err)
+	}
+}
+
+func TestDeleteRelatedS(t *testing.T) {
+	_, err := Model[Group]().Where("name = ?", "admin").DeleteRelated("users", "id = ?", 1)
+	if err != nil {
+		t.Error(err)
+	}
+}
+
+func TestDeleteRelatedM(t *testing.T) {
+	_, err := Table("groups").Where("name = ?", "admin").DeleteRelated("users", "id = ?", 2)
+	if err != nil {
+		t.Error(err)
+	}
+}
+
+func TestGetRelatedM(t *testing.T) {
+	users := []map[string]any{}
+	err := Table("groups").Where("name", "admin").GetRelated("users", &users)
+	if err != nil {
+		t.Error(err)
+	}
+	if len(users) != 2 {
+		t.Error("len(users) != 2 , got: ", users)
+	}
+}
+
+func TestGetRelatedS(t *testing.T) {
+	users := []User{}
+	err := Model[Group]().Where("name = ?", "admin").GetRelated("users", &users)
+	if err != nil {
+		t.Error(err)
+	}
+	if len(users) != 2 {
+		t.Error("len(users) != 2 , got: ", users)
+	}
+}
+
+func TestJoinRelatedM(t *testing.T) {
+	users := []map[string]any{}
+	err := Table("groups").Where("name = ?", "admin").JoinRelated("users", &users)
+	if err != nil {
+		t.Error(err)
+	}
+	if len(users) != 2 {
+		t.Error("len(users) != 2 , got: ", users)
+	}
+}
+
+func TestInsertForeignKeyShouldError(t *testing.T) {
+	for i := 0; i < 10; i++ {
+		_, err := Model[User]().Insert(&User{
+			Uuid:      GenerateUUID(),
+			Email:     "user-0@example.com",
+			Password:  "dqdqd",
+			IsAdmin:   true,
+			CreatedAt: time.Now(),
+		})
+		if err == nil {
+			t.Error("should error,did not")
 		}
 	}
 }
@@ -120,6 +239,36 @@ func TestGetAllM(t *testing.T) {
 	}
 	if len(u) != 20 {
 		t.Error("len not 20")
+	}
+}
+
+func TestQuery(t *testing.T) {
+	u, err := Query(DB_TEST_NAME, "select * from users")
+	if err != nil {
+		t.Error(err)
+	}
+	if len(u) != 20 {
+		t.Error("len not 20")
+	}
+}
+
+func TestMemoryDatabases(t *testing.T) {
+	dbs := GetMemoryDatabases()
+	if len(dbs) != 1 {
+		t.Error("len(dbs) != 1")
+	}
+	if dbs[0].Name != DB_TEST_NAME {
+		t.Error("dbs[0].Name != DB_TEST_NAME:", dbs[0].Name)
+	}
+}
+
+func TestMemoryDatabase(t *testing.T) {
+	db, err := GetMemoryDatabase(DB_TEST_NAME)
+	if err != nil {
+		t.Error(err)
+	}
+	if db.Name != DB_TEST_NAME {
+		t.Error("db.Name != DB_TEST_NAME:", db.Name)
 	}
 }
 
@@ -223,7 +372,7 @@ func TestWithCtxM(t *testing.T) {
 	}
 }
 
-func TestQuery(t *testing.T) {
+func TestQueryS(t *testing.T) {
 	u, err := Model[User]().Query("select * from users").All()
 	if err != nil {
 		t.Error(err)
@@ -368,16 +517,20 @@ func TestDeleteM(t *testing.T) {
 }
 
 func TestDrop(t *testing.T) {
-	n, err := Model[User]().Drop()
+	_, err := Model[User]().Drop()
 	if err != nil {
 		t.Error(err)
-	}
-	if n <= 0 {
-		t.Error("nothing droped, it should")
 	}
 	for _, table := range GetAllTables() {
 		if table == "users" {
 			t.Error("users table not dropped", GetAllTables())
 		}
+	}
+}
+
+func TestShutdown(t *testing.T) {
+	err := Shutdown(DB_TEST_NAME)
+	if err != nil {
+		t.Error(err)
 	}
 }
