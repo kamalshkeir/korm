@@ -12,23 +12,23 @@ import (
 var DB_TEST_NAME = "test"
 
 func TestMain(m *testing.M) {
-	//pgdriver.Use()
+	//sqlitedriver.Use()
 	DisableCheck()
-	err := New(POSTGRES, DB_TEST_NAME, "user:strongPass@localhost:5432")
+	err := New(SQLITE, DB_TEST_NAME)
 	if err != nil {
 		log.Fatal(err)
 	}
 	// run tests
 	exitCode := m.Run()
 	// Cleanup for sqlite , remove file db
-	// err = os.Remove(DB_TEST_NAME + ".sqlite")
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
+	err = os.Remove(DB_TEST_NAME + ".sqlite")
+	if err != nil {
+		log.Fatal(err)
+	}
 	os.Exit(exitCode)
 }
 
-type User struct {
+type TestUser struct {
 	Id        uint   `korm:"pk"`
 	Uuid      string `korm:"size:40;iunique"`
 	Email     string `korm:"size:100;iunique"`
@@ -54,7 +54,7 @@ type UserNotMigrated struct {
 }
 
 func TestMigrate(t *testing.T) {
-	err := AutoMigrate[User]("users")
+	err := AutoMigrate[TestUser]("users")
 	if err != nil {
 		t.Error(err)
 	}
@@ -102,7 +102,7 @@ func TestManyToMany(t *testing.T) {
 func TestInsertUsersAndGroups(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		iString := strconv.Itoa(i)
-		_, err := Model[User]().Insert(&User{
+		_, err := Model[TestUser]().Insert(&TestUser{
 			Uuid:      GenerateUUID(),
 			Email:     "user-" + iString + "@example.com",
 			Password:  "dqdqd",
@@ -177,7 +177,7 @@ func TestGetRelatedM(t *testing.T) {
 }
 
 func TestGetRelatedS(t *testing.T) {
-	users := []User{}
+	users := []TestUser{}
 	err := Model[Group]().Where("name = ?", "admin").GetRelated("users", &users)
 	if err != nil {
 		t.Error(err)
@@ -200,7 +200,7 @@ func TestJoinRelatedM(t *testing.T) {
 
 func TestInsertForeignKeyShouldError(t *testing.T) {
 	for i := 0; i < 10; i++ {
-		_, err := Model[User]().Insert(&User{
+		_, err := Model[TestUser]().Insert(&TestUser{
 			Uuid:      GenerateUUID(),
 			Email:     "user-0@example.com",
 			Password:  "dqdqd",
@@ -230,7 +230,7 @@ func TestInsertM(t *testing.T) {
 }
 
 func TestGetAll(t *testing.T) {
-	u, err := Model[User]().All()
+	u, err := Model[TestUser]().All()
 	if err != nil {
 		t.Error(err)
 	}
@@ -280,7 +280,7 @@ func TestMemoryDatabase(t *testing.T) {
 }
 
 func TestGetOne(t *testing.T) {
-	u, err := Model[User]().Where("id = ?", 1).One()
+	u, err := Model[TestUser]().Where("id = ?", 1).One()
 	if err != nil {
 		t.Error(err)
 	}
@@ -300,7 +300,7 @@ func TestGetOneM(t *testing.T) {
 }
 
 func TestGetOneWithDebug(t *testing.T) {
-	u, err := Model[User]().Debug().Where("id = ?", 1).One()
+	u, err := Model[TestUser]().Debug().Where("id = ?", 1).One()
 	if err != nil {
 		t.Error(err)
 	}
@@ -320,7 +320,7 @@ func TestGetOneWithDebugM(t *testing.T) {
 }
 
 func TestOrderBy(t *testing.T) {
-	u, err := Model[User]().Where("is_admin = ?", true).OrderBy("-id").All()
+	u, err := Model[TestUser]().Where("is_admin = ?", true).OrderBy("-id").All()
 	if err != nil {
 		t.Error(err)
 	}
@@ -340,7 +340,7 @@ func TestOrderByM(t *testing.T) {
 }
 
 func TestPagination(t *testing.T) {
-	u, err := Model[User]().Where("is_admin = ?", true).Limit(5).Page(2).All()
+	u, err := Model[TestUser]().Where("is_admin = ?", true).Limit(5).Page(2).All()
 	if err != nil {
 		t.Error(err)
 	}
@@ -360,7 +360,7 @@ func TestPaginationM(t *testing.T) {
 }
 
 func TestWithCtx(t *testing.T) {
-	u, err := Model[User]().Where("is_admin = ?", true).Context(context.Background()).All()
+	u, err := Model[TestUser]().Where("is_admin = ?", true).Context(context.Background()).All()
 	if err != nil {
 		t.Error(err)
 	}
@@ -380,7 +380,7 @@ func TestWithCtxM(t *testing.T) {
 }
 
 func TestQueryS(t *testing.T) {
-	u, err := Model[User]().Query("select * from users").All()
+	u, err := Model[TestUser]().Query("select * from users").All()
 	if err != nil {
 		t.Error(err)
 	}
@@ -400,7 +400,7 @@ func TestQueryM(t *testing.T) {
 }
 
 func TestSelect(t *testing.T) {
-	u, err := Model[User]().Select("email").All()
+	u, err := Model[TestUser]().Select("email").All()
 	if err != nil {
 		t.Error(err)
 	}
@@ -420,7 +420,7 @@ func TestSelectM(t *testing.T) {
 }
 
 func TestBuilderStruct(t *testing.T) {
-	u, err := BuilderStruct[User]().All()
+	u, err := BuilderStruct[TestUser]().All()
 	if err != nil {
 		t.Error(err)
 	}
@@ -440,7 +440,7 @@ func TestBuilderMap(t *testing.T) {
 }
 
 func TestDatabase(t *testing.T) {
-	u, err := Model[User]().Database(DB_TEST_NAME).All()
+	u, err := Model[TestUser]().Database(DB_TEST_NAME).All()
 	if err != nil {
 		t.Error(err)
 	}
@@ -461,14 +461,14 @@ func TestDatabaseM(t *testing.T) {
 
 func TestUpdateSet(t *testing.T) {
 	updatedEmail := "updated@example.com"
-	n, err := Model[User]().Where("id = ?", 3).Set("email = ?", updatedEmail)
+	n, err := Model[TestUser]().Where("id = ?", 3).Set("email = ?", updatedEmail)
 	if err != nil {
 		t.Error(err)
 	}
 	if n <= 0 {
 		t.Error("nothing updated, it should")
 	}
-	u, err := Model[User]().Where("id = ?", 3).One()
+	u, err := Model[TestUser]().Where("id = ?", 3).One()
 	if err != nil {
 		t.Error(err)
 	}
@@ -486,7 +486,7 @@ func TestUpdateSetM(t *testing.T) {
 	if n <= 0 {
 		t.Error("nothing updated, it should")
 	}
-	u, err := Model[User]().Where("id = ?", 7).One()
+	u, err := Model[TestUser]().Where("id = ?", 7).One()
 	if err != nil {
 		t.Error(err)
 	}
@@ -496,14 +496,14 @@ func TestUpdateSetM(t *testing.T) {
 }
 
 func TestDelete(t *testing.T) {
-	n, err := Model[User]().Where("id = ?", 12).Delete()
+	n, err := Model[TestUser]().Where("id = ?", 12).Delete()
 	if err != nil {
 		t.Error(err)
 	}
 	if n < 0 {
 		t.Error("nothing deleted, it should", n)
 	}
-	_, err = Model[User]().Where("id = ?", 12).One()
+	_, err = Model[TestUser]().Where("id = ?", 12).One()
 	if err == nil {
 		t.Error("not errored, it should")
 	}
@@ -536,7 +536,7 @@ func TestDropM(t *testing.T) {
 }
 
 func TestDropS(t *testing.T) {
-	_, err := Model[User]().Drop()
+	_, err := Model[TestUser]().Drop()
 	if err != nil {
 		t.Error(err)
 	}

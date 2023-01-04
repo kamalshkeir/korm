@@ -2,6 +2,7 @@ package korm
 
 import (
 	"database/sql"
+	"embed"
 	"errors"
 	"fmt"
 	"net/http"
@@ -24,7 +25,7 @@ var (
 	// defaultDB keep tracking of the first database connected
 	defaultDB       = ""
 	useCache        = true
-	databases       = []databaseEntity{}
+	databases       = []DatabaseEntity{}
 	mModelTablename = map[any]string{}
 	cachesOneM      = kmap.New[dbCache, map[string]any](false)
 	cacheAllM       = kmap.New[dbCache, []map[string]any](false)
@@ -33,6 +34,7 @@ var (
 	relationsMap    = kmap.New[string, struct{}](false)
 
 	onceDone       = false
+	serverBus      *ksbus.Server
 	cachebus       *ksbus.Bus
 	switchBusMutex sync.Mutex
 	MaxOpenConns   = 10
@@ -53,7 +55,7 @@ const (
 	COCKROACH        Dialect = "cockroach"
 )
 
-type tableEntity struct {
+type TableEntity struct {
 	Types      map[string]string
 	ModelTypes map[string]string
 	Tags       map[string][]string
@@ -62,8 +64,8 @@ type tableEntity struct {
 	Name       string
 }
 
-type databaseEntity struct {
-	Tables  []tableEntity
+type DatabaseEntity struct {
+	Tables  []TableEntity
 	Name    string
 	Dialect string
 	Conn    *sql.DB
@@ -162,11 +164,11 @@ func New(dbType Dialect, dbName string, dbDSN ...string) error {
 	conn.SetConnMaxIdleTime(MaxIdleTime)
 
 	if !dbFound {
-		databases = append(databases, databaseEntity{
+		databases = append(databases, DatabaseEntity{
 			Name:    dbName,
 			Conn:    conn,
 			Dialect: dbType,
-			Tables:  []tableEntity{},
+			Tables:  []TableEntity{},
 		})
 	}
 	if !onceDone {
@@ -256,7 +258,7 @@ func ManyToMany(table1, table2 string, dbName ...string) error {
 	if err != nil {
 		return err
 	}
-	dben.Tables = append(dben.Tables, tableEntity{
+	dben.Tables = append(dben.Tables, TableEntity{
 		Types: map[string]string{
 			"id":           "uint",
 			table1 + "_id": "uint",
@@ -335,11 +337,11 @@ func NewFromConnection(dbType, dbName string, conn *sql.DB) error {
 	conn.SetConnMaxLifetime(MaxLifetime)
 	conn.SetConnMaxIdleTime(MaxIdleTime)
 	if !dbFound {
-		databases = append(databases, databaseEntity{
+		databases = append(databases, DatabaseEntity{
 			Name:    dbName,
 			Conn:    conn,
 			Dialect: dbType,
-			Tables:  []tableEntity{},
+			Tables:  []TableEntity{},
 		})
 	}
 	if !onceDone {
@@ -365,6 +367,7 @@ func NewFromConnection(dbType, dbName string, conn *sql.DB) error {
 // WithBus take ksbus.NewServer() that can be Run, RunTLS, RunAutoTLS
 func WithBus(bus *ksbus.Server) *ksbus.Server {
 	switchBusMutex.Lock()
+	serverBus = bus
 	cachebus = bus.Bus
 	switchBusMutex.Unlock()
 	if useCache {
@@ -376,6 +379,18 @@ func WithBus(bus *ksbus.Server) *ksbus.Server {
 		})
 	}
 	return bus
+}
+
+func WithDashboard(staticAndTemplatesEmbeded ...embed.FS) *ksbus.Server {
+	if serverBus == nil {
+		switchBusMutex.Lock()
+		serverBus = ksbus.NewServer()
+		cachebus = serverBus.Bus
+		switchBusMutex.Unlock()
+	}
+	cloneAndMigrateDashboard(staticAndTemplatesEmbeded...)
+	initAdminUrlPatterns(serverBus.App, staticAndTemplatesEmbeded...)
+	return serverBus
 }
 
 // BeforeServersData handle connections and data received from another server
@@ -406,7 +421,7 @@ func DisableCache() {
 }
 
 func GetConnection(dbName ...string) (conn *sql.DB, ok bool) {
-	var db *databaseEntity
+	var db *DatabaseEntity
 	var err error
 	if len(dbName) > 0 {
 		db, err = GetMemoryDatabase(dbName[0])
@@ -573,30 +588,30 @@ func GetAllColumnsTypes(table string, dbName ...string) map[string]string {
 }
 
 // GetMemoryTable get a table from memory for specified or first connected db
-func GetMemoryTable(tbName string, dbName ...string) (tableEntity, error) {
+func GetMemoryTable(tbName string, dbName ...string) (TableEntity, error) {
 	dName := databases[0].Name
 	if len(dbName) > 0 {
 		dName = dbName[0]
 	}
 	db, err := GetMemoryDatabase(dName)
 	if err != nil {
-		return tableEntity{}, err
+		return TableEntity{}, err
 	}
 	for _, t := range db.Tables {
 		if t.Name == tbName {
 			return t, nil
 		}
 	}
-	return tableEntity{}, errors.New("nothing found")
+	return TableEntity{}, errors.New("nothing found")
 }
 
 // GetMemoryDatabases get all databases from memory
-func GetMemoryDatabases() []databaseEntity {
+func GetMemoryDatabases() []DatabaseEntity {
 	return databases
 }
 
 // GetMemoryDatabase return the first connected database korm.DefaultDatabase if dbName "" or "default" else the matched db
-func GetMemoryDatabase(dbName string) (*databaseEntity, error) {
+func GetMemoryDatabase(dbName string) (*DatabaseEntity, error) {
 	if defaultDB == "" {
 		defaultDB = databases[0].Name
 	}
@@ -691,7 +706,7 @@ func AddTrigger(onTable, col, bf_af_UpdateInsertDelete string, ofColumn, stmt st
 	for _, s := range stat {
 		err := Exec(dbName[0], s)
 		if err != nil {
-			if !StringContains(err.Error(), "Trigger does not exist") {
+			if !strings.Contains(err.Error(), "Trigger does not exist") {
 				klog.Printf("rdcould not add trigger %v\n", err)
 				return
 			}
@@ -710,7 +725,7 @@ func DropTrigger(onField, tableName string, dbName ...string) {
 	}
 	err := Exec(n, stat)
 	if err != nil {
-		if !StringContains(err.Error(), "Trigger does not exist") {
+		if !strings.Contains(err.Error(), "Trigger does not exist") {
 			return
 		}
 		klog.Printf("rderr:%v\n", err)

@@ -24,14 +24,15 @@
 
 ---
 ## KORM is an Elegant and [Blazingly Fast](#benchmarks) ORM using generics and network bus. It can handle sql databases and Mongo using [Kormongo](https://github.com/kamalshkeir/kormongo), both have pretty much the same api, everything detailed in this readme
+#### All drivers are written in Go, so you will never encounter gcc or c missing compiler
 
-## It is Composable, you can combine it with a Server Bus (using WithBus) when you want to scale and synchronise your data between multiple KORM.
-## You have full control on the data came in and go out, you can check the example below [NetworkBus](https://github.com/kamalshkeir/ksbus)
-
+## It is easily composable, you can combine it with a Server Bus (using WithBus) when you want to scale or just synchronise your data between multiple database.
+## You have full control on the data came in and go out, you can check the example below [NetworkBus](#example-with-bus-between-2-korm)
 
 #### It come with :
+- New: [Admin dashboard](#example-with-dashboard)
 - New: handle [many to many](#manytomany-relationships-example) relationships 
-- [Interactive Shell](#interactive-shell), to CRUD in your databases `go run main.go dbshell` or `go run main.go mongoshell` for mongo
+- [Interactive Shell](#interactive-shell), to CRUD in your databases `go run main.go shell` or `go run main.go mongoshell` for mongo
 - Network Bus allowing you to send and recv data in realtime using pubsub websockets between your ORMs, so you can decide how you data will be distributed between different databases, see [Example](#example-with-bus-between-2-korm) .
 - [AutoMigrate](#automigrate) directly from struct, for mongo it will only link the struct to the tableName, allowing usage of BuilderS. For all sql, whenever you add or remove a field from a migrated struct, you will get a prompt proposing to add the column for the table in the database or remove a column, you can also only generate the query without execute, and then you can use the shell to migrate the generated file
 - It use std library database/sql, and the Mongo official driver, so if you want, know that you can always do your queries yourself using sql.DB or mongo.Client , but i doubt you will need to, after seeing these [benchmarks](#benchmarks) . `korm.GetConnection(dbName)` or `kormongo.GetConnection(dbName)`
@@ -294,6 +295,41 @@ korm.Model[models.User]().Drop()
 // update
 korm.Model[models.User]().Where("id = ?",1).Set("email = ?","new@example.com")
 ```
+
+### Example With Dashboard
+
+```go
+package main
+
+import (
+	"github.com/kamalshkeir/klog"
+	"github.com/kamalshkeir/kmux"
+	"github.com/kamalshkeir/korm"
+	"github.com/kamalshkeir/sqlitedriver"
+)
+
+func main() {
+	sqlitedriver.Use()
+	err := korm.New(korm.SQLITE, "db")
+	klog.CheckError(err)
+
+	sbus := korm.WithDashboard()
+
+	sbus.App.GET("/", func(c *kmux.Context) {
+		c.Text("Index")
+	})
+
+	sbus.Run("localhost:9313")
+}
+```
+Then create admin user to connect to the dashboard
+```sh
+go run main.go shell
+
+createsuperuser
+```
+
+Then you can visit `/admin`
 
 ### Example With Bus between 2 KORM
 KORM 1:

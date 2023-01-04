@@ -33,7 +33,7 @@ type dbCache struct {
 }
 
 // linkModel link a struct model to a  db_table_name
-func linkModel[T comparable](to_table_name string, db *databaseEntity) {
+func linkModel[T comparable](to_table_name string, db *DatabaseEntity) {
 	if db.Name == "" {
 		var err error
 		db.Name = databases[0].Name
@@ -95,7 +95,7 @@ func linkModel[T comparable](to_table_name string, db *databaseEntity) {
 	}
 
 	if !tFound {
-		db.Tables = append(db.Tables, tableEntity{
+		db.Tables = append(db.Tables, TableEntity{
 			Name:       to_table_name,
 			Columns:    fields,
 			ModelTypes: ftypes,
@@ -107,7 +107,7 @@ func linkModel[T comparable](to_table_name string, db *databaseEntity) {
 }
 
 // handleAddOrRemove handle sync with db when adding or removing from a struct auto migrated
-func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []string, db *databaseEntity, ftypes map[string]string, ftags map[string][]string, pk string) {
+func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []string, db *DatabaseEntity, ftypes map[string]string, ftags map[string][]string, pk string) {
 	if len(cols) > len(fields) { // extra column db
 		for _, d := range diff {
 			fileName := "drop_" + to_table_name + "_" + d + ".sql"
@@ -854,7 +854,7 @@ func handleIndexes(to_table_name, colName string, indexes []string, mi *migratio
 }
 
 // handleRename handle sync with db when renaming fields struct
-func handleRename(to_table_name string, fields, cols, diff []string, db *databaseEntity, ftags map[string][]string, pk string) {
+func handleRename(to_table_name string, fields, cols, diff []string, db *DatabaseEntity, ftags map[string][]string, pk string) {
 	// rename field
 	old := []string{}
 	new := []string{}
@@ -1150,6 +1150,7 @@ func GenerateUUID() string {
 	encodeHex(buf[:], uuid)
 	return string(buf[:])
 }
+
 func encodeHex(dst []byte, uuid [16]byte) {
 	hex.Encode(dst, uuid[:4])
 	dst[8] = '-'
@@ -1225,13 +1226,4 @@ func sliceRemove[T comparable](slice *[]T, elemsToRemove ...T) {
 			}
 		}
 	}
-}
-
-func StringContains(s string, subs ...string) bool {
-	for _, sub := range subs {
-		if strings.Contains(s, sub) {
-			return true
-		}
-	}
-	return false
 }

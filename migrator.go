@@ -39,7 +39,7 @@ func checkUpdatedAtTrigger(dialect, tableName, col string) map[string][]string {
 	return triggers
 }
 
-func autoMigrate[T comparable](db *databaseEntity, tableName string, execute bool) (string, error) {
+func autoMigrate[T comparable](db *DatabaseEntity, tableName string, execute bool) (string, error) {
 	toReturnstats := []string{}
 	dialect := db.Dialect
 	s := reflect.ValueOf(new(T)).Elem()
@@ -58,6 +58,7 @@ func autoMigrate[T comparable](db *databaseEntity, tableName string, execute boo
 		if ftag, ok := typeOfT.Field(i).Tag.Lookup("korm"); ok {
 			tags := strings.Split(ftag, ";")
 			for i, tag := range tags {
+				tag := strings.TrimSpace(tag)
 				if tag == "autoinc" || tag == "pk" {
 					pk = fname
 				} else if fname == "id" {
@@ -159,7 +160,7 @@ func autoMigrate[T comparable](db *databaseEntity, tableName string, execute boo
 	}
 
 	if !tbFound {
-		db.Tables = append(db.Tables, tableEntity{
+		db.Tables = append(db.Tables, TableEntity{
 			Name:       tableName,
 			Columns:    cols,
 			Tags:       mFieldName_Tags,
@@ -289,7 +290,7 @@ func AutoMigrate[T comparable](tableName string, dbName ...string) error {
 	if _, ok := mModelTablename[*new(T)]; !ok {
 		mModelTablename[*new(T)] = tableName
 	}
-	var db *databaseEntity
+	var db *DatabaseEntity
 	var err error
 	dbname := ""
 	if len(dbName) == 1 {

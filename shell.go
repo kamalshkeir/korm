@@ -9,7 +9,9 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/kamalshkeir/argon"
 	"github.com/kamalshkeir/kinput"
 	"github.com/kamalshkeir/klog"
 )
@@ -41,6 +43,12 @@ const helpS string = `Commands :
   'migrate':
 	  migrate or execute sql file
 
+  'createsuperuser':
+	  create a admin user
+  
+  'createuser':
+	  create a regular user
+
   'getall':
 	  get all rows given a table name
 
@@ -57,7 +65,7 @@ const helpS string = `Commands :
 	  clear console
 `
 
-const commandsS string = "Commands :  [databases, use, tables, columns, migrate, getall, get, drop, delete, clear/cls, q!/quit/exit, help/commands]"
+const commandsS string = "Commands :  [databases, use, tables, columns, migrate, getall, get, drop, delete, createsuperuser, createuser, clear/cls, q!/quit/exit, help/commands]"
 
 // InitShell init the shell and return true if used to stop main
 func InitShell() bool {
@@ -75,7 +83,7 @@ func InitShell() bool {
 		fmt.Printf(yellow, "Shell Usage: go run main.go dbshell")
 		fmt.Printf(yellow, helpS)
 		return true
-	case "dbshell":
+	case "shell":
 		databases := GetMemoryDatabases()
 		var conn *sql.DB
 		if len(databases) > 1 {
@@ -146,12 +154,42 @@ func InitShell() bool {
 				dropTable()
 			case "delete":
 				deleteRow()
+			case "createuser":
+				createuser()
+			case "createsuperuser":
+				createsuperuser()
 			default:
 				fmt.Printf(red, "command not handled, use 'help' or 'commands' to list available commands ")
 			}
 		}
 	default:
 		return false
+	}
+}
+
+func createuser() {
+	email := kinput.Input(kinput.Blue, "Email : ")
+	password := kinput.Hidden(kinput.Blue, "Password : ")
+	if email != "" && password != "" {
+		err := newuser(email, password, false)
+		if err == nil {
+			fmt.Printf(green, "User "+email+" created successfully")
+		} else {
+			fmt.Printf(red, "unable to create user:"+err.Error())
+		}
+	} else {
+		fmt.Printf(red, "email or password invalid")
+	}
+}
+
+func createsuperuser() {
+	email := kinput.Input(kinput.Blue, "Email: ")
+	password := kinput.Hidden(kinput.Blue, "Password: ")
+	err := newuser(email, password, true)
+	if err == nil {
+		fmt.Printf(green, "Admin "+email+" created successfully")
+	} else {
+		fmt.Printf(red, "error creating user :"+err.Error())
 	}
 }
 
@@ -164,6 +202,29 @@ func getAll() {
 	} else {
 		fmt.Printf(red, err.Error())
 	}
+}
+
+func newuser(email, password string, admin bool) error {
+	if email == "" || password == "" {
+		return fmt.Errorf("email or password empty")
+	}
+
+	hash, err := argon.Hash(password)
+	if err != nil {
+		return err
+	}
+	_, err = Table("users").Insert(map[string]any{
+		"uuid":       GenerateUUID(),
+		"email":      email,
+		"password":   hash,
+		"is_admin":   admin,
+		"image":      "",
+		"created_at": time.Now(),
+	})
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func getRow() {
