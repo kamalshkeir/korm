@@ -6,15 +6,16 @@ import (
 )
 
 var (
-	Pprof            = false
-	PaginationPer    = 10
-	EmbededDashboard = false
-	MediaDir         = "media"
-	AssetsDir        = "assets"
-	StaticDir        = path.Join(AssetsDir, "/", "static")
-	TemplatesDir     = path.Join(AssetsDir, "/", "templates")
-	RepoUser         = "kamalshkeir"
-	RepoName         = "korm-dashboard"
+	Pprof              = false
+	PaginationPer      = 10
+	EmbededDashboard   = false
+	MediaDir           = "media"
+	AssetsDir          = "assets"
+	StaticDir          = path.Join(AssetsDir, "/", "static")
+	TemplatesDir       = path.Join(AssetsDir, "/", "templates")
+	RepoUser           = "kamalshkeir"
+	RepoName           = "korm-dashboard"
+	AdminPathNameGroup = "/admin"
 )
 
 type User struct {

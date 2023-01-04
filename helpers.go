@@ -1069,7 +1069,7 @@ func adaptWhereQuery(query *string, tableName ...string) {
 		var b strings.Builder
 		fieldStart := -1
 		for i, c := range q {
-			if c == ',' || c == ' ' || c == '|' {
+			if c == ',' || c == '|' {
 				if fieldStart >= 0 {
 					if tbName != "" {
 						b.WriteString(tbName)

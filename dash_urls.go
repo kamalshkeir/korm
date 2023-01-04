@@ -26,7 +26,7 @@ func init() {
 }
 
 func initAdminUrlPatterns(r *kmux.Router, StaticAndTemplatesEmbeded ...embed.FS) {
-	if EmbededDashboard {
+	if EmbededDashboard && len(StaticAndTemplatesEmbeded) > 0 {
 		r.EmbededStatics(StaticDir, StaticAndTemplatesEmbeded[0], "static")
 	} else {
 		r.LocalStatics(StaticDir, "static")
@@ -40,7 +40,7 @@ func initAdminUrlPatterns(r *kmux.Router, StaticAndTemplatesEmbeded ...embed.FS)
 	r.GET("/manifest.webmanifest", ManifestView)
 	r.GET("/sw.js", ServiceWorkerView)
 	r.GET("/robots.txt", RobotsTxtView)
-	adminGroup := r.Group("/admin")
+	adminGroup := r.Group(AdminPathNameGroup)
 	adminGroup.GET("", Admin(IndexView))
 	adminGroup.GET("/login", Auth(LoginView))
 	adminGroup.POST("/login", Auth(LoginPOSTView))
