@@ -14,7 +14,7 @@ var (
 	StaticDir        = path.Join(AssetsDir, "/", "static")
 	TemplatesDir     = path.Join(AssetsDir, "/", "templates")
 	RepoUser         = "kamalshkeir"
-	RepoName         = "kago-assets"
+	RepoName         = "korm-dashboard"
 )
 
 type User struct {

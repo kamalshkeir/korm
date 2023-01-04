@@ -206,22 +206,16 @@ func autoMigrate[T comparable](db *DatabaseEntity, tableName string, execute boo
 		}
 		statIndexes := ""
 		if len(indexes) > 0 {
-			if len(indexes) > 1 {
-				klog.Printf("%s cannot have more than 1 index\n", mi.fName)
-			} else {
-				ff := strings.ReplaceAll(indexes[0], "DESC", "")
-				statIndexes = fmt.Sprintf("CREATE INDEX idx_%s_%s ON %s (%s)", tableName, ff, tableName, indexes[0])
+			for _, col := range indexes {
+				ff := strings.ReplaceAll(col, "DESC", "")
+				statIndexes += fmt.Sprintf("CREATE INDEX idx_%s_%s ON %s (%s);", tableName, ff, tableName, col)
 			}
 		}
 		mstatIndexes := ""
 		if len(*mi.mindexes) > 0 {
-			if len(*mi.mindexes) > 1 {
-				klog.Printf("%s cannot have more than 1 multiple indexes\n", mi.fName)
-			} else {
-				for k, v := range *mi.mindexes {
-					ff := strings.ReplaceAll(k, "DESC", "")
-					mstatIndexes = fmt.Sprintf("CREATE INDEX idx_%s_%s ON %s (%s)", tableName, ff, tableName, k+","+v)
-				}
+			for k, v := range *mi.mindexes {
+				ff := strings.ReplaceAll(k, "DESC", "")
+				mstatIndexes = fmt.Sprintf("CREATE INDEX idx_%s_%s ON %s (%s)", tableName, ff, tableName, k+","+v)
 			}
 		}
 		ustatIndexes := []string{}
@@ -235,16 +229,18 @@ func autoMigrate[T comparable](db *DatabaseEntity, tableName string, execute boo
 			res := strings.Join(sp, ",")
 			ustatIndexes = append(ustatIndexes, fmt.Sprintf("CREATE UNIQUE INDEX idx_%s_%s ON %s (%s)", tableName, col, tableName, res))
 		}
+		statIndexesExecuted := false
 		if statIndexes != "" {
 			if Debug {
 				klog.Printfs("%s\n", statIndexes)
 			}
-			if execute {
+			if execute && !statIndexesExecuted {
 				_, err := db.Conn.Exec(statIndexes)
 				if klog.CheckError(err) {
 					klog.Printfs("rdindexes: %s\n", statIndexes)
 					return "", err
 				}
+				statIndexesExecuted = true
 			}
 
 			toReturnstats = append(toReturnstats, statIndexes)
@@ -388,7 +384,7 @@ func handleMigrationInt(mi *migrationInput) {
 					klog.Printf("dialect can be sqlite, postgres or mysql only, not %s\n", mi.dialect)
 				}
 			case "notnull":
-				notnull = "NOT NULL"
+				notnull = " NOT NULL"
 			case "index", "+index", "index+":
 				*mi.indexes = append(*mi.indexes, mi.fName)
 			case "-index", "index-":

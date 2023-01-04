@@ -24,7 +24,7 @@ func cloneAndMigrateDashboard(staticAndTemplatesEmbeded ...embed.FS) {
 		if err != nil {
 			klog.Printf("rdunable to rename %s : %v \n", RepoName, err)
 		}
-		klog.Printf("grdashboard assets cloned\n")
+		klog.Printfs("grdashboard assets cloned\n")
 	}
 
 	if len(staticAndTemplatesEmbeded) > 0 {

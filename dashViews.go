@@ -156,6 +156,11 @@ var AllModelsSearch = func(c *kmux.Context) {
 			if v != "" {
 				blder.Where(v)
 			}
+		} else {
+			c.Json(map[string]any{
+				"error": "Error: No query given in body",
+			})
+			return
 		}
 	}
 
@@ -591,10 +596,6 @@ var RobotsTxtView = func(c *kmux.Context) {
 
 var OfflineView = func(c *kmux.Context) {
 	c.Text("<h1>YOUR ARE OFFLINE, check connection</h1>")
-}
-
-var LogsGetView = func(c *kmux.Context) {
-	c.Html("admin/logs.html", nil)
 }
 
 func uploadMultipartFile(file multipart.File, filename string, outPath string, acceptedFormats ...string) (string, error) {

@@ -297,7 +297,7 @@ func deleteRow() {
 		if err != nil {
 			_, err := Table(tableName).Database(usedDB).Where(whereField+" = ?", equalTo).Delete()
 			if err == nil {
-				fmt.Printf(green, tableName+"with"+whereField+"="+equalTo+"deleted.")
+				fmt.Printf(green, tableName+" with "+whereField+" = "+equalTo+" deleted.")
 			} else {
 				fmt.Printf(red, "error deleting row: "+err.Error())
 			}

@@ -1054,11 +1054,14 @@ func adaptWhereQuery(query *string, tableName ...string) {
 	}
 	*query = strings.ToLower(*query)
 	q := []rune(*query)
+	hasComparaisonSign := false
 	hasQuestionMark := false
 	for i := range q {
-		if q[i] == '?' {
+		switch q[i] {
+		case '?':
 			hasQuestionMark = true
-			break
+		case '=', '>', '<', '!':
+			hasComparaisonSign = true
 		}
 	}
 
@@ -1073,7 +1076,9 @@ func adaptWhereQuery(query *string, tableName ...string) {
 						b.WriteString(".")
 					}
 					b.WriteString(string(q[fieldStart:i]))
-					b.WriteString(" = ?")
+					if !hasComparaisonSign {
+						b.WriteString(" = ?")
+					}
 					if i < len(q)-1 {
 						if c == '|' {
 							b.WriteString(" OR ")
@@ -1093,7 +1098,9 @@ func adaptWhereQuery(query *string, tableName ...string) {
 				b.WriteString(".")
 			}
 			b.WriteString(string(q[fieldStart:]))
-			b.WriteString(" = ?")
+			if !hasComparaisonSign {
+				b.WriteString(" = ?")
+			}
 		}
 		*query = b.String()
 	} else {
