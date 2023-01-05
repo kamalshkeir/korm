@@ -15,7 +15,7 @@ import (
 
 var cacheOneS = kmap.New[dbCache, any](false)
 var cacheAllS = kmap.New[dbCache, any](false)
-var errModelNotFound = errors.New("unable to find tableName from model, restart the app if you just migrated")
+var errTableNotFound = errors.New("unable to find tableName")
 
 type Builder[T comparable] struct {
 	debug      bool
@@ -46,29 +46,12 @@ func Model[T comparable](tableName ...string) *Builder[T] {
 	}
 	return &Builder[T]{
 		tableName: tName,
-	}
-}
-
-func BuilderStruct[T comparable](tableName ...string) *Builder[T] {
-	tName := getTableName[T]()
-	if tName == "" {
-		if len(tableName) > 0 {
-			mModelTablename[*new(T)] = tableName[0]
-			tName = tableName[0]
-		} else {
-			return nil
-		}
-	}
-	return &Builder[T]{
-		tableName: tName,
+		database:  databases[0].Name,
 	}
 }
 
 func (b *Builder[T]) Database(dbName string) *Builder[T] {
 	b.database = dbName
-	if b.database == "" {
-		b.database = databases[0].Name
-	}
 	db, err := GetMemoryDatabase(b.database)
 	if err != nil {
 		b.database = databases[0].Name
@@ -80,10 +63,7 @@ func (b *Builder[T]) Database(dbName string) *Builder[T] {
 
 func (b *Builder[T]) Insert(model *T) (int, error) {
 	if b == nil || b.tableName == "" {
-		return 0, errModelNotFound
-	}
-	if b.database == "" {
-		b.database = databases[0].Name
+		return 0, errTableNotFound
 	}
 	if useCache {
 		cachebus.Publish(CACHE_TOPIC, map[string]any{
@@ -182,10 +162,7 @@ func (b *Builder[T]) Insert(model *T) (int, error) {
 
 func (b *Builder[T]) BulkInsert(models ...*T) (int, error) {
 	if b == nil || b.tableName == "" {
-		return 0, errModelNotFound
-	}
-	if b.database == "" {
-		b.database = databases[0].Name
+		return 0, errTableNotFound
 	}
 	if useCache {
 		cachebus.Publish(CACHE_TOPIC, map[string]any{
@@ -294,10 +271,7 @@ func (b *Builder[T]) BulkInsert(models ...*T) (int, error) {
 
 func (b *Builder[T]) AddRelated(relatedTable string, whereRelatedTable string, whereRelatedArgs ...any) (int, error) {
 	if b == nil || b.tableName == "" {
-		return 0, errModelNotFound
-	}
-	if b.database == "" {
-		b.database = databases[0].Name
+		return 0, errTableNotFound
 	}
 	if useCache {
 		cachebus.Publish(CACHE_TOPIC, map[string]any{
@@ -384,10 +358,7 @@ func (b *Builder[T]) AddRelated(relatedTable string, whereRelatedTable string, w
 
 func (b *Builder[T]) DeleteRelated(relatedTable string, whereRelatedTable string, whereRelatedArgs ...any) (int, error) {
 	if b == nil || b.tableName == "" {
-		return 0, errModelNotFound
-	}
-	if b.database == "" {
-		b.database = databases[0].Name
+		return 0, errTableNotFound
 	}
 	if useCache {
 		cachebus.Publish(CACHE_TOPIC, map[string]any{
@@ -458,12 +429,8 @@ func (b *Builder[T]) DeleteRelated(relatedTable string, whereRelatedTable string
 
 func (b *Builder[T]) GetRelated(relatedTable string, dest any) error {
 	if b == nil || b.tableName == "" {
-		return errModelNotFound
+		return errTableNotFound
 	}
-	if b.database == "" {
-		b.database = databases[0].Name
-	}
-
 	relationTableName := "m2m_" + b.tableName + "-" + b.database + "-" + relatedTable
 	if _, ok := relationsMap.Get("m2m_" + b.tableName + "-" + b.database + "-" + relatedTable); !ok {
 		relationTableName = "m2m_" + relatedTable + "-" + b.database + "-" + b.tableName
@@ -527,12 +494,8 @@ func (b *Builder[T]) GetRelated(relatedTable string, dest any) error {
 
 func (b *Builder[T]) JoinRelated(relatedTable string, dest any) error {
 	if b == nil || b.tableName == "" {
-		return errModelNotFound
+		return errTableNotFound
 	}
-	if b.database == "" {
-		b.database = databases[0].Name
-	}
-
 	relationTableName := "m2m_" + b.tableName + "-" + b.database + "-" + relatedTable
 	if _, ok := relationsMap.Get("m2m_" + b.tableName + "-" + b.database + "-" + relatedTable); !ok {
 		relationTableName = "m2m_" + relatedTable + "-" + b.database + "-" + b.tableName
@@ -597,13 +560,10 @@ func (b *Builder[T]) JoinRelated(relatedTable string, dest any) error {
 	return nil
 }
 
-// Set usage: Set("email,is_admin","example@mail.com",true) or Set("email = ? AND is_admin = ?","example@mail.com",true) or Set("email = ?, is_admin = ?","example@mail.com",true)
+// Set usage: Set("email,is_admin","example@mail.com",true) or Set("email = ? AND is_admin = ?","example@mail.com",true)
 func (b *Builder[T]) Set(query string, args ...any) (int, error) {
 	if b == nil || b.tableName == "" {
-		return 0, errModelNotFound
-	}
-	if b.database == "" {
-		b.database = databases[0].Name
+		return 0, errTableNotFound
 	}
 	if useCache {
 		cachebus.Publish(CACHE_TOPIC, map[string]any{
@@ -651,10 +611,7 @@ func (b *Builder[T]) Set(query string, args ...any) (int, error) {
 
 func (b *Builder[T]) Delete() (int, error) {
 	if b == nil || b.tableName == "" {
-		return 0, errModelNotFound
-	}
-	if b.database == "" {
-		b.database = databases[0].Name
+		return 0, errTableNotFound
 	}
 	if useCache {
 		cachebus.Publish(CACHE_TOPIC, map[string]any{
@@ -697,10 +654,7 @@ func (b *Builder[T]) Delete() (int, error) {
 
 func (b *Builder[T]) Drop() (int, error) {
 	if b == nil || b.tableName == "" {
-		return 0, errModelNotFound
-	}
-	if b.database == "" {
-		b.database = databases[0].Name
+		return 0, errTableNotFound
 	}
 	if useCache {
 		cachebus.Publish(CACHE_TOPIC, map[string]any{
@@ -813,10 +767,7 @@ func (b *Builder[T]) Debug() *Builder[T] {
 
 func (b *Builder[T]) All() ([]T, error) {
 	if b == nil || b.tableName == "" {
-		return nil, errModelNotFound
-	}
-	if b.database == "" {
-		b.database = databases[0].Name
+		return nil, errTableNotFound
 	}
 	c := dbCache{
 		database:   b.database,
@@ -829,7 +780,7 @@ func (b *Builder[T]) All() ([]T, error) {
 		offset:     b.offset,
 		limit:      b.limit,
 		page:       b.page,
-		args:       fmt.Sprintf("%v", b.args...),
+		args:       fmt.Sprint(b.args...),
 	}
 	if useCache {
 		if v, ok := cacheAllS.Get(c); ok {
@@ -881,10 +832,7 @@ func (b *Builder[T]) All() ([]T, error) {
 
 func (b *Builder[T]) One() (T, error) {
 	if b == nil || b.tableName == "" {
-		return *new(T), errModelNotFound
-	}
-	if b.database == "" {
-		b.database = databases[0].Name
+		return *new(T), errTableNotFound
 	}
 	c := dbCache{
 		database:   b.database,
@@ -897,7 +845,7 @@ func (b *Builder[T]) One() (T, error) {
 		offset:     b.offset,
 		limit:      b.limit,
 		page:       b.page,
-		args:       fmt.Sprintf("%v", b.args...),
+		args:       fmt.Sprint(b.args...),
 	}
 	if useCache {
 		if v, ok := cacheOneS.Get(c); ok {
@@ -950,10 +898,7 @@ func (b *Builder[T]) One() (T, error) {
 
 func (b *Builder[T]) queryS(query string, args ...any) ([]T, error) {
 	if b == nil || b.tableName == "" {
-		return nil, errModelNotFound
-	}
-	if b.database == "" {
-		b.database = databases[0].Name
+		return nil, errTableNotFound
 	}
 	db, err := GetMemoryDatabase(b.database)
 	if klog.CheckError(err) {

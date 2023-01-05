@@ -1,7 +1,8 @@
 <div align="center">
-	<h1 style="font-size:clamp(50px,15vw,100px);padding-bottom:0;">KORM</h1>
-	<h3 style="color:#dddd00;font-size:clamp(20px,4vw,40px);">
-	<a href="#benchmarks" style="text-decoration:none;color:#dddd00">The Blazingly Fast ORM</a></h3>
+	<img src="./korm.png" width="auto" style="margin:0 auto 0 auto;"/>
+</div>
+<br>
+<div align="center">
 	<img src="https://img.shields.io/github/go-mod/go-version/kamalshkeir/korm" width="auto" height="20px">
 	<img src="https://img.shields.io/github/languages/code-size/kamalshkeir/korm" width="auto" height="20px">
 	<img src="https://img.shields.io/badge/License-BSD%20v3-blue.svg" width="auto" height="20px">
@@ -10,6 +11,10 @@
 	<img src="https://img.shields.io/github/forks/kamalshkeir/korm?style=social" width="auto" height="20px">
 </div>
 <br>
+
+
+
+
 <div align="center">
 	<a href="https://kamalshkeir.dev" target="_blank">
 		<img src="https://img.shields.io/badge/my_portfolio-000?style=for-the-badge&logo=ko-fi&logoColor=white" width="auto" height="32px">
@@ -23,23 +28,27 @@
 </div>
 
 ---
-## KORM is an Elegant and [Blazingly Fast](#benchmarks) ORM using generics and network bus. It can handle sql databases and Mongo using [Kormongo](https://github.com/kamalshkeir/kormongo), both have pretty much the same api, everything detailed in this readme
-#### All drivers are written in Go, so you will never encounter gcc or c missing compiler
+## KORM is an Elegant and Blazingly Fast ORM and migration tool, see [Benchmarks](#benchmarks), it use go generics 1.18 and a network bus.
 
-## It is easily composable, you can combine it with a Server Bus (using WithBus) when you want to scale or just synchronise your data between multiple database.
-## You have full control on the data came in and go out, you can check the example below [NetworkBus](#example-with-bus-between-2-korm)
+### It is easily composable, you can combine it with a Server Bus (using WithBus) when you want to scale or just synchronise your data between multiple database or WithDashboard to have an admin panel
 
-#### It come with :
-- New: [Admin dashboard](#example-with-dashboard)
-- New: handle [many to many](#manytomany-relationships-example) relationships 
+##### It can handle sql databases and Mongo using [Kormongo](https://github.com/kamalshkeir/kormongo), both have pretty much the same api, everything detailed in this readme
+##### All drivers are written in Go, so you will never encounter gcc or c missing compiler
+
+
+##### You have full control on the data came in and go out, you can check the example below [NetworkBus](#example-with-bus-between-2-korm)
+
+### It Have :
+- Simple [API](#api)
+- [Admin dashboard](#example-with-dashboard) CRUD
+- [many to many](#manytomany-relationships-example) relationships 
+- Support for foreign keys, indexes , checks,... [See all](#automigrate)
 - [Interactive Shell](#interactive-shell), to CRUD in your databases `go run main.go shell` or `go run main.go mongoshell` for mongo
 - Network Bus allowing you to send and recv data in realtime using pubsub websockets between your ORMs, so you can decide how you data will be distributed between different databases, see [Example](#example-with-bus-between-2-korm) .
-- [AutoMigrate](#automigrate) directly from struct, for mongo it will only link the struct to the tableName, allowing usage of BuilderS. For all sql, whenever you add or remove a field from a migrated struct, you will get a prompt proposing to add the column for the table in the database or remove a column, you can also only generate the query without execute, and then you can use the shell to migrate the generated file
-- It use std library database/sql, and the Mongo official driver, so if you want, know that you can always do your queries yourself using sql.DB or mongo.Client , but i doubt you will need to, after seeing these [benchmarks](#benchmarks) . `korm.GetConnection(dbName)` or `kormongo.GetConnection(dbName)`
+- It use std library database/sql, and the Mongo official driver, so if you want, know that you can always do your queries yourself using sql.DB or mongo.Client  `korm.GetConnection(dbName)` or `kormongo.GetConnection(dbName)`
+- [AutoMigrate](#automigrate) directly from struct, for mongo it will only link the struct to the tableName, allowing usage of BuilderS. For all sql, whenever you add or remove a field from a migrated struct, you will get a prompt proposing to add the column for the table in the database or remove a column, you can also only generate the query without execute, and then you can use the shell to migrate the generated file.
 - Powerful Query Builder for SQL and Mongo [Builder](#builder-mapstringany).
-- Support of foreign keys, indexes , checks,... [See all](#automigrate)
-- It handle query and execute on multiple database at the same time.
-- Concurrency Safe.
+- Concurrency Safe access.
 
 
 #### Supported databases:
@@ -148,7 +157,7 @@ all, _ := korm.Model[FirstTable]()
                    .All()
 ```
 
-### API (working with SQL and MONGO)
+### API
 #### General
 ```go
 func New(dbType, dbName string, dbDSN ...string) error
@@ -157,7 +166,7 @@ func NewFromConnection(dbName string,dbConn *mongo.Database) error (kormongo)
 func WithBus(bus *ksbus.Server) *ksbus.Server // Usage: WithBus(ksbus.NewServer()) or share an existing one
 func BeforeServersData(fn func(data any, conn *ws.Conn))
 func BeforeDataWS(fn func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) bool)
-func GetConnection(dbName ...string) (conn *sql.DB,ok bool)
+func GetConnection(dbName ...string) *sql.DB
 func GetAllTables(dbName ...string) []string
 func GetAllColumnsTypes(table string, dbName ...string) map[string]string
 func GetMemoryTable(tbName string, dbName ...string) (TableEntity, error)
@@ -170,11 +179,63 @@ func DisableCheck() // Korm Only, disable struct check on change to add or remov
 func DisableCache()
 func ManyToMany(table1, table2 string, dbName ...string) error // add table relation m2m 
 ```
+#### Builder `Struct`:
+```go
+func Model[T comparable](tableName ...string) *Builder[T] // starter
+func (b *Builder[T]) Database(dbName string) *Builder[T]
+func (b *Builder[T]) Insert(model *T) (int, error)
+func (b *Builder[T]) BulkInsert(models ...*T) (int, error)
+func (b *Builder[T]) Set(query string, args ...any) (int, error)
+func (b *Builder[T]) Delete() (int, error)
+func (b *Builder[T]) Drop() (int, error)
+func (b *Builder[T]) Select(columns ...string) *Builder[T]
+func (b *Builder[T]) Where(query string, args ...any) *Builder[T]
+func (b *Builder[T]) Query(query string, args ...any) *Builder[T]
+func (b *Builder[T]) AddRelated(relatedTable string, whereRelatedTable string, whereRelatedArgs ...any) (int, error)
+func (b *Builder[T]) DeleteRelated(relatedTable string, whereRelatedTable string, whereRelatedArgs ...any) (int, error)
+func (b *Builder[T]) GetRelated(relatedTable string, dest any) error
+func (b *Builder[T]) JoinRelated(relatedTable string, dest any) error
+func (b *Builder[T]) Limit(limit int) *Builder[T]
+func (b *Builder[T]) Context(ctx context.Context) *Builder[T]
+func (b *Builder[T]) Page(pageNumber int) *Builder[T]
+func (b *Builder[T]) OrderBy(fields ...string) *Builder[T]
+func (b *Builder[T]) Debug() *Builder[T]
+func (b *Builder[T]) All() ([]T, error)
+func (b *Builder[T]) One() (T, error)
 
+Examples:
+korm.Model[models.User]().Select("email","uuid").OrderBy("-id").Limit(PAGINATION_PER).Page(1).All()
+
+// INSERT
+uuid,_ := korm.GenerateUUID()
+hashedPass,_ := hash.GenerateHash("password")
+korm.Model[models.User]().Insert(&models.User{
+	Uuid: uuid,
+	Email: "test@example.com",
+	Password: hashedPass,
+	IsAdmin: false,
+	Image: "",
+	CreatedAt: time.Now(),
+})
+
+//if using more than one db
+korm.Database[models.User]("dbNameHere").Where("id = ? AND email = ?",1,"test@example.com").All() 
+
+// where
+korm.Model[models.User]().Where("id = ? AND email = ?",1,"test@example.com").One() 
+
+// delete
+korm.Model[models.User]().Where("id = ? AND email = ?",1,"test@example.com").Delete()
+
+// drop table
+korm.Model[models.User]().Drop()
+
+// update
+korm.Model[models.User]().Where("id = ?",1).Set("email = ?","new@example.com")
+```
 #### Builder `map[string]any`:
 ```go
 func Table(tableName string) *BuilderM // starter
-func BuilderMap(tableName string) *BuilderM // starter
 func (b *BuilderM) Database(dbName string) *BuilderM // select database
 func (b *BuilderM) Select(columns ...string) *BuilderM // select columns
 func (b *BuilderM) Where(query string, args ...any) *BuilderM // korm.Where("id = ?",1) for sql and kormongo.Where("id",1) for mongo
@@ -240,61 +301,7 @@ korm.Table("tableName").Where("id",1).Set("email","new@example.com") // orSQL
 
 korm.Table("tableName").Where("id",1).Set("email","new@example.com") // Mongo
 ```
-#### Builder `Struct`:
-```go
-func Model[T comparable](tableName ...string) *Builder[T] // you get the idea
-func BuilderStruct[T comparable](tableName ...string) *Builder[T] 
-func (b *Builder[T]) Database(dbName string) *Builder[T]
-func (b *Builder[T]) Insert(model *T) (int, error)
-func (b *Builder[T]) BulkInsert(models ...*T) (int, error)
-func (b *Builder[T]) Set(query string, args ...any) (int, error)
-func (b *Builder[T]) Delete() (int, error)
-func (b *Builder[T]) Drop() (int, error)
-func (b *Builder[T]) Select(columns ...string) *Builder[T]
-func (b *Builder[T]) Where(query string, args ...any) *Builder[T]
-func (b *Builder[T]) Query(query string, args ...any) *Builder[T]
-func (b *Builder[T]) AddRelated(relatedTable string, whereRelatedTable string, whereRelatedArgs ...any) (int, error)
-func (b *Builder[T]) DeleteRelated(relatedTable string, whereRelatedTable string, whereRelatedArgs ...any) (int, error)
-func (b *Builder[T]) GetRelated(relatedTable string, dest any) error
-func (b *Builder[T]) JoinRelated(relatedTable string, dest any) error
-func (b *Builder[T]) Limit(limit int) *Builder[T]
-func (b *Builder[T]) Context(ctx context.Context) *Builder[T]
-func (b *Builder[T]) Page(pageNumber int) *Builder[T]
-func (b *Builder[T]) OrderBy(fields ...string) *Builder[T]
-func (b *Builder[T]) Debug() *Builder[T]
-func (b *Builder[T]) All() ([]T, error)
-func (b *Builder[T]) One() (T, error)
 
-Examples:
-korm.Model[models.User]().Select("email","uuid").OrderBy("-id").Limit(PAGINATION_PER).Page(1).All()
-
-// INSERT
-uuid,_ := korm.GenerateUUID()
-hashedPass,_ := hash.GenerateHash("password")
-korm.Model[models.User]().Insert(&models.User{
-	Uuid: uuid,
-	Email: "test@example.com",
-	Password: hashedPass,
-	IsAdmin: false,
-	Image: "",
-	CreatedAt: time.Now(),
-})
-
-//if using more than one db
-korm.Database[models.User]("dbNameHere").Where("id = ? AND email = ?",1,"test@example.com").All() 
-
-// where
-korm.Model[models.User]().Where("id = ? AND email = ?",1,"test@example.com").One() 
-
-// delete
-korm.Model[models.User]().Where("id = ? AND email = ?",1,"test@example.com").Delete()
-
-// drop table
-korm.Model[models.User]().Drop()
-
-// update
-korm.Model[models.User]().Where("id = ?",1).Set("email = ?","new@example.com")
-```
 
 ### Example With Dashboard
 

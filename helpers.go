@@ -127,8 +127,8 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 				trigs := "DROP TRIGGER IF EXISTS " + to_table_name + "_update_trig"
 				if len(databases) > 1 && db.Name == "" {
 					ddb := kinput.Input(kinput.Blue, "> There are more than one database connected, enter database name: ")
-					conn, ok := GetConnection(ddb)
-					if ok {
+					conn := GetConnection(ddb)
+					if conn != nil {
 						// triggers
 						if db.Dialect != MYSQL && db.Dialect != MARIA {
 							if ts, ok := ftags[d]; ok {
@@ -240,8 +240,8 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 
 				if len(databases) > 1 && db.Name == "" {
 					ddb := kinput.Input(kinput.Blue, "> There are more than one database connected, enter database name: ")
-					_, ok := GetConnection(ddb)
-					if ok {
+					conn := GetConnection(ddb)
+					if conn != nil {
 						// triggers
 						if db.Dialect != MYSQL && db.Dialect != MARIA {
 							if ts, ok := ftags[d]; ok {
@@ -546,8 +546,8 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 				if SliceContains([]string{"yes", "Y", "y"}, choice) {
 					if len(databases) > 1 && db.Name == "" {
 						ddb := kinput.Input(kinput.Blue, "> There are more than one database connected, database name:")
-						conn, ok := GetConnection(ddb)
-						if ok {
+						conn := GetConnection(ddb)
+						if conn != nil {
 							_, err := conn.Exec(statement)
 							if klog.CheckError(err) {
 								klog.Printf("%s\n", statement)
@@ -604,8 +604,8 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 							klog.Printfs("grDone, '%s' added to '%s', you may want to restart your server\n", d, to_table_name)
 						}
 					} else {
-						conn, ok := GetConnection(db.Name)
-						if ok {
+						conn := GetConnection(db.Name)
+						if conn != nil {
 							_, err := conn.Exec(statement)
 							if klog.CheckError(err) {
 								klog.Printf("%s\n", statement)
@@ -666,8 +666,8 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 
 					if len(databases) > 1 && db.Name == "" {
 						ddb := kinput.Input(kinput.Blue, "> There are more than one database connected, database name:")
-						_, ok := GetConnection(ddb)
-						if ok {
+						conn := GetConnection(ddb)
+						if conn != nil {
 							if !strings.HasSuffix(statement, ";") {
 								statement += ";"
 							}
@@ -718,8 +718,8 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 							}
 						}
 					} else {
-						_, ok := GetConnection(db.Name)
-						if ok {
+						conn := GetConnection(db.Name)
+						if conn != nil {
 							if !strings.HasSuffix(statement, ";") {
 								statement += ";"
 							}
@@ -883,8 +883,8 @@ func handleRename(to_table_name string, fields, cols, diff []string, db *Databas
 				statement := "ALTER TABLE " + to_table_name + " RENAME COLUMN " + old[0] + " TO " + new[0]
 				if len(databases) > 1 && db.Name == "" {
 					ddb := kinput.Input(kinput.Blue, "> There are more than one database connected, database name:")
-					conn, ok := GetConnection(ddb)
-					if ok {
+					conn := GetConnection(ddb)
+					if conn != nil {
 						if Debug {
 							klog.Printf("ylstatement:%s\n", statement)
 						}
@@ -920,8 +920,8 @@ func handleRename(to_table_name string, fields, cols, diff []string, db *Databas
 							statement := "ALTER TABLE " + to_table_name + " RENAME COLUMN " + o + " TO " + n
 							if len(databases) > 1 && db.Name == "" {
 								ddb := kinput.Input(kinput.Blue, "> There are more than one database connected, database name:")
-								conn, ok := GetConnection(ddb)
-								if ok {
+								conn := GetConnection(ddb)
+								if conn != nil {
 									if Debug {
 										klog.Printf("statement:%s\n", statement)
 									}
@@ -935,8 +935,8 @@ func handleRename(to_table_name string, fields, cols, diff []string, db *Databas
 								if Debug {
 									klog.Printf("statement:%s\n", statement)
 								}
-								conn, ok := GetConnection(db.Name)
-								if ok {
+								conn := GetConnection(db.Name)
+								if conn != nil {
 									_, err := conn.Exec(statement)
 									if klog.CheckError(err) {
 										klog.Printf("statement:%s\n", statement)

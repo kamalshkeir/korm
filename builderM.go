@@ -36,12 +36,6 @@ func Table(tableName string) *BuilderM {
 	}
 }
 
-func BuilderMap(tableName string) *BuilderM {
-	return &BuilderM{
-		tableName: tableName,
-	}
-}
-
 func (b *BuilderM) Database(dbName string) *BuilderM {
 	b.database = dbName
 	return b
@@ -163,7 +157,7 @@ func (b *BuilderM) All() ([]map[string]any, error) {
 		offset:     b.offset,
 		limit:      b.limit,
 		page:       b.page,
-		args:       fmt.Sprintf("%v", b.args...),
+		args:       fmt.Sprint(b.args...),
 	}
 	if useCache {
 		if v, ok := cacheAllM.Get(c); ok {
@@ -232,7 +226,7 @@ func (b *BuilderM) One() (map[string]any, error) {
 		offset:     b.offset,
 		limit:      b.limit,
 		page:       b.page,
-		args:       fmt.Sprintf("%v", b.args...),
+		args:       fmt.Sprint(b.args...),
 	}
 	if useCache {
 		if v, ok := cachesOneM.Get(c); ok {

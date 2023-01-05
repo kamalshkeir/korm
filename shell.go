@@ -96,10 +96,10 @@ func InitShell() bool {
 			if dbName == "" {
 				return true
 			}
-			conn, _ = GetConnection(dbName)
+			conn = GetConnection(dbName)
 			usedDB = dbName
 		} else {
-			conn, _ = GetConnection()
+			conn = GetConnection()
 			usedDB = databases[0].Name
 		}
 		defer conn.Close()
@@ -265,7 +265,7 @@ func migratefromfile(path string) error {
 
 	//exec migrations
 	for i := range statements {
-		conn, _ := GetConnection(usedDB)
+		conn := GetConnection(usedDB)
 		_, err := conn.Exec(statements[i])
 		if err != nil {
 			return errors.New("error migrating from " + path + " " + err.Error())

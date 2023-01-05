@@ -419,26 +419,6 @@ func TestSelectM(t *testing.T) {
 	}
 }
 
-func TestBuilderStruct(t *testing.T) {
-	u, err := BuilderStruct[TestUser]().All()
-	if err != nil {
-		t.Error(err)
-	}
-	if len(u) != 20 {
-		t.Error("wrong data len:", len(u))
-	}
-}
-
-func TestBuilderMap(t *testing.T) {
-	u, err := BuilderMap("users").All()
-	if err != nil {
-		t.Error(err)
-	}
-	if len(u) != 20 {
-		t.Error("wrong data len:", len(u))
-	}
-}
-
 func TestDatabase(t *testing.T) {
 	u, err := Model[TestUser]().Database(DB_TEST_NAME).All()
 	if err != nil {

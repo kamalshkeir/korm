@@ -430,22 +430,21 @@ func DisableCache() {
 	useCache = false
 }
 
-func GetConnection(dbName ...string) (conn *sql.DB, ok bool) {
-	var db *DatabaseEntity
-	var err error
+func GetConnection(dbName ...string) *sql.DB {
+	var name string
 	if len(dbName) > 0 {
-		db, err = GetMemoryDatabase(dbName[0])
+		name = dbName[0]
 	} else {
-		db, err = GetMemoryDatabase(databases[0].Name)
+		name = databases[0].Name
 	}
+	db, err := GetMemoryDatabase(name)
 	if klog.CheckError(err) {
-		return nil, false
+		return nil
 	}
-	if db.Conn != nil {
-		conn = db.Conn
-		return conn, true
+	if db.Conn == nil {
+		klog.Printf("rdmemory database %s not found", name)
 	}
-	return nil, false
+	return db.Conn
 }
 
 // GetAllTables get all tables for the optional dbName given, otherwise, if not args, it will return tables of the first connected database
@@ -796,8 +795,8 @@ func Query(dbName string, statement string, args ...any) ([]map[string]interface
 }
 
 func Exec(dbName, query string, args ...any) error {
-	conn, ok := GetConnection(dbName)
-	if !ok {
+	conn := GetConnection(dbName)
+	if conn == nil {
 		return errors.New("no connection found")
 	}
 	adaptTrueFalseArgs(&args)

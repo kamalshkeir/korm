@@ -1,21 +1,27 @@
 package benchmarks
 
 import (
+	"log"
+	"os"
 	"testing"
 
 	"github.com/kamalshkeir/klog"
 	"github.com/kamalshkeir/korm"
 )
 
+var DB_BENCH_NAME = "bench"
+
 type TestTable struct {
 	Id      uint `korm:"pk"`
 	Content string
 }
 
-func init() {
+func TestMain(m *testing.M) {
+	//sqlitedriver.Use()
+	korm.DisableCheck()
 	var err error
 	//sqlitedriver.Use()
-	_ = korm.New(korm.SQLITE, "bench")
+	_ = korm.New(korm.SQLITE, DB_BENCH_NAME)
 	// migrate table test_table from struct TestTable
 	err = korm.AutoMigrate[TestTable]("test_table")
 	if klog.CheckError(err) {
@@ -28,13 +34,27 @@ func init() {
 		})
 		klog.CheckError(err)
 	}
+	// run tests
+	exitCode := m.Run()
+
+	err = korm.Shutdown(DB_BENCH_NAME)
+	if klog.CheckError(err) {
+		return
+	}
+	// Cleanup for sqlite , remove file db
+	err = os.Remove(DB_BENCH_NAME + ".sqlite")
+	if err != nil {
+		log.Fatal(err)
+	}
+	os.Exit(exitCode)
 }
 
 func BenchmarkGetAllS(b *testing.B) {
 	b.ReportAllocs()
+	var err error
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := korm.Model[TestTable]().All()
+		_, err = korm.Model[TestTable]().All()
 		if err != nil {
 			b.Error("error BenchmarkGetAllS:", err)
 		}
