@@ -470,13 +470,6 @@ type Student struct {
 	CreatedAt time.Time `korm:"now"`
 }
 
-type Teacher struct {
-	Id        uint      `korm:"pk"`
-	Name      string    `korm:"size:100"`
-	CreatedAt time.Time `korm:"now"`
-}
-
-
 // migrate
 func migrate() {
 	err := korm.AutoMigrate[Class]("classes")
@@ -484,10 +477,6 @@ func migrate() {
 		return
 	}
 	err = korm.AutoMigrate[Student]("students")
-	if klog.CheckError(err) {
-		return
-	}
-	err = korm.AutoMigrate[Teacher]("teachers")
 	if klog.CheckError(err) {
 		return
 	}
@@ -513,9 +502,9 @@ err = korm.Table("classes").Where("name = ?", "Math").Select("name").OrderBy("-n
 std := []map[string]any{}
 err = korm.Table("classes").Where("name = ?", "Math").JoinRelated("students", &std)
 
-// join related to map
-std := []Student{}
-err = korm.Model[Class]().Where("name = ?", "Math").JoinRelated("students", &std)
+// join related to strcu
+cu := []JoinClassUser{}
+err = korm.Model[Class]().Where("name = ?", "Math").JoinRelated("students", &cu)
 
 // to add relation
 _, err = korm.Model[Class]().AddRelated("students", "name = ?", "hisName")
