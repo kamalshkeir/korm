@@ -13,9 +13,11 @@ import (
 	"github.com/kamalshkeir/kstrct"
 )
 
-var cacheOneS = kmap.New[dbCache, any](false)
-var cacheAllS = kmap.New[dbCache, any](false)
-var errTableNotFound = errors.New("unable to find tableName")
+var (
+	cacheOneS        = kmap.New[dbCache, any](false)
+	cacheAllS        = kmap.New[dbCache, any](false)
+	errTableNotFound = errors.New("unable to find tableName")
+)
 
 type Builder[T comparable] struct {
 	debug      bool
@@ -79,6 +81,12 @@ func (b *Builder[T]) Insert(model *T) (int, error) {
 	values := []any{}
 	if len(names) < len(mvalues) {
 		return 0, errors.New("more values than fields")
+	}
+	if onInsert != nil {
+		err := onInsert(b.database, b.tableName, mvalues)
+		if err != nil {
+			return 0, err
+		}
 	}
 	placeholdersSlice := []string{}
 	ignored := []int{}
@@ -181,6 +189,12 @@ func (b *Builder[T]) BulkInsert(models ...*T) (int, error) {
 		names, mvalues, _, mtags := getStructInfos(models[mm], true)
 		if len(names) < len(mvalues) {
 			return 0, errors.New("more values than fields")
+		}
+		if onInsert != nil {
+			err := onInsert(b.database, b.tableName, mvalues)
+			if err != nil {
+				return 0, err
+			}
 		}
 		placeholdersSlice := []string{}
 		values := []any{}
@@ -288,7 +302,6 @@ func (b *Builder[T]) AddRelated(relatedTable string, whereRelatedTable string, w
 			return 0, fmt.Errorf("no relations many to many between theses 2 tables: %s, %s", b.tableName, relatedTable)
 		}
 	}
-
 	cols := ""
 	wherecols := ""
 	inOrder := false
@@ -310,13 +323,14 @@ func (b *Builder[T]) AddRelated(relatedTable string, whereRelatedTable string, w
 	if err != nil {
 		return 0, fmt.Errorf("memory table not found:" + relatedTable)
 	}
-	ids := make([]any, 4)
+
 	adaptTrueFalseArgs(&whereRelatedArgs)
 	adaptWhereQuery(&whereRelatedTable, relatedTable)
 	data, err := Table(relatedTable).Where(whereRelatedTable, whereRelatedArgs...).One()
 	if err != nil {
 		return 0, err
 	}
+	ids := make([]any, 4)
 	if v, ok := data[memoryRelatedTable.Pk]; ok {
 		if inOrder {
 			ids[1] = v
@@ -341,6 +355,24 @@ func (b *Builder[T]) AddRelated(relatedTable string, whereRelatedTable string, w
 		} else {
 			ids[1] = v
 			ids[3] = v
+		}
+	}
+	if onInsert != nil {
+		var mInsert map[string]any
+		if inOrder {
+			mInsert = map[string]any{
+				b.tableName + "_id":  ids[0],
+				relatedTable + "_id": ids[1],
+			}
+		} else {
+			mInsert = map[string]any{
+				b.tableName + "_id":  ids[1],
+				relatedTable + "_id": ids[0],
+			}
+		}
+		err := onInsert(db.Name, relationTableName, mInsert)
+		if err != nil {
+			return 0, err
 		}
 	}
 	stat := "INSERT INTO " + relationTableName + "(" + cols + ") SELECT ?,? WHERE NOT EXISTS (SELECT * FROM " + relationTableName + " WHERE " + wherecols + ");"
@@ -570,6 +602,24 @@ func (b *Builder[T]) Set(query string, args ...any) (int, error) {
 			"type": "update",
 		})
 	}
+	if onSet != nil {
+		mToSet := map[string]any{}
+		sp := strings.Split(query, ",")
+		if strings.Contains(query, "?") {
+			for i := range sp {
+				sp[i] = setReplacer.Replace(sp[i])
+				mToSet[strings.TrimSpace(sp[i])] = args[i]
+			}
+		} else {
+			for i := range sp {
+				mToSet[strings.TrimSpace(sp[i])] = args[i]
+			}
+		}
+		err := onSet(b.database, b.tableName, mToSet)
+		if err != nil {
+			return 0, err
+		}
+	}
 	db, err := GetMemoryDatabase(b.database)
 	if klog.CheckError(err) {
 		return 0, err
@@ -622,6 +672,12 @@ func (b *Builder[T]) Delete() (int, error) {
 	if klog.CheckError(err) {
 		return 0, err
 	}
+	if onDelete != nil {
+		err := onDelete(b.database, b.tableName, b.whereQuery, b.args...)
+		if err != nil {
+			return 0, err
+		}
+	}
 
 	b.statement = "DELETE FROM " + b.tableName
 	if b.whereQuery != "" {
@@ -660,6 +716,12 @@ func (b *Builder[T]) Drop() (int, error) {
 		cachebus.Publish(CACHE_TOPIC, map[string]any{
 			"type": "drop",
 		})
+	}
+	if onDrop != nil {
+		err := onDrop(b.database, b.tableName)
+		if err != nil {
+			return 0, err
+		}
 	}
 	db, err := GetMemoryDatabase(b.database)
 	if klog.CheckError(err) {

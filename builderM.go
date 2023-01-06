@@ -13,6 +13,8 @@ import (
 	"github.com/kamalshkeir/kstrct"
 )
 
+var setReplacer = strings.NewReplacer("=", "", "?", "")
+
 type BuilderM struct {
 	debug      bool
 	limit      int
@@ -33,6 +35,7 @@ type BuilderM struct {
 func Table(tableName string) *BuilderM {
 	return &BuilderM{
 		tableName: tableName,
+		database:  databases[0].Name,
 	}
 }
 
@@ -165,10 +168,6 @@ func (b *BuilderM) All() ([]map[string]any, error) {
 		}
 	}
 
-	if b.database == "" {
-		b.database = databases[0].Name
-	}
-
 	if b.selected != "" {
 		b.statement = "select " + b.selected + " from " + b.tableName
 	} else {
@@ -233,9 +232,6 @@ func (b *BuilderM) One() (map[string]any, error) {
 			return v, nil
 		}
 	}
-	if b.database == "" {
-		b.database = databases[0].Name
-	}
 
 	if b.selected != "" && b.selected != "*" {
 		b.statement = "select " + b.selected + " from " + b.tableName
@@ -280,8 +276,12 @@ func (b *BuilderM) Insert(rowData map[string]any) (int, error) {
 	if b.tableName == "" {
 		return 0, errors.New("unable to find table, try db.Table before")
 	}
-	if b.database == "" {
-		b.database = databases[0].Name
+	if onInsert != nil {
+		err := onInsert(b.database, b.tableName, rowData)
+		if err != nil {
+			return 0, err
+		}
+
 	}
 	if useCache {
 		cachebus.Publish(CACHE_TOPIC, map[string]any{
@@ -350,9 +350,6 @@ func (b *BuilderM) BulkInsert(rowsData ...map[string]any) (int, error) {
 	if b.tableName == "" {
 		return 0, errors.New("unable to find table, try db.Table before")
 	}
-	if b.database == "" {
-		b.database = databases[0].Name
-	}
 	if useCache {
 		cachebus.Publish(CACHE_TOPIC, map[string]any{
 			"type": "create",
@@ -370,6 +367,12 @@ func (b *BuilderM) BulkInsert(rowsData ...map[string]any) (int, error) {
 	}
 
 	for ii := range rowsData {
+		if onInsert != nil {
+			err := onInsert(b.database, b.tableName, rowsData[ii])
+			if err != nil {
+				return 0, err
+			}
+		}
 		placeholdersSlice := []string{}
 		keys := []string{}
 		values := []any{}
@@ -438,13 +441,28 @@ func (b *BuilderM) Set(query string, args ...any) (int, error) {
 	if b.tableName == "" {
 		return 0, errors.New("unable to find model, try db.Table before")
 	}
-	if b.database == "" {
-		b.database = databases[0].Name
-	}
 	if useCache {
 		cachebus.Publish(CACHE_TOPIC, map[string]any{
 			"type": "update",
 		})
+	}
+	if onSet != nil {
+		mToSet := map[string]any{}
+		sp := strings.Split(query, ",")
+		if strings.Contains(query, "?") {
+			for i := range sp {
+				sp[i] = setReplacer.Replace(sp[i])
+				mToSet[strings.TrimSpace(sp[i])] = args[i]
+			}
+		} else {
+			for i := range sp {
+				mToSet[strings.TrimSpace(sp[i])] = args[i]
+			}
+		}
+		err := onSet(b.database, b.tableName, mToSet)
+		if err != nil {
+			return 0, err
+		}
 	}
 	db, err := GetMemoryDatabase(b.database)
 	if err != nil {
@@ -488,13 +506,16 @@ func (b *BuilderM) Delete() (int, error) {
 	if b.tableName == "" {
 		return 0, errors.New("unable to find model, try korm.AutoMigrate before")
 	}
-	if b.database == "" {
-		b.database = databases[0].Name
-	}
 	if useCache {
 		cachebus.Publish(CACHE_TOPIC, map[string]any{
 			"type": "delete",
 		})
+	}
+	if onDelete != nil {
+		err := onDelete(b.database, b.tableName, b.whereQuery, b.args...)
+		if err != nil {
+			return 0, err
+		}
 	}
 	db, err := GetMemoryDatabase(b.database)
 	if err != nil {
@@ -533,13 +554,16 @@ func (b *BuilderM) Drop() (int, error) {
 	if b.tableName == "" {
 		return 0, errors.New("unable to find model, try korm.LinkModel before Update")
 	}
-	if b.database == "" {
-		b.database = databases[0].Name
-	}
 	if useCache {
 		cachebus.Publish(CACHE_TOPIC, map[string]any{
 			"type": "drop",
 		})
+	}
+	if onDrop != nil {
+		err := onDrop(b.database, b.tableName)
+		if err != nil {
+			return 0, err
+		}
 	}
 	db, err := GetMemoryDatabase(b.database)
 	if err != nil {
@@ -564,9 +588,6 @@ func (b *BuilderM) Drop() (int, error) {
 }
 
 func (b *BuilderM) queryM(statement string, args ...any) ([]map[string]interface{}, error) {
-	if b.database == "" {
-		b.database = databases[0].Name
-	}
 	db, err := GetMemoryDatabase(b.database)
 	if err != nil {
 		return nil, err
@@ -626,9 +647,6 @@ func (b *BuilderM) queryM(statement string, args ...any) ([]map[string]interface
 func (b *BuilderM) AddRelated(relatedTable string, whereRelatedTable string, whereRelatedArgs ...any) (int, error) {
 	if b.tableName == "" {
 		return 0, errors.New("unable to find model, try korm.AutoMigrate before")
-	}
-	if b.database == "" {
-		b.database = databases[0].Name
 	}
 	if useCache {
 		cachebus.Publish(CACHE_TOPIC, map[string]any{
@@ -700,6 +718,24 @@ func (b *BuilderM) AddRelated(relatedTable string, whereRelatedTable string, whe
 			ids[3] = v
 		}
 	}
+	if onInsert != nil {
+		var mInsert map[string]any
+		if inOrder {
+			mInsert = map[string]any{
+				b.tableName + "_id":  ids[0],
+				relatedTable + "_id": ids[1],
+			}
+		} else {
+			mInsert = map[string]any{
+				b.tableName + "_id":  ids[1],
+				relatedTable + "_id": ids[0],
+			}
+		}
+		err := onInsert(db.Name, relationTableName, mInsert)
+		if err != nil {
+			return 0, err
+		}
+	}
 	stat := "INSERT INTO " + relationTableName + "(" + cols + ") SELECT ?,? WHERE NOT EXISTS (SELECT * FROM " + relationTableName + " WHERE " + wherecols + ");"
 	adaptPlaceholdersToDialect(&stat, db.Dialect)
 	if b.debug {
@@ -717,10 +753,6 @@ func (b *BuilderM) GetRelated(relatedTable string, dest *[]map[string]any) error
 	if b.tableName == "" {
 		return errors.New("unable to find model, try db.Table before")
 	}
-	if b.database == "" {
-		b.database = databases[0].Name
-	}
-
 	relationTableName := "m2m_" + b.tableName + "-" + b.database + "-" + relatedTable
 	if _, ok := relationsMap.Get("m2m_" + b.tableName + "-" + b.database + "-" + relatedTable); !ok {
 		relationTableName = "m2m_" + relatedTable + "-" + b.database + "-" + b.tableName
@@ -791,10 +823,6 @@ func (b *BuilderM) JoinRelated(relatedTable string, dest *[]map[string]any) erro
 	if b.tableName == "" {
 		return errors.New("unable to find model, try db.Table before")
 	}
-	if b.database == "" {
-		b.database = databases[0].Name
-	}
-
 	relationTableName := "m2m_" + b.tableName + "-" + b.database + "-" + relatedTable
 	if _, ok := relationsMap.Get("m2m_" + b.tableName + "-" + b.database + "-" + relatedTable); !ok {
 		relationTableName = "m2m_" + relatedTable + "-" + b.database + "-" + b.tableName
@@ -864,9 +892,6 @@ func (b *BuilderM) DeleteRelated(relatedTable string, whereRelatedTable string, 
 	if b.tableName == "" {
 		return 0, errors.New("unable to find model, try db.Table before")
 	}
-	if b.database == "" {
-		b.database = databases[0].Name
-	}
 	if useCache {
 		cachebus.Publish(CACHE_TOPIC, map[string]any{
 			"type": "delete",
@@ -935,9 +960,6 @@ func (b *BuilderM) DeleteRelated(relatedTable string, whereRelatedTable string, 
 }
 
 func (b *BuilderM) queryS(strct any, statement string, args ...any) error {
-	if b.database == "" {
-		b.database = databases[0].Name
-	}
 	db, err := GetMemoryDatabase(b.database)
 	if err != nil {
 		return err

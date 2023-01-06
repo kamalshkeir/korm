@@ -39,6 +39,7 @@
 ##### You have full control on the data came in and go out, you can check the example below [NetworkBus](#example-with-bus-between-2-korm)
 
 ### It Have :
+- New: [Hooks](#hooks) : OnInsert OnSet OnDelete and OnDrop
 - Simple [API](#api)
 - [Admin dashboard](#example-with-dashboard) CRUD
 - [many to many](#manytomany-relationships-example) relationships 
@@ -64,7 +65,7 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@v1.3.3 // latest version
+go get -u github.com/kamalshkeir/korm@v1.3.4 // latest version
 ```
 
 # Drivers moved outside this package to not get them all in your go.mod file
@@ -428,6 +429,23 @@ func main() {
 	// OR generate certificates let's encrypt for a domain name, check https://github.com/kamalshkeir/ksbus for more infos
 	bus.RunAutoTLS(domainName string, subDomains ...string)
 }
+```
+
+# Hooks
+```go
+korm.OnInsert(func(database, table string, data map[string]any) error {
+	fmt.Println("inserting into", database, table, data)
+	return nil
+})
+
+korm.OnSet(func(database, table string, data map[string]any) error {
+	fmt.Println("set into", database, table, data)
+	return nil
+})
+
+korm.OnDelete(func(database, table, query string, args ...any) error {})
+
+korm.OnDrop(func(database, table string) error {})
 ```
 
 

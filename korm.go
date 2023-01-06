@@ -41,9 +41,14 @@ var (
 	MaxIdleConns   = 10
 	MaxLifetime    = 30 * time.Minute
 	MaxIdleTime    = 12 * time.Hour
+	onInsert       DbHook
+	onSet          DbHook
+	onDelete       func(database, table string, query string, args ...any) error
+	onDrop         func(database, table string) error
 )
 
 type Dialect = string
+type DbHook func(database, table string, data map[string]any) error
 
 const (
 	MIGRATION_FOLDER         = "migrations"
@@ -805,4 +810,20 @@ func Exec(dbName, query string, args ...any) error {
 		return err
 	}
 	return nil
+}
+
+func OnInsert(fn DbHook) {
+	onInsert = fn
+}
+
+func OnSet(fn DbHook) {
+	onSet = fn
+}
+
+func OnDelete(fn func(database, table string, query string, args ...any) error) {
+	onDelete = fn
+}
+
+func OnDrop(fn func(database, table string) error) {
+	onDrop = fn
 }
