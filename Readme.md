@@ -112,7 +112,7 @@ type User struct {
 	Id        int       `korm:"pk"` // AUTO Increment ID primary key
 	Uuid      string    `korm:"size:40"` // VARCHAR(50)
 	Email     string    `korm:"size:50;iunique"` // insensitive unique
-	Password  string    `korm:"size:150"`
+	Password  string    `korm:"size:150"` // VARCHAR(150)
 	IsAdmin   bool      `korm:"default:false"` // DEFAULT 0
 	Image     string    `korm:"size:100;default:''"`
 	CreatedAt time.Time `korm:"now"` // auto now
@@ -304,7 +304,7 @@ korm.Table("tableName").Where("id",1).Set("email","new@example.com") // Mongo
 ```
 
 
-### Example With Dashboard
+### Example With Dashboard (you don't need korm.WithBus with it, because WithDashboard already call it and return the server bus for you)
 
 ```go
 package main
@@ -321,7 +321,7 @@ func main() {
 	err := korm.New(korm.SQLITE, "db")
 	klog.CheckError(err)
 
-	sbus := korm.WithDashboard()
+	sbus := korm.WithDashboard() 
 	// add extra static directory if you want
 	//sbus.App.LocalStatics("assets/mystatic","myassets") // will be available at /myassets/*
 	//sbus.App.LocalTemplates("assets/templates") // will make them available to use with c.Html
@@ -388,7 +388,7 @@ func main() {
 	bus.Run("localhost:9313")
 	// OR run https if you have certificates
 	bus.RunTLS(addr string, cert string, certKey string)
-	// OR generate certificates let's encrypt for a domain name, check https://github.com/kamalshkeir/ksbus for more infos
+	// OR generate certificates let's encrypt for a domain name, check https://github.com/kamalshkeir/ksbus for more details
 	bus.RunAutoTLS(domainName string, subDomains ...string)
 }
 ```
