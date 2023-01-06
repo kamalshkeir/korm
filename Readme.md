@@ -935,8 +935,7 @@ Available 'on_delete' and 'on_update' options: cascade,(donothing,noaction),(set
 ### Interactive shell
 ```shell
 AVAILABLE COMMANDS:
-[databases, use, tables, columns, migrate, 
-getall, get, drop, delete, clear/cls, q/quit/exit, help/commands]
+[databases, use, tables, columns, migrate, createsuperuser, createuser, getall, get, drop, delete, clear/cls, q/quit/exit, help/commands]
   'databases':
 	  list all connected databases
 
@@ -950,7 +949,13 @@ getall, get, drop, delete, clear/cls, q/quit/exit, help/commands]
 	  list all columns of a table
 
   'migrate':
-	  migrate sql file
+	  migrate or execute sql file
+
+  'createsuperuser': #only with korm.WithDashboard()
+	  create a admin user
+  
+  'createuser':  #only with korm.WithDashboard()
+	  create a regular user
 
   'getall':
 	  get all rows given a table name
