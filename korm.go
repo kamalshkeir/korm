@@ -389,10 +389,7 @@ func WithBus(bus *ksbus.Server) *ksbus.Server {
 func WithDashboard(staticAndTemplatesEmbeded ...embed.FS) *ksbus.Server {
 	EmbededDashboard = len(staticAndTemplatesEmbeded) > 0
 	if serverBus == nil {
-		switchBusMutex.Lock()
-		serverBus = ksbus.NewServer()
-		cachebus = serverBus.Bus
-		switchBusMutex.Unlock()
+		serverBus = WithBus(ksbus.NewServer())
 	}
 	cloneAndMigrateDashboard(staticAndTemplatesEmbeded...)
 	initAdminUrlPatterns(serverBus.App, staticAndTemplatesEmbeded...)

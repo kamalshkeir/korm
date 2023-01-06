@@ -65,7 +65,7 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@v1.3.4 // latest version
+go get -u github.com/kamalshkeir/korm@v1.3.5 // latest version
 ```
 
 # Drivers moved outside this package to not get them all in your go.mod file
@@ -322,11 +322,16 @@ func main() {
 	klog.CheckError(err)
 
 	sbus := korm.WithDashboard()
+	// add extra static directory if you want
+	//sbus.App.LocalStatics("assets/mystatic","myassets") // will be available at /myassets/*
+	//sbus.App.LocalTemplates("assets/templates") // will make them available to use with c.Html
 
-	sbus.App.GET("/", func(c *kmux.Context) {
-		c.Text("Index")
-	})
-
+	// serve HTML 
+	// sbus.App.Get("/",func(c *kmux.Context) {
+	// 	c.Html("index.html", map[string]any{
+	// 		"data": data,
+	// 	})
+	// })
 	sbus.Run("localhost:9313")
 }
 ```
