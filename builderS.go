@@ -805,7 +805,7 @@ func (b *BuilderS[T]) Set(query string, args ...any) (int, error) {
 	if b.whereQuery == "" {
 		return 0, errors.New("you should use Where before Update")
 	}
-	adaptWhereQuery(&query)
+	adaptSetQuery(&query)
 	b.statement = "UPDATE " + b.tableName + " SET " + query + " WHERE " + b.whereQuery
 	adaptTrueFalseArgs(&args)
 
@@ -823,10 +823,6 @@ func (b *BuilderS[T]) Set(query string, args ...any) (int, error) {
 		res, err = db.Conn.Exec(b.statement, args...)
 	}
 	if err != nil {
-		if b.debug {
-			klog.Printf("%s,%s\n", b.statement, args)
-			klog.Printf("rd%v\n", err)
-		}
 		return 0, err
 	}
 	aff, err := res.RowsAffected()

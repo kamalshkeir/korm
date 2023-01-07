@@ -2,7 +2,6 @@ package korm
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -229,7 +228,7 @@ func TestInsertM(t *testing.T) {
 			"created_at": time.Now(),
 		})
 		if err != nil {
-			t.Log(err)
+			t.Error(err)
 		}
 	}
 }
@@ -242,7 +241,6 @@ func TestGetAll(t *testing.T) {
 	if len(u) != 20 {
 		t.Error("len not 20")
 	}
-	fmt.Println(u[0])
 }
 
 func TestGetAllM(t *testing.T) {
@@ -447,7 +445,8 @@ func TestDatabaseM(t *testing.T) {
 
 func TestUpdateSet(t *testing.T) {
 	updatedEmail := "updated@example.com"
-	n, err := Model[TestUser]().Where("id = ?", 3).Set("email = ?", updatedEmail)
+	is_admin := true
+	n, err := Model[TestUser]().Where("id = ?", 3).Set("email,is_admin", updatedEmail, &is_admin)
 	if err != nil {
 		t.Error(err)
 	}
@@ -458,8 +457,8 @@ func TestUpdateSet(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if *u.Email != updatedEmail {
-		t.Errorf("expect %s got %v", updatedEmail, u.Email)
+	if *u.Email != updatedEmail || !*u.IsAdmin {
+		t.Errorf("expect %s got %v, bool is %v", updatedEmail, *u.Email, *u.IsAdmin)
 	}
 }
 

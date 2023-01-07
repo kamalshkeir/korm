@@ -648,7 +648,7 @@ func (b *BuilderM) Set(query string, args ...any) (int, error) {
 	if b.whereQuery == "" {
 		return 0, errors.New("you should use Where before Update")
 	}
-	adaptWhereQuery(&query)
+	adaptSetQuery(&query)
 	b.statement = "UPDATE " + b.tableName + " SET " + query + " WHERE " + b.whereQuery
 	adaptTrueFalseArgs(&args)
 	adaptPlaceholdersToDialect(&b.statement, db.Dialect)
@@ -665,11 +665,6 @@ func (b *BuilderM) Set(query string, args ...any) (int, error) {
 		res, err = db.Conn.Exec(b.statement, args...)
 	}
 	if err != nil {
-		if Debug {
-			klog.Printf("ylstatement:%s\n", b.statement)
-			klog.Printf("ylargs:%v\n", b.args)
-			klog.Printf("reerror:%v\n", err)
-		}
 		return 0, err
 	}
 	aff, err := res.RowsAffected()

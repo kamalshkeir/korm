@@ -1122,6 +1122,26 @@ func adaptWhereQuery(query *string, tableName ...string) {
 	}
 }
 
+func adaptSetQuery(query *string) {
+	sp := strings.Split(*query, ",")
+	q := []rune(*query)
+	hasQuestionMark := false
+	hasEqual := false
+	for i := range q {
+		if q[i] == '?' {
+			hasQuestionMark = true
+		} else if q[i] == '=' {
+			hasEqual = true
+		}
+	}
+	for i := range sp {
+		if !hasQuestionMark && !hasEqual {
+			sp[i] = sp[i] + "= ?"
+		}
+	}
+	*query = strings.Join(sp, ",")
+}
+
 func handleCache(data map[string]any) {
 	switch data["type"] {
 	case "create", "delete", "update":
