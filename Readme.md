@@ -65,7 +65,7 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@v1.3.5 // latest version
+go get -u github.com/kamalshkeir/korm@v1.3.6 // latest version
 ```
 
 # Drivers moved outside this package to not get them all in your go.mod file
@@ -88,10 +88,10 @@ sqlitedriver.Use() // load sqlite driver --> go get github.com/kamalshkeir/sqlit
 err := korm.New(korm.SQLITE, "db") // Connect
 // postgres, coakroach
 pgdriver.Use() // load postgres driver  --> go get github.com/kamalshkeir/pgdriver
-err := korm.New(korm.POSTGRES,"dbName", "localhost:5432") // Connect
+err := korm.New(korm.POSTGRES,"dbName", "user:password@localhost:5432") // Connect
 // mysql, maria
 mysqldriver.Use() // load mysql driver  --> go get github.com/kamalshkeir/mysqldriver
-err := korm.New(korm.MYSQL,"dbName","localhost:3306") // Connect
+err := korm.New(korm.MYSQL,"dbName","user:password@localhost:3306") // Connect
 
 korm.Shutdown(databasesName ...string) error
 kormongo.ShutdownDatabases(databasesName ...string) error
@@ -179,30 +179,54 @@ func FlushCache()
 func DisableCheck() // Korm Only, disable struct check on change to add or remove column
 func DisableCache()
 func ManyToMany(table1, table2 string, dbName ...string) error // add table relation m2m 
+func Exec(dbName, query string, args ...any) error
 ```
 #### Builder `Struct`:
 ```go
-func Model[T comparable](tableName ...string) *Builder[T] // starter
-func (b *Builder[T]) Database(dbName string) *Builder[T]
-func (b *Builder[T]) Insert(model *T) (int, error)
-func (b *Builder[T]) BulkInsert(models ...*T) (int, error)
-func (b *Builder[T]) Set(query string, args ...any) (int, error)
-func (b *Builder[T]) Delete() (int, error)
-func (b *Builder[T]) Drop() (int, error)
-func (b *Builder[T]) Select(columns ...string) *Builder[T]
-func (b *Builder[T]) Where(query string, args ...any) *Builder[T]
-func (b *Builder[T]) Query(query string, args ...any) *Builder[T]
-func (b *Builder[T]) AddRelated(relatedTable string, whereRelatedTable string, whereRelatedArgs ...any) (int, error)
-func (b *Builder[T]) DeleteRelated(relatedTable string, whereRelatedTable string, whereRelatedArgs ...any) (int, error)
-func (b *Builder[T]) GetRelated(relatedTable string, dest any) error
-func (b *Builder[T]) JoinRelated(relatedTable string, dest any) error
-func (b *Builder[T]) Limit(limit int) *Builder[T]
-func (b *Builder[T]) Context(ctx context.Context) *Builder[T]
-func (b *Builder[T]) Page(pageNumber int) *Builder[T]
-func (b *Builder[T]) OrderBy(fields ...string) *Builder[T]
-func (b *Builder[T]) Debug() *Builder[T]
-func (b *Builder[T]) All() ([]T, error)
-func (b *Builder[T]) One() (T, error)
+// Model is a starter for Buider
+func Model[T comparable](tableName ...string) *BuilderS[T]
+// Database allow to choose database to execute query on
+func (b *BuilderS[T]) Database(dbName string) *BuilderS[T]
+// Insert insert a row into a table and return inserted PK
+func (b *BuilderS[T]) Insert(model *T) (int, error)
+// InsertR add row to a table using input struct, and return the inserted row
+func (b *BuilderS[T]) InsertR(model *T) (T, error)
+// BulkInsert insert many row at the same time in one query
+func (b *BuilderS[T]) BulkInsert(models ...*T) ([]int, error)
+// AddRelated used for many to many, and after korm.ManyToMany, to add a class to a student or a student to a class, class or student should exist in the database before adding them
+func (b *BuilderS[T]) AddRelated(relatedTable string, whereRelatedTable string, whereRelatedArgs ...any) (int, error)
+// DeleteRelated delete a relations many to many
+func (b *BuilderS[T]) DeleteRelated(relatedTable string, whereRelatedTable string, whereRelatedArgs ...any) (int, error)
+// GetRelated used for many to many to get related classes to a student or related students to a class
+func (b *BuilderS[T]) GetRelated(relatedTable string, dest any) error
+// JoinRelated same as get, but it join data
+func (b *BuilderS[T]) JoinRelated(relatedTable string, dest any) error
+// Set used to update, Set("email,is_admin","example@mail.com",true) or Set("email = ? AND is_admin = ?","example@mail.com",true)
+func (b *BuilderS[T]) Set(query string, args ...any) (int, error)
+// Delete data from database, can be multiple, depending on the where, return affected rows(Not every database or database driver may support affected rows)
+func (b *BuilderS[T]) Delete() (int, error)
+// Drop drop table from db
+func (b *BuilderS[T]) Drop() (int, error)
+// Select usage: Select("email","password")
+func (b *BuilderS[T]) Select(columns ...string) *BuilderS[T]
+// Where can be like : Where("id > ?",1) or Where("id",1) = Where("id = ?",1)
+func (b *BuilderS[T]) Where(query string, args ...any) *BuilderS[T]
+// Query can be used like: Query("select * from table") or Query("select * from table where col like '?'","%something%")
+func (b *BuilderS[T]) Query(query string, args ...any) *BuilderS[T]
+// Limit set limit
+func (b *BuilderS[T]) Limit(limit int) *BuilderS[T]
+// Context allow to query or execute using ctx
+func (b *BuilderS[T]) Context(ctx context.Context) *BuilderS[T]
+// Page return paginated elements using Limit for specific page
+func (b *BuilderS[T]) Page(pageNumber int) *BuilderS[T]
+// OrderBy can be used like: OrderBy("-id","-email") OrderBy("id","-email") OrderBy("+id","email")
+func (b *BuilderS[T]) OrderBy(fields ...string) *BuilderS[T]
+// Debug print prepared statement and values for this operation
+func (b *BuilderS[T]) Debug() *BuilderS[T]
+// All get all data
+func (b *BuilderS[T]) All() ([]T, error)
+// One get single row
+func (b *BuilderS[T]) One() (T, error)
 
 Examples:
 korm.Model[models.User]().Select("email","uuid").OrderBy("-id").Limit(PAGINATION_PER).Page(1).All()
@@ -236,29 +260,53 @@ korm.Model[models.User]().Where("id = ?",1).Set("email = ?","new@example.com")
 ```
 #### Builder `map[string]any`:
 ```go
-func Table(tableName string) *BuilderM // starter
-func (b *BuilderM) Database(dbName string) *BuilderM // select database
-func (b *BuilderM) Select(columns ...string) *BuilderM // select columns
-func (b *BuilderM) Where(query string, args ...any) *BuilderM // korm.Where("id = ?",1) for sql and kormongo.Where("id",1) for mongo
-func (b *BuilderM) Query(query string, args ...any) *BuilderM // SQL Only
+// BuilderM is query builder map string any
+type BuilderM struct
+// Table is a starter for BuiderM
+func Table(tableName string) *BuilderM
+// Database allow to choose database to execute query on
+func (b *BuilderM) Database(dbName string) *BuilderM
+// Select select table columns to return
+func (b *BuilderM) Select(columns ...string) *BuilderM
+// Where can be like: Where("id > ?",1) or Where("id",1) = Where("id = ?",1)
+func (b *BuilderM) Where(query string, args ...any) *BuilderM
+// Query can be used like: Query("select * from table") or Query("select * from table where col like '?'","%something%")
+func (b *BuilderM) Query(query string, args ...any) *BuilderM
+// Limit set limit
 func (b *BuilderM) Limit(limit int) *BuilderM
+// Page return paginated elements using Limit for specific page
 func (b *BuilderM) Page(pageNumber int) *BuilderM
+// OrderBy can be used like: OrderBy("-id","-email") OrderBy("id","-email") OrderBy("+id","email")
 func (b *BuilderM) OrderBy(fields ...string) *BuilderM
+// Context allow to query or execute using ctx
 func (b *BuilderM) Context(ctx context.Context) *BuilderM
-func (b *BuilderM) AddRelated(relatedTable string, whereRelatedTable string, whereRelatedArgs ...any) (int, error) // finisher
-func (b *BuilderM) GetRelated(relatedTable string, dest *[]map[string]any) error // finisher
-func (b *BuilderM) JoinRelated(relatedTable string, dest *[]map[string]any) error // finisher
-func (b *BuilderM) DeleteRelated(relatedTable string, whereRelatedTable string, whereRelatedArgs ...any) (int, error) // finisher
-func (b *BuilderM) Debug() *BuilderM // show executed queries for migrations
-func (b *BuilderM) All() ([]map[string]any, error) // finisher
-func (b *BuilderM) One() (map[string]any, error) // finisher
-func (b *BuilderM) Insert(rowData map[string]any) (int, error) // finisher
-func (b *BuilderM) BulkInsert(rowsData ...map[string]any) (int, error) // finisher
-func (b *BuilderM) Set(query string, args ...any) (int, error) // finisher
-func (b *BuilderM) Delete() (int, error) // finisher
-func (b *BuilderM) Drop() (int, error) // finisher
-func Query(dbName string, statement string, args ...any) ([]map[string]interface{}, error) // finisher SQL Only
-func Exec(dbName, query string, args ...any) error // SQL Only
+// Debug print prepared statement and values for this operation
+func (b *BuilderM) Debug() *BuilderM
+// All get all data
+func (b *BuilderM) All() ([]map[string]any, error)
+// One get single row
+func (b *BuilderM) One() (map[string]any, error)
+// Insert add row to a table using input map, and return PK of the inserted row
+func (b *BuilderM) Insert(rowData map[string]any) (int, error)
+// InsertR add row to a table using input map, and return the inserted row
+func (b *BuilderM) InsertR(rowData map[string]any) (map[string]any, error)
+// BulkInsert insert many row at the same time in one query
+func (b *BuilderM) BulkInsert(rowsData ...map[string]any) ([]int, error)
+// Set used to update, Set("email,is_admin","example@mail.com",true) or Set("email = ? AND is_admin = ?","example@mail.com",true)
+func (b *BuilderM) Set(query string, args ...any) (int, error)
+// Delete data from database, can be multiple, depending on the where, return affected rows(Not every database or database driver may support affected rows)
+func (b *BuilderM) Delete() (int, error)
+// Drop drop table from db
+func (b *BuilderM) Drop() (int, error)
+// AddRelated used for many to many, and after korm.ManyToMany, to add a class to a student or a student to a class, class or student should exist in the database before adding them
+func (b *BuilderM) AddRelated(relatedTable string, whereRelatedTable string, whereRelatedArgs ...any) (int, error)
+// GetRelated used for many to many to get related classes to a student or related students to a class
+func (b *BuilderM) GetRelated(relatedTable string, dest *[]map[string]any) error
+// JoinRelated same as get, but it join data
+func (b *BuilderM) JoinRelated(relatedTable string, dest *[]map[string]any) error
+// DeleteRelated delete a relations many to many
+func (b *BuilderM) DeleteRelated(relatedTable string, whereRelatedTable string, whereRelatedArgs ...any) (int, error)
+
 
 Examples:
 

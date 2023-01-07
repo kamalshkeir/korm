@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/kamalshkeir/klog"
 	"github.com/kamalshkeir/kmap"
@@ -19,7 +20,8 @@ var (
 	errTableNotFound = errors.New("unable to find tableName")
 )
 
-type Builder[T comparable] struct {
+// BuilderS is query builder for struct using generics
+type BuilderS[T comparable] struct {
 	debug      bool
 	limit      int
 	page       int
@@ -36,7 +38,8 @@ type Builder[T comparable] struct {
 	ctx        context.Context
 }
 
-func Model[T comparable](tableName ...string) *Builder[T] {
+// Model is a starter for Buider
+func Model[T comparable](tableName ...string) *BuilderS[T] {
 	tName := getTableName[T]()
 	if tName == "" {
 		if len(tableName) > 0 {
@@ -46,13 +49,14 @@ func Model[T comparable](tableName ...string) *Builder[T] {
 			return nil
 		}
 	}
-	return &Builder[T]{
+	return &BuilderS[T]{
 		tableName: tName,
 		database:  databases[0].Name,
 	}
 }
 
-func (b *Builder[T]) Database(dbName string) *Builder[T] {
+// Database allow to choose database to execute query on
+func (b *BuilderS[T]) Database(dbName string) *BuilderS[T] {
 	b.database = dbName
 	db, err := GetMemoryDatabase(b.database)
 	if err != nil {
@@ -63,7 +67,8 @@ func (b *Builder[T]) Database(dbName string) *Builder[T] {
 	return b
 }
 
-func (b *Builder[T]) Insert(model *T) (int, error) {
+// Insert insert a row into a table and return inserted PK
+func (b *BuilderS[T]) Insert(model *T) (int, error) {
 	if b == nil || b.tableName == "" {
 		return 0, errTableNotFound
 	}
@@ -77,7 +82,7 @@ func (b *Builder[T]) Insert(model *T) (int, error) {
 		return 0, err
 	}
 
-	names, mvalues, _, mtags := getStructInfos(model, true)
+	names, mvalues, mTypes, mtags := getStructInfos(model, true)
 	values := []any{}
 	if len(names) < len(mvalues) {
 		return 0, errors.New("more values than fields")
@@ -90,12 +95,21 @@ func (b *Builder[T]) Insert(model *T) (int, error) {
 	}
 	placeholdersSlice := []string{}
 	ignored := []int{}
+	pk := ""
 	for i, name := range names {
 		if v, ok := mvalues[name]; ok {
 			if v == true {
 				v = 1
 			} else if v == false {
 				v = 0
+			}
+			if vvv, ok := mTypes[name]; ok && strings.HasSuffix(vvv, "Time") {
+				switch tyV := v.(type) {
+				case time.Time:
+					v = tyV.Format("2006-01-02 15:04:05")
+				case string:
+					v = strings.ReplaceAll(tyV, "T", " ")
+				}
 			}
 			values = append(values, v)
 		} else {
@@ -108,6 +122,7 @@ func (b *Builder[T]) Insert(model *T) (int, error) {
 			for _, tag := range tags {
 				switch tag {
 				case "autoinc", "pk", "-":
+					pk = name
 					ig = true
 				default:
 					if strings.Contains(tag, "m2m") {
@@ -123,7 +138,6 @@ func (b *Builder[T]) Insert(model *T) (int, error) {
 		} else {
 			placeholdersSlice = append(placeholdersSlice, "?")
 		}
-
 	}
 
 	cum := 0
@@ -136,7 +150,7 @@ func (b *Builder[T]) Insert(model *T) (int, error) {
 	}
 	placeholders := strings.Join(placeholdersSlice, ",")
 	fields_comma_separated := strings.Join(names, ",")
-	var affectedRows int
+
 	stat := strings.Builder{}
 	stat.WriteString("INSERT INTO " + b.tableName + " (")
 	stat.WriteString(fields_comma_separated)
@@ -145,32 +159,170 @@ func (b *Builder[T]) Insert(model *T) (int, error) {
 	stat.WriteString(")")
 	b.statement = stat.String()
 	adaptPlaceholdersToDialect(&b.statement, db.Dialect)
-	var res sql.Result
-	if b.ctx != nil {
-		res, err = db.Conn.ExecContext(b.ctx, b.statement, values...)
-	} else {
-		res, err = db.Conn.Exec(b.statement, values...)
-	}
-
 	if b.debug {
-		klog.Printf("%s,%s\n", b.statement, values)
+		klog.Printf("statement : %s, values : %s\n", b.statement, values)
 	}
-	if err != nil {
-		if b.debug {
-			klog.Printf("rderr:%v\n", err)
+	if db.Dialect != POSTGRES {
+		var res sql.Result
+		if b.ctx != nil {
+			res, err = db.Conn.ExecContext(b.ctx, b.statement, values...)
+		} else {
+			res, err = db.Conn.Exec(b.statement, values...)
 		}
-		return affectedRows, err
+		if err != nil {
+			return 0, err
+		}
+		rows, err := res.LastInsertId()
+		if err != nil {
+			return int(rows), err
+		}
+		return int(rows), nil
+	} else {
+		var id int
+		if b.ctx != nil {
+			err = db.Conn.QueryRowContext(b.ctx, b.statement+"RETURNING "+pk, values...).Scan(&id)
+		} else {
+			err = db.Conn.QueryRow(b.statement+"RETURNING "+pk, values...).Scan(&id)
+		}
+		if err != nil {
+			return id, err
+		}
+		return id, nil
 	}
-	rows, err := res.RowsAffected()
-	if err != nil {
-		return int(rows), err
-	}
-	return int(rows), nil
 }
 
-func (b *Builder[T]) BulkInsert(models ...*T) (int, error) {
+// InsertR add row to a table using input struct, and return the inserted row
+func (b *BuilderS[T]) InsertR(model *T) (T, error) {
 	if b == nil || b.tableName == "" {
-		return 0, errTableNotFound
+		return *new(T), errTableNotFound
+	}
+	if useCache {
+		cachebus.Publish(CACHE_TOPIC, map[string]any{
+			"type": "create",
+		})
+	}
+	db, err := GetMemoryDatabase(b.database)
+	if klog.CheckError(err) {
+		return *new(T), err
+	}
+
+	names, mvalues, mTypes, mtags := getStructInfos(model, true)
+	values := []any{}
+	if len(names) < len(mvalues) {
+		return *new(T), errors.New("more values than fields")
+	}
+	if onInsert != nil {
+		err := onInsert(b.database, b.tableName, mvalues)
+		if err != nil {
+			return *new(T), err
+		}
+	}
+	placeholdersSlice := []string{}
+	ignored := []int{}
+	pk := ""
+	for i, name := range names {
+		if v, ok := mvalues[name]; ok {
+			if v == true {
+				v = 1
+			} else if v == false {
+				v = 0
+			}
+			if vvv, ok := mTypes[name]; ok && strings.HasSuffix(vvv, "Time") {
+				switch tyV := v.(type) {
+				case time.Time:
+					v = tyV.Format("2006-01-02 15:04:05")
+				case string:
+					v = strings.ReplaceAll(tyV, "T", " ")
+				}
+			}
+			values = append(values, v)
+		} else {
+			klog.Printf("rd%vnot found in fields\n")
+			return *new(T), errors.New("field not found")
+		}
+
+		if tags, ok := mtags[name]; ok {
+			ig := false
+			for _, tag := range tags {
+				switch tag {
+				case "autoinc", "pk", "-":
+					pk = name
+					ig = true
+				default:
+					if strings.Contains(tag, "m2m") {
+						ig = true
+					}
+				}
+			}
+			if ig {
+				ignored = append(ignored, i)
+			} else {
+				placeholdersSlice = append(placeholdersSlice, "?")
+			}
+		} else {
+			placeholdersSlice = append(placeholdersSlice, "?")
+		}
+	}
+
+	cum := 0
+	for _, ign := range ignored {
+		ii := ign - cum
+		delete(mvalues, names[ii])
+		names = append(names[:ii], names[ii+1:]...)
+		values = append(values[:ii], values[ii+1:]...)
+		cum++
+	}
+	placeholders := strings.Join(placeholdersSlice, ",")
+	fields_comma_separated := strings.Join(names, ",")
+
+	stat := strings.Builder{}
+	stat.WriteString("INSERT INTO " + b.tableName + " (")
+	stat.WriteString(fields_comma_separated)
+	stat.WriteString(") VALUES (")
+	stat.WriteString(placeholders)
+	stat.WriteString(")")
+	b.statement = stat.String()
+	adaptPlaceholdersToDialect(&b.statement, db.Dialect)
+	if b.debug {
+		klog.Printf("statement : %s, values : %s\n", b.statement, values)
+	}
+	var id int
+	if db.Dialect != POSTGRES {
+		var res sql.Result
+		if b.ctx != nil {
+			res, err = db.Conn.ExecContext(b.ctx, b.statement, values...)
+		} else {
+			res, err = db.Conn.Exec(b.statement, values...)
+		}
+		if err != nil {
+			return *new(T), err
+		}
+		rows, err := res.LastInsertId()
+		if err != nil {
+			return *new(T), err
+		}
+		id = int(rows)
+	} else {
+		if b.ctx != nil {
+			err = db.Conn.QueryRowContext(b.ctx, b.statement+"RETURNING "+pk, values...).Scan(&id)
+		} else {
+			err = db.Conn.QueryRow(b.statement+"RETURNING "+pk, values...).Scan(&id)
+		}
+		if err != nil {
+			return *new(T), err
+		}
+	}
+	m, err := Model[T]().Where(pk+"=?", id).One()
+	if err != nil {
+		return *new(T), err
+	}
+	return m, nil
+}
+
+// BulkInsert insert many row at the same time in one query
+func (b *BuilderS[T]) BulkInsert(models ...*T) ([]int, error) {
+	if b == nil || b.tableName == "" {
+		return nil, errTableNotFound
 	}
 	if useCache {
 		cachebus.Publish(CACHE_TOPIC, map[string]any{
@@ -179,21 +331,23 @@ func (b *Builder[T]) BulkInsert(models ...*T) (int, error) {
 	}
 	db, err := GetMemoryDatabase(b.database)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	tx, err := db.Conn.BeginTx(context.Background(), &sql.TxOptions{})
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
+	ids := []int{}
+	pk := ""
 	for mm := range models {
-		names, mvalues, _, mtags := getStructInfos(models[mm], true)
+		names, mvalues, mTypes, mtags := getStructInfos(models[mm], true)
 		if len(names) < len(mvalues) {
-			return 0, errors.New("more values than fields")
+			return nil, errors.New("more values than fields")
 		}
 		if onInsert != nil {
 			err := onInsert(b.database, b.tableName, mvalues)
 			if err != nil {
-				return 0, err
+				return nil, err
 			}
 		}
 		placeholdersSlice := []string{}
@@ -206,10 +360,17 @@ func (b *Builder[T]) BulkInsert(models ...*T) (int, error) {
 				} else if v == false {
 					v = 0
 				}
+				if fType, ok := mTypes[name]; ok && strings.HasSuffix(fType, "Time") {
+					switch tyV := v.(type) {
+					case time.Time:
+						v = tyV.Format("2006-01-02 15:04:05")
+					case string:
+						v = strings.ReplaceAll(tyV, "T", " ")
+					}
+				}
 				values = append(values, v)
 			} else {
-				klog.Printf("rd%vnot found in fields\n")
-				return 0, errors.New("field not found")
+				return nil, fmt.Errorf("field value not found")
 			}
 
 			if tags, ok := mtags[name]; ok {
@@ -218,6 +379,7 @@ func (b *Builder[T]) BulkInsert(models ...*T) (int, error) {
 					switch tag {
 					case "autoinc", "pk", "-":
 						ig = true
+						pk = name
 					default:
 						if strings.Contains(tag, "m2m") {
 							ig = true
@@ -254,36 +416,48 @@ func (b *Builder[T]) BulkInsert(models ...*T) (int, error) {
 		if b.debug {
 			klog.Printf("%s,%s\n", statem, values)
 		}
-		var res sql.Result
-		if b.ctx != nil {
-			res, err = tx.ExecContext(b.ctx, statem, values...)
+
+		if db.Dialect != POSTGRES {
+			var res sql.Result
+			if b.ctx != nil {
+				res, err = db.Conn.ExecContext(b.ctx, statem, values...)
+			} else {
+				res, err = db.Conn.Exec(statem, values...)
+			}
+			if err != nil {
+				errRoll := tx.Rollback()
+				if errRoll != nil {
+					return nil, errRoll
+				}
+				return nil, err
+			}
+			idInserted, err := res.LastInsertId()
+			if err != nil {
+				return ids, err
+			}
+			ids = append(ids, int(idInserted))
 		} else {
-			res, err = tx.Exec(statem, values...)
-		}
-		if err != nil {
-			errRoll := tx.Rollback()
-			if errRoll != nil {
-				return 0, errRoll
+			var idInserted int
+			if b.ctx != nil {
+				err = db.Conn.QueryRowContext(b.ctx, statem+"RETURNING "+pk, values...).Scan(&idInserted)
+			} else {
+				err = db.Conn.QueryRow(statem+"RETURNING "+pk, values...).Scan(&idInserted)
 			}
-			return 0, err
-		}
-		rows, err := res.RowsAffected()
-		if err != nil {
-			errRoll := tx.Rollback()
-			if errRoll != nil {
-				return 0, errRoll
+			if err != nil {
+				return ids, err
 			}
-			return int(rows), err
+			ids = append(ids, idInserted)
 		}
 	}
 	err = tx.Commit()
 	if err != nil {
-		return 0, err
+		return ids, err
 	}
-	return len(models), nil
+	return ids, nil
 }
 
-func (b *Builder[T]) AddRelated(relatedTable string, whereRelatedTable string, whereRelatedArgs ...any) (int, error) {
+// AddRelated used for many to many, and after korm.ManyToMany, to add a class to a student or a student to a class, class or student should exist in the database before adding them
+func (b *BuilderS[T]) AddRelated(relatedTable string, whereRelatedTable string, whereRelatedArgs ...any) (int, error) {
 	if b == nil || b.tableName == "" {
 		return 0, errTableNotFound
 	}
@@ -388,7 +562,8 @@ func (b *Builder[T]) AddRelated(relatedTable string, whereRelatedTable string, w
 	return 1, nil
 }
 
-func (b *Builder[T]) DeleteRelated(relatedTable string, whereRelatedTable string, whereRelatedArgs ...any) (int, error) {
+// DeleteRelated delete a relations many to many
+func (b *BuilderS[T]) DeleteRelated(relatedTable string, whereRelatedTable string, whereRelatedArgs ...any) (int, error) {
 	if b == nil || b.tableName == "" {
 		return 0, errTableNotFound
 	}
@@ -459,7 +634,8 @@ func (b *Builder[T]) DeleteRelated(relatedTable string, whereRelatedTable string
 	return n, nil
 }
 
-func (b *Builder[T]) GetRelated(relatedTable string, dest any) error {
+// GetRelated used for many to many to get related classes to a student or related students to a class
+func (b *BuilderS[T]) GetRelated(relatedTable string, dest any) error {
 	if b == nil || b.tableName == "" {
 		return errTableNotFound
 	}
@@ -524,7 +700,8 @@ func (b *Builder[T]) GetRelated(relatedTable string, dest any) error {
 	return nil
 }
 
-func (b *Builder[T]) JoinRelated(relatedTable string, dest any) error {
+// JoinRelated same as get, but it join data
+func (b *BuilderS[T]) JoinRelated(relatedTable string, dest any) error {
 	if b == nil || b.tableName == "" {
 		return errTableNotFound
 	}
@@ -592,8 +769,8 @@ func (b *Builder[T]) JoinRelated(relatedTable string, dest any) error {
 	return nil
 }
 
-// Set usage: Set("email,is_admin","example@mail.com",true) or Set("email = ? AND is_admin = ?","example@mail.com",true)
-func (b *Builder[T]) Set(query string, args ...any) (int, error) {
+// Set used to update, Set("email,is_admin","example@mail.com",true) or Set("email = ? AND is_admin = ?","example@mail.com",true)
+func (b *BuilderS[T]) Set(query string, args ...any) (int, error) {
 	if b == nil || b.tableName == "" {
 		return 0, errTableNotFound
 	}
@@ -659,7 +836,8 @@ func (b *Builder[T]) Set(query string, args ...any) (int, error) {
 	return int(aff), nil
 }
 
-func (b *Builder[T]) Delete() (int, error) {
+// Delete data from database, can be multiple, depending on the where, return affected rows(Not every database or database driver may support affected rows)
+func (b *BuilderS[T]) Delete() (int, error) {
 	if b == nil || b.tableName == "" {
 		return 0, errTableNotFound
 	}
@@ -708,7 +886,8 @@ func (b *Builder[T]) Delete() (int, error) {
 	return int(affectedRows), nil
 }
 
-func (b *Builder[T]) Drop() (int, error) {
+// Drop drop table from db
+func (b *BuilderS[T]) Drop() (int, error) {
 	if b == nil || b.tableName == "" {
 		return 0, errTableNotFound
 	}
@@ -746,13 +925,14 @@ func (b *Builder[T]) Drop() (int, error) {
 }
 
 // Select usage: Select("email","password")
-func (b *Builder[T]) Select(columns ...string) *Builder[T] {
+func (b *BuilderS[T]) Select(columns ...string) *BuilderS[T] {
 	b.selected = strings.Join(columns, ",")
 	b.order = append(b.order, "select")
 	return b
 }
 
-func (b *Builder[T]) Where(query string, args ...any) *Builder[T] {
+// Where can be like : Where("id > ?",1) or Where("id",1) = Where("id = ?",1)
+func (b *BuilderS[T]) Where(query string, args ...any) *BuilderS[T] {
 	adaptWhereQuery(&query, b.tableName)
 	adaptTrueFalseArgs(&args)
 	b.whereQuery = query
@@ -761,7 +941,8 @@ func (b *Builder[T]) Where(query string, args ...any) *Builder[T] {
 	return b
 }
 
-func (b *Builder[T]) Query(query string, args ...any) *Builder[T] {
+// Query can be used like: Query("select * from table") or Query("select * from table where col like '?'","%something%")
+func (b *BuilderS[T]) Query(query string, args ...any) *BuilderS[T] {
 	b.query = query
 	adaptTrueFalseArgs(&args)
 	b.args = append(b.args, args...)
@@ -769,24 +950,28 @@ func (b *Builder[T]) Query(query string, args ...any) *Builder[T] {
 	return b
 }
 
-func (b *Builder[T]) Limit(limit int) *Builder[T] {
+// Limit set limit
+func (b *BuilderS[T]) Limit(limit int) *BuilderS[T] {
 	b.limit = limit
 	b.order = append(b.order, "limit")
 	return b
 }
 
-func (b *Builder[T]) Context(ctx context.Context) *Builder[T] {
+// Context allow to query or execute using ctx
+func (b *BuilderS[T]) Context(ctx context.Context) *BuilderS[T] {
 	b.ctx = ctx
 	return b
 }
 
-func (b *Builder[T]) Page(pageNumber int) *Builder[T] {
+// Page return paginated elements using Limit for specific page
+func (b *BuilderS[T]) Page(pageNumber int) *BuilderS[T] {
 	b.page = pageNumber
 	b.order = append(b.order, "page")
 	return b
 }
 
-func (b *Builder[T]) OrderBy(fields ...string) *Builder[T] {
+// OrderBy can be used like: OrderBy("-id","-email") OrderBy("id","-email") OrderBy("+id","email")
+func (b *BuilderS[T]) OrderBy(fields ...string) *BuilderS[T] {
 	b.orderBys = "ORDER BY "
 	orders := []string{}
 
@@ -822,12 +1007,14 @@ func (b *Builder[T]) OrderBy(fields ...string) *Builder[T] {
 	return b
 }
 
-func (b *Builder[T]) Debug() *Builder[T] {
+// Debug print prepared statement and values for this operation
+func (b *BuilderS[T]) Debug() *BuilderS[T] {
 	b.debug = true
 	return b
 }
 
-func (b *Builder[T]) All() ([]T, error) {
+// All get all data
+func (b *BuilderS[T]) All() ([]T, error) {
 	if b == nil || b.tableName == "" {
 		return nil, errTableNotFound
 	}
@@ -892,7 +1079,8 @@ func (b *Builder[T]) All() ([]T, error) {
 	return models, nil
 }
 
-func (b *Builder[T]) One() (T, error) {
+// One get single row
+func (b *BuilderS[T]) One() (T, error) {
 	if b == nil || b.tableName == "" {
 		return *new(T), errTableNotFound
 	}
@@ -958,7 +1146,7 @@ func (b *Builder[T]) One() (T, error) {
 	return models[0], nil
 }
 
-func (b *Builder[T]) queryS(query string, args ...any) ([]T, error) {
+func (b *BuilderS[T]) queryS(query string, args ...any) ([]T, error) {
 	if b == nil || b.tableName == "" {
 		return nil, errTableNotFound
 	}

@@ -54,7 +54,7 @@ func autoMigrate[T comparable](db *DatabaseEntity, tableName string, execute boo
 		fname := typeOfT.Field(i).Name
 		fname = kstrct.ToSnakeCase(fname)
 		ftype := f.Type()
-		mFieldName_Type[fname] = ftype.Name()
+		mFieldName_Type[fname] = ftype.String()
 		if ftag, ok := typeOfT.Field(i).Tag.Lookup("korm"); ok {
 			tags := strings.Split(ftag, ";")
 			for i, tag := range tags {
@@ -104,15 +104,15 @@ func autoMigrate[T comparable](db *DatabaseEntity, tableName string, execute boo
 				uindexes: &uindexes,
 			}
 			switch ty {
-			case "int", "uint", "int64", "uint64", "int32", "uint32":
+			case "int", "uint", "int64", "uint64", "int32", "uint32", "*int", "*uint", "*int64", "*uint64", "*int32", "*uint32":
 				handleMigrationInt(mi)
-			case "bool":
+			case "bool", "*bool":
 				handleMigrationBool(mi)
-			case "string":
+			case "string", "*string":
 				handleMigrationString(mi)
-			case "float64", "float32":
+			case "float64", "float32", "*float64", "*float32":
 				handleMigrationFloat(mi)
-			case "Time":
+			case "time.Time", "*time.Time":
 				handleMigrationTime(mi)
 			default:
 				isM2M := false

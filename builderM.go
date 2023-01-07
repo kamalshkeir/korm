@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/kamalshkeir/klog"
 	"github.com/kamalshkeir/kstrct"
@@ -15,6 +16,7 @@ import (
 
 var setReplacer = strings.NewReplacer("=", "", "?", "")
 
+// BuilderM is query builder map string any
 type BuilderM struct {
 	debug      bool
 	limit      int
@@ -32,6 +34,7 @@ type BuilderM struct {
 	ctx        context.Context
 }
 
+// Table is a starter for BuiderM
 func Table(tableName string) *BuilderM {
 	return &BuilderM{
 		tableName: tableName,
@@ -39,17 +42,20 @@ func Table(tableName string) *BuilderM {
 	}
 }
 
+// Database allow to choose database to execute query on
 func (b *BuilderM) Database(dbName string) *BuilderM {
 	b.database = dbName
 	return b
 }
 
+// Select select table columns to return
 func (b *BuilderM) Select(columns ...string) *BuilderM {
 	b.selected = strings.Join(columns, ",")
 	b.order = append(b.order, "select")
 	return b
 }
 
+// Where can be like: Where("id > ?",1) or Where("id",1) = Where("id = ?",1)
 func (b *BuilderM) Where(query string, args ...any) *BuilderM {
 	adaptWhereQuery(&query, b.tableName)
 	adaptTrueFalseArgs(&args)
@@ -59,6 +65,7 @@ func (b *BuilderM) Where(query string, args ...any) *BuilderM {
 	return b
 }
 
+// Query can be used like: Query("select * from table") or Query("select * from table where col like '?'","%something%")
 func (b *BuilderM) Query(query string, args ...any) *BuilderM {
 	b.query = query
 	adaptTrueFalseArgs(&args)
@@ -67,6 +74,7 @@ func (b *BuilderM) Query(query string, args ...any) *BuilderM {
 	return b
 }
 
+// Limit set limit
 func (b *BuilderM) Limit(limit int) *BuilderM {
 	if b.tableName == "" {
 		klog.Printf("rdUse db.Table before Limit\n")
@@ -77,6 +85,7 @@ func (b *BuilderM) Limit(limit int) *BuilderM {
 	return b
 }
 
+// Page return paginated elements using Limit for specific page
 func (b *BuilderM) Page(pageNumber int) *BuilderM {
 	if b.tableName == "" {
 		klog.Printf("rdUse db.Table before Page\n")
@@ -87,6 +96,7 @@ func (b *BuilderM) Page(pageNumber int) *BuilderM {
 	return b
 }
 
+// OrderBy can be used like: OrderBy("-id","-email") OrderBy("id","-email") OrderBy("+id","email")
 func (b *BuilderM) OrderBy(fields ...string) *BuilderM {
 	if b.tableName == "" {
 		klog.Printf("rdUse db.Table before OrderBy\n")
@@ -126,6 +136,7 @@ func (b *BuilderM) OrderBy(fields ...string) *BuilderM {
 	return b
 }
 
+// Context allow to query or execute using ctx
 func (b *BuilderM) Context(ctx context.Context) *BuilderM {
 	if b.tableName == "" {
 		klog.Printf("rdUse db.Table before Context\n")
@@ -135,6 +146,7 @@ func (b *BuilderM) Context(ctx context.Context) *BuilderM {
 	return b
 }
 
+// Debug print prepared statement and values for this operation
 func (b *BuilderM) Debug() *BuilderM {
 	if b.tableName == "" {
 		klog.Printf("rdUse db.Table before Debug\n")
@@ -144,6 +156,7 @@ func (b *BuilderM) Debug() *BuilderM {
 	return b
 }
 
+// All get all data
 func (b *BuilderM) All() ([]map[string]any, error) {
 	if b.tableName == "" {
 		return nil, errors.New("unable to find table, try db.Table before")
@@ -210,6 +223,7 @@ func (b *BuilderM) All() ([]map[string]any, error) {
 	return models, nil
 }
 
+// One get single row
 func (b *BuilderM) One() (map[string]any, error) {
 	if b.tableName == "" {
 		return nil, errors.New("unable to find table, try db.Table before")
@@ -272,9 +286,15 @@ func (b *BuilderM) One() (map[string]any, error) {
 	return models[0], nil
 }
 
+// Insert add row to a table using input map, and return PK of the inserted row
 func (b *BuilderM) Insert(rowData map[string]any) (int, error) {
 	if b.tableName == "" {
 		return 0, errors.New("unable to find table, try db.Table before")
+	}
+	if useCache {
+		cachebus.Publish(CACHE_TOPIC, map[string]any{
+			"type": "create",
+		})
 	}
 	if onInsert != nil {
 		err := onInsert(b.database, b.tableName, rowData)
@@ -283,15 +303,17 @@ func (b *BuilderM) Insert(rowData map[string]any) (int, error) {
 		}
 
 	}
-	if useCache {
-		cachebus.Publish(CACHE_TOPIC, map[string]any{
-			"type": "create",
-		})
-	}
-
 	db, err := GetMemoryDatabase(b.database)
 	if err != nil {
 		return 0, err
+	}
+	pk := ""
+	var tbmem TableEntity
+	for _, t := range db.Tables {
+		if t.Name == b.tableName {
+			pk = t.Pk
+			tbmem = t
+		}
 	}
 
 	placeholdersSlice := []string{}
@@ -313,12 +335,20 @@ func (b *BuilderM) Insert(rowData map[string]any) (int, error) {
 		} else if v == false {
 			v = 0
 		}
+
+		if vvv, ok := tbmem.ModelTypes[k]; ok && strings.HasSuffix(vvv, "Time") {
+			switch tyV := v.(type) {
+			case time.Time:
+				v = tyV.Format("2006-01-02 15:04:05")
+			case string:
+				v = strings.ReplaceAll(tyV, "T", " ")
+			}
+		}
+
 		values = append(values, v)
 		count++
 	}
 	placeholders := strings.Join(placeholdersSlice, ",")
-	var affectedRows int
-
 	stat := strings.Builder{}
 	stat.WriteString("INSERT INTO " + b.tableName + " (")
 	stat.WriteString(strings.Join(keys, ","))
@@ -326,29 +356,150 @@ func (b *BuilderM) Insert(rowData map[string]any) (int, error) {
 	stat.WriteString(placeholders)
 	stat.WriteString(")")
 	statement := stat.String()
-	var res sql.Result
-	if b.ctx != nil {
-		res, err = db.Conn.ExecContext(b.ctx, statement, values...)
-	} else {
-		res, err = db.Conn.Exec(statement, values...)
+	if b.debug {
+		klog.Printf("statement : %s, values : %v\n", statement, values)
 	}
-	if err != nil {
-		if b.debug {
-			klog.Printf("ylstatement: %s\nvalues: %v \n", statement, values)
-			klog.Printf("rderr:%v\n", err)
+	var id int
+	if db.Dialect != POSTGRES {
+		var res sql.Result
+		if b.ctx != nil {
+			res, err = db.Conn.ExecContext(b.ctx, statement, values...)
+		} else {
+			res, err = db.Conn.Exec(statement, values...)
 		}
-		return affectedRows, err
+		if err != nil {
+			return 0, err
+		}
+		rows, err := res.LastInsertId()
+		if err != nil {
+			id = -1
+		} else {
+			id = int(rows)
+		}
+	} else {
+		if b.ctx != nil {
+			err = db.Conn.QueryRowContext(b.ctx, statement+"RETURNING "+pk, values...).Scan(&id)
+		} else {
+			err = db.Conn.QueryRow(statement+"RETURNING "+pk, values...).Scan(&id)
+		}
+		if err != nil {
+			id = -1
+		}
 	}
-	rows, err := res.RowsAffected()
-	if err != nil {
-		return int(rows), err
-	}
-	return int(rows), nil
+	return id, nil
 }
 
-func (b *BuilderM) BulkInsert(rowsData ...map[string]any) (int, error) {
+// InsertR add row to a table using input map, and return the inserted row
+func (b *BuilderM) InsertR(rowData map[string]any) (map[string]any, error) {
 	if b.tableName == "" {
-		return 0, errors.New("unable to find table, try db.Table before")
+		return nil, errors.New("unable to find table, try db.Table before")
+	}
+	if useCache {
+		cachebus.Publish(CACHE_TOPIC, map[string]any{
+			"type": "create",
+		})
+	}
+	if onInsert != nil {
+		err := onInsert(b.database, b.tableName, rowData)
+		if err != nil {
+			return nil, err
+		}
+
+	}
+	db, err := GetMemoryDatabase(b.database)
+	if err != nil {
+		return nil, err
+	}
+	pk := ""
+	var tbmem TableEntity
+	for _, t := range db.Tables {
+		if t.Name == b.tableName {
+			pk = t.Pk
+			tbmem = t
+		}
+	}
+
+	placeholdersSlice := []string{}
+	keys := []string{}
+	values := []any{}
+	count := 0
+	for k, v := range rowData {
+		switch db.Dialect {
+		case POSTGRES, SQLITE:
+			placeholdersSlice = append(placeholdersSlice, "$"+strconv.Itoa(count+1))
+		case MYSQL, MARIA, "mariadb":
+			placeholdersSlice = append(placeholdersSlice, "?")
+		default:
+			return nil, errors.New("database is neither sqlite, postgres or mysql")
+		}
+		keys = append(keys, k)
+		if v == true {
+			v = 1
+		} else if v == false {
+			v = 0
+		}
+
+		if vvv, ok := tbmem.ModelTypes[k]; ok && strings.HasSuffix(vvv, "Time") {
+			switch tyV := v.(type) {
+			case time.Time:
+				v = tyV.Format("2006-01-02 15:04:05")
+			case string:
+				v = strings.ReplaceAll(tyV, "T", " ")
+			}
+		}
+
+		values = append(values, v)
+		count++
+	}
+	placeholders := strings.Join(placeholdersSlice, ",")
+	stat := strings.Builder{}
+	stat.WriteString("INSERT INTO " + b.tableName + " (")
+	stat.WriteString(strings.Join(keys, ","))
+	stat.WriteString(") VALUES (")
+	stat.WriteString(placeholders)
+	stat.WriteString(")")
+	statement := stat.String()
+	if b.debug {
+		klog.Printf("statement : %s, values : %v\n", statement, values)
+	}
+	var id int
+	if db.Dialect != POSTGRES {
+		var res sql.Result
+		if b.ctx != nil {
+			res, err = db.Conn.ExecContext(b.ctx, statement, values...)
+		} else {
+			res, err = db.Conn.Exec(statement, values...)
+		}
+		if err != nil {
+			return nil, err
+		}
+		rows, err := res.LastInsertId()
+		if err != nil {
+			id = -1
+		} else {
+			id = int(rows)
+		}
+	} else {
+		if b.ctx != nil {
+			err = db.Conn.QueryRowContext(b.ctx, statement+"RETURNING "+pk, values...).Scan(&id)
+		} else {
+			err = db.Conn.QueryRow(statement+"RETURNING "+pk, values...).Scan(&id)
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	m, err := Table(b.tableName).Where(pk+"= ?", id).One()
+	if err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// BulkInsert insert many row at the same time in one query
+func (b *BuilderM) BulkInsert(rowsData ...map[string]any) ([]int, error) {
+	if b.tableName == "" {
+		return nil, errors.New("unable to find table, try db.Table before")
 	}
 	if useCache {
 		cachebus.Publish(CACHE_TOPIC, map[string]any{
@@ -358,19 +509,27 @@ func (b *BuilderM) BulkInsert(rowsData ...map[string]any) (int, error) {
 
 	db, err := GetMemoryDatabase(b.database)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
 	tx, err := db.Conn.BeginTx(context.Background(), &sql.TxOptions{})
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-
+	ids := []int{}
+	pk := ""
+	var tbmem TableEntity
+	for _, t := range db.Tables {
+		if t.Name == b.tableName {
+			pk = t.Pk
+			tbmem = t
+		}
+	}
 	for ii := range rowsData {
 		if onInsert != nil {
 			err := onInsert(b.database, b.tableName, rowsData[ii])
 			if err != nil {
-				return 0, err
+				return nil, err
 			}
 		}
 		placeholdersSlice := []string{}
@@ -384,13 +543,21 @@ func (b *BuilderM) BulkInsert(rowsData ...map[string]any) (int, error) {
 			case MYSQL, MARIA, "mariadb":
 				placeholdersSlice = append(placeholdersSlice, "?")
 			default:
-				return 0, errors.New("database is neither sqlite, postgres or mysql")
+				return nil, errors.New("database is neither sqlite, postgres or mysql")
 			}
 			keys = append(keys, k)
 			if v == true {
 				v = 1
 			} else if v == false {
 				v = 0
+			}
+			if vvv, ok := tbmem.ModelTypes[k]; ok && strings.HasSuffix(vvv, "Time") {
+				switch tyV := v.(type) {
+				case time.Time:
+					v = tyV.Format("2006-01-02 15:04:05")
+				case string:
+					v = strings.ReplaceAll(tyV, "T", " ")
+				}
 			}
 			values = append(values, v)
 			count++
@@ -404,39 +571,49 @@ func (b *BuilderM) BulkInsert(rowsData ...map[string]any) (int, error) {
 		stat.WriteString(placeholders)
 		stat.WriteString(")")
 		statement := stat.String()
-		var res sql.Result
 		if b.debug {
 			klog.Printf("%s,%s\n", statement, values)
 		}
-		if b.ctx != nil {
-			res, err = tx.ExecContext(b.ctx, statement, values...)
+		if db.Dialect != POSTGRES {
+			var res sql.Result
+			if b.ctx != nil {
+				res, err = db.Conn.ExecContext(b.ctx, statement, values...)
+			} else {
+				res, err = db.Conn.Exec(statement, values...)
+			}
+			if err != nil {
+				errRoll := tx.Rollback()
+				if errRoll != nil {
+					return nil, errRoll
+				}
+				return nil, err
+			}
+			idInserted, err := res.LastInsertId()
+			if err != nil {
+				return ids, err
+			}
+			ids = append(ids, int(idInserted))
 		} else {
-			res, err = tx.Exec(statement, values...)
-		}
-		if err != nil {
-			errRoll := tx.Rollback()
-			if errRoll != nil {
-				return 0, errRoll
+			var idInserted int
+			if b.ctx != nil {
+				err = db.Conn.QueryRowContext(b.ctx, statement+"RETURNING "+pk, values...).Scan(&idInserted)
+			} else {
+				err = db.Conn.QueryRow(statement+"RETURNING "+pk, values...).Scan(&idInserted)
 			}
-			return 0, err
-		}
-		_, err := res.RowsAffected()
-		if err != nil {
-			errRoll := tx.Rollback()
-			if errRoll != nil {
-				return 0, errRoll
+			if err != nil {
+				return ids, err
 			}
-			return 0, err
+			ids = append(ids, idInserted)
 		}
 	}
-
 	err = tx.Commit()
 	if err != nil {
-		return 0, err
+		return ids, err
 	}
-	return len(rowsData), nil
+	return ids, nil
 }
 
+// Set used to update, Set("email,is_admin","example@mail.com",true) or Set("email = ? AND is_admin = ?","example@mail.com",true)
 func (b *BuilderM) Set(query string, args ...any) (int, error) {
 	if b.tableName == "" {
 		return 0, errors.New("unable to find model, try db.Table before")
@@ -502,6 +679,7 @@ func (b *BuilderM) Set(query string, args ...any) (int, error) {
 	return int(aff), nil
 }
 
+// Delete data from database, can be multiple, depending on the where, return affected rows(Not every database or database driver may support affected rows)
 func (b *BuilderM) Delete() (int, error) {
 	if b.tableName == "" {
 		return 0, errors.New("unable to find model, try korm.AutoMigrate before")
@@ -550,6 +728,7 @@ func (b *BuilderM) Delete() (int, error) {
 	return int(affectedRows), nil
 }
 
+// Drop drop table from db
 func (b *BuilderM) Drop() (int, error) {
 	if b.tableName == "" {
 		return 0, errors.New("unable to find model, try korm.LinkModel before Update")
@@ -644,6 +823,7 @@ func (b *BuilderM) queryM(statement string, args ...any) ([]map[string]interface
 	return listMap, nil
 }
 
+// AddRelated used for many to many, and after korm.ManyToMany, to add a class to a student or a student to a class, class or student should exist in the database before adding them
 func (b *BuilderM) AddRelated(relatedTable string, whereRelatedTable string, whereRelatedArgs ...any) (int, error) {
 	if b.tableName == "" {
 		return 0, errors.New("unable to find model, try korm.AutoMigrate before")
@@ -749,6 +929,7 @@ func (b *BuilderM) AddRelated(relatedTable string, whereRelatedTable string, whe
 	return 1, nil
 }
 
+// GetRelated used for many to many to get related classes to a student or related students to a class
 func (b *BuilderM) GetRelated(relatedTable string, dest *[]map[string]any) error {
 	if b.tableName == "" {
 		return errors.New("unable to find model, try db.Table before")
@@ -819,6 +1000,7 @@ func (b *BuilderM) GetRelated(relatedTable string, dest *[]map[string]any) error
 	return nil
 }
 
+// JoinRelated same as get, but it join data
 func (b *BuilderM) JoinRelated(relatedTable string, dest *[]map[string]any) error {
 	if b.tableName == "" {
 		return errors.New("unable to find model, try db.Table before")
@@ -888,6 +1070,7 @@ func (b *BuilderM) JoinRelated(relatedTable string, dest *[]map[string]any) erro
 	return nil
 }
 
+// DeleteRelated delete a relations many to many
 func (b *BuilderM) DeleteRelated(relatedTable string, whereRelatedTable string, whereRelatedArgs ...any) (int, error) {
 	if b.tableName == "" {
 		return 0, errors.New("unable to find model, try db.Table before")

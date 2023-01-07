@@ -2,6 +2,7 @@ package korm
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -29,11 +30,11 @@ func TestMain(m *testing.M) {
 }
 
 type TestUser struct {
-	Id        uint   `korm:"pk"`
-	Uuid      string `korm:"size:40;iunique"`
-	Email     string `korm:"size:100;iunique"`
+	Id        *uint   `korm:"pk"`
+	Uuid      string  `korm:"size:40;iunique"`
+	Email     *string `korm:"size:100;iunique"`
 	Password  string
-	IsAdmin   bool
+	IsAdmin   *bool
 	CreatedAt time.Time `korm:"now"`
 	UpdatedAt time.Time `korm:"update"`
 }
@@ -102,11 +103,13 @@ func TestManyToMany(t *testing.T) {
 func TestInsertUsersAndGroups(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		iString := strconv.Itoa(i)
+		email := "user-" + iString + "@example.com"
+		admin := true
 		_, err := Model[TestUser]().Insert(&TestUser{
 			Uuid:      GenerateUUID(),
-			Email:     "user-" + iString + "@example.com",
+			Email:     &email,
 			Password:  "dqdqd",
-			IsAdmin:   true,
+			IsAdmin:   &admin,
 			CreatedAt: time.Now(),
 		})
 		if err != nil {
@@ -200,11 +203,13 @@ func TestJoinRelatedM(t *testing.T) {
 
 func TestInsertForeignKeyShouldError(t *testing.T) {
 	for i := 0; i < 10; i++ {
+		email := "user-0@example.com"
+		admin := true
 		_, err := Model[TestUser]().Insert(&TestUser{
 			Uuid:      GenerateUUID(),
-			Email:     "user-0@example.com",
+			Email:     &email,
 			Password:  "dqdqd",
-			IsAdmin:   true,
+			IsAdmin:   &admin,
 			CreatedAt: time.Now(),
 		})
 		if err == nil {
@@ -237,6 +242,7 @@ func TestGetAll(t *testing.T) {
 	if len(u) != 20 {
 		t.Error("len not 20")
 	}
+	fmt.Println(u[0])
 }
 
 func TestGetAllM(t *testing.T) {
@@ -284,7 +290,7 @@ func TestGetOne(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if !u.IsAdmin || u.Email == "" || u.CreatedAt.IsZero() || u.Uuid == "" {
+	if !*u.IsAdmin || *u.Email == "" || u.CreatedAt.IsZero() || u.Uuid == "" {
 		t.Error("wrong data:", u)
 	}
 }
@@ -304,7 +310,7 @@ func TestGetOneWithDebug(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if !u.IsAdmin || u.Email == "" || u.CreatedAt.IsZero() || u.Uuid == "" {
+	if !*u.IsAdmin || *u.Email == "" || u.CreatedAt.IsZero() || u.Uuid == "" {
 		t.Error("wrong data:", u)
 	}
 }
@@ -324,7 +330,7 @@ func TestOrderBy(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if (len(u) > 1 && u[0].Id < u[1].Id) || !u[0].IsAdmin || u[0].Email == "" || u[0].CreatedAt.IsZero() || u[0].Uuid == "" {
+	if (len(u) > 1 && *(u[0]).Id < *(u[1]).Id) || !*(u[0]).IsAdmin || *(u[0]).Email == "" || u[0].CreatedAt.IsZero() || u[0].Uuid == "" {
 		t.Error("wrong data:", u[0], u[0].CreatedAt.IsZero())
 	}
 }
@@ -344,7 +350,7 @@ func TestPagination(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if len(u) != 5 || u[0].Id != 6 {
+	if len(u) != 5 || *(u[0]).Id != 6 {
 		t.Error("wrong data:", u[0])
 	}
 }
@@ -404,7 +410,7 @@ func TestSelect(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if len(u) != 20 || !u[0].CreatedAt.IsZero() || u[0].Email == "" || u[0].Password != "" {
+	if len(u) != 20 || !u[0].CreatedAt.IsZero() || *u[0].Email == "" || u[0].Password != "" {
 		t.Error("wrong data:", u[0])
 	}
 }
@@ -452,8 +458,8 @@ func TestUpdateSet(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if u.Email != updatedEmail {
-		t.Errorf("expect %s got %s", updatedEmail, u.Email)
+	if *u.Email != updatedEmail {
+		t.Errorf("expect %s got %v", updatedEmail, u.Email)
 	}
 }
 
@@ -470,8 +476,8 @@ func TestUpdateSetM(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if u.Email != updatedEmail {
-		t.Errorf("expect %s got %s", updatedEmail, u.Email)
+	if *u.Email != updatedEmail {
+		t.Errorf("expect %s got %v", updatedEmail, u.Email)
 	}
 }
 
