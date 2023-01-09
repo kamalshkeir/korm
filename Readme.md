@@ -38,7 +38,7 @@
 
 ##### You have full control on the data came in and go out, you can check the example below [NetworkBus](#example-with-bus-between-2-korm)
 
-### It Have :
+### It Has :
 - New: [Hooks](#hooks) : OnInsert OnSet OnDelete and OnDrop
 - Simple [API](#api)
 - [Admin dashboard](#example-with-dashboard) CRUD
