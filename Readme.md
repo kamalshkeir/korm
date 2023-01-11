@@ -30,7 +30,7 @@
 ---
 ### KORM is an elegant and blazingly fast ORM, see [Benchmarks](#benchmarks), it use go generics 1.18 and a network bus.
 
-### Easily composable, you can combine it with a Server Bus using [WithBus](#example-with-bus-between-2-korm) when you want to scale or just synchronise your data between multiple database or [WithDashboard](#example-with-dashboard-you-dont-need-kormwithbus-with-it-because-withdashboard-already-call-it-and-return-the-server-bus-for-you) to have an admin panel and all the rest.
+### Easily composable, you can combine it with a Server Bus using [WithBus](#example-with-bus-between-2-korm) when you want to scale or just synchronise your data between multiple database or [WithDashboard](#example-with-dashboard-you-dont-need-kormwithbus-with-it-because-withdashboard-already-call-it-and-return-the-server-bus-for-you) to have a complete setup of server bus and Admin Dashboard.
 
 ##### It can handle sql databases and Mongo using [Kormongo](https://github.com/kamalshkeir/kormongo), both have pretty much the same api, everything detailed in this readme
 ##### All drivers are written in Go, so you will never encounter gcc or c missing compiler
