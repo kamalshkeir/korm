@@ -28,37 +28,33 @@
 </div>
 
 ---
-## KORM is an Elegant and Blazingly Fast ORM and migration tool, see [Benchmarks](#benchmarks), it use go generics 1.18 and a network bus.
+### KORM is an elegant and blazingly fast ORM, see [Benchmarks](#benchmarks), it use go generics 1.18 and a network bus.
 
-### It is easily composable, you can combine it with a Server Bus (using WithBus) when you want to scale or just synchronise your data between multiple database or WithDashboard to have an admin panel
+### Easily composable, you can combine it with a Server Bus using [WithBus](#example-with-bus-between-2-korm) when you want to scale or just synchronise your data between multiple database or [WithDashboard](#example-with-dashboard-you-dont-need-kormwithbus-with-it-because-withdashboard-already-call-it-and-return-the-server-bus-for-you) to have an admin panel and all the rest.
 
 ##### It can handle sql databases and Mongo using [Kormongo](https://github.com/kamalshkeir/kormongo), both have pretty much the same api, everything detailed in this readme
 ##### All drivers are written in Go, so you will never encounter gcc or c missing compiler
 
-
-##### You have full control on the data came in and go out, you can check the example below [NetworkBus](#example-with-bus-between-2-korm)
-
 ### It Has :
 - New: [Hooks](#hooks) : OnInsert OnSet OnDelete and OnDrop
 - Simple [API](#api)
-- [Admin dashboard](#example-with-dashboard) CRUD
+- CRUD [Admin dashboard](#example-with-dashboard-you-dont-need-kormwithbus-with-it-because-withdashboard-already-call-it-and-return-the-server-bus-for-you) 
 - [many to many](#manytomany-relationships-example) relationships 
 - Support for foreign keys, indexes , checks,... [See all](#automigrate)
 - [Interactive Shell](#interactive-shell), to CRUD in your databases `go run main.go shell` or `go run main.go mongoshell` for mongo
 - Network Bus allowing you to send and recv data in realtime using pubsub websockets between your ORMs, so you can decide how you data will be distributed between different databases, see [Example](#example-with-bus-between-2-korm) .
-- It use std library database/sql, and the Mongo official driver, so if you want, know that you can always do your queries yourself using sql.DB or mongo.Client  `korm.GetConnection(dbName)` or `kormongo.GetConnection(dbName)`
-- [AutoMigrate](#automigrate) directly from struct, for mongo it will only link the struct to the tableName, allowing usage of BuilderS. For all sql, whenever you add or remove a field from a migrated struct, you will get a prompt proposing to add the column for the table in the database or remove a column, you can also only generate the query without execute, and then you can use the shell to migrate the generated file.
-- Powerful Query Builder for SQL and Mongo [Builder](#builder-mapstringany).
+- Compatible with std library database/sql, and the Mongo official driver, so if you want, know that you can always do your queries yourself using sql.DB or mongo.Client  `korm.GetConnection(dbName)` or `kormongo.GetConnection(dbName)`
+- [AutoMigrate](#automigrate) directly from struct, for mongo it will only link the struct to the tableName, allowing usage of BuilderS. For all sql, whenever you add or remove a field from a migrated struct, you will get a prompt proposing to add the column for the table in the database or remove a column, you can also only generate the query without execute, and then you can use the shell to migrate the generated file, to disable the check for sql, you can use `korm.DisableCheck()`.
 - Concurrency Safe access.
 
 
 #### Supported databases:
+- Sqlite
 - Postgres
 - Mysql
-- Mongo via [MONGO](https://github.com/kamalshkeir/kormongo)
-- Sqlite
 - Maria
 - Coakroach
+- Mongo via [MONGO](https://github.com/kamalshkeir/kormongo)
 
 
 ---
@@ -133,6 +129,8 @@ all, _ := korm.Model[User]()
                    .Where("id = ?",id) // notice here not like mongo, mongo will be like Where("_id",id) without '= ?'
                    .Select("item1","item2")
                    .OrderBy("created")
+				   .Limit(8)
+				   .Page(2)
                    .All()
 ```
 
@@ -155,6 +153,8 @@ all, _ := korm.Model[FirstTable]()
                    .Where("_id",id) // notice here for mongo it's not like sql Where("_id = ?",id) 
                    .Select("item1","item2")
                    .OrderBy("created")
+				   .Limit(8)
+				   .Page(2)
                    .All()
 ```
 
@@ -164,7 +164,9 @@ all, _ := korm.Model[FirstTable]()
 func New(dbType, dbName string, dbDSN ...string) error
 func NewFromConnection(dbType, dbName string, conn *sql.DB) error
 func NewFromConnection(dbName string,dbConn *mongo.Database) error (kormongo)
+func Exec(dbName, query string, args ...any) error
 func WithBus(bus *ksbus.Server) *ksbus.Server // Usage: WithBus(ksbus.NewServer()) or share an existing one
+func WithDashboard(staticAndTemplatesEmbeded ...embed.FS) *ksbus.Server
 func BeforeServersData(fn func(data any, conn *ws.Conn))
 func BeforeDataWS(fn func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) bool)
 func GetConnection(dbName ...string) *sql.DB
@@ -179,7 +181,6 @@ func FlushCache()
 func DisableCheck() // Korm Only, disable struct check on change to add or remove column
 func DisableCache()
 func ManyToMany(table1, table2 string, dbName ...string) error // add table relation m2m 
-func Exec(dbName, query string, args ...any) error
 ```
 #### Builder `Struct`:
 ```go
@@ -233,7 +234,7 @@ korm.Model[models.User]().Select("email","uuid").OrderBy("-id").Limit(PAGINATION
 
 // INSERT
 uuid,_ := korm.GenerateUUID()
-hashedPass,_ := hash.GenerateHash("password")
+hashedPass,_ := argon.Hash(password)
 korm.Model[models.User]().Insert(&models.User{
 	Uuid: uuid,
 	Email: "test@example.com",
@@ -319,12 +320,12 @@ sliceMapStringAny,err := korm.Table("users")
 
 // INSERT
 uuid,_ := korm.GenerateUUID()
-hashedPass,_ := hash.GenerateHash("password")
+hashedPass,_ := argon.Hash("password") // github.com/kamalshkeir/argon
 
-korm.Model[models.User]().Insert(map[string]any{
+korm.Table("users").Insert(map[string]any{
 	"uuid":uuid,
-	"email:"test@example.com",
-	...
+	"email":"test@example.com",
+	 ...
 })
 
 //if using more than one db
@@ -346,7 +347,7 @@ korm.Table("tableName").Drop()
 
 // update
 korm.Table("tableName").Where("id = ?",1).Set("email = ?","new@example.com") // SQL 
-korm.Table("tableName").Where("id",1).Set("email","new@example.com") // orSQL 
+korm.Table("tableName").Where("id",1).Set("email","new@example.com") 
 
 korm.Table("tableName").Where("id",1).Set("email","new@example.com") // Mongo
 ```
@@ -369,18 +370,23 @@ func main() {
 	err := korm.New(korm.SQLITE, "db")
 	klog.CheckError(err)
 
-	sbus := korm.WithDashboard() 
+	serverBus := korm.WithDashboard() 
 	// add extra static directory if you want
-	//sbus.App.LocalStatics("assets/mystatic","myassets") // will be available at /myassets/*
-	//sbus.App.LocalTemplates("assets/templates") // will make them available to use with c.Html
+	//serverBus.App.LocalStatics("assets/mystatic","myassets") // will be available at /myassets/*
+	//serverBus.App.LocalTemplates("assets/templates") // will make them available to use with c.Html
 
 	// serve HTML 
-	// sbus.App.Get("/",func(c *kmux.Context) {
+	// serverBus.App.Get("/",func(c *kmux.Context) {
 	// 	c.Html("index.html", map[string]any{
 	// 		"data": data,
 	// 	})
 	// })
-	sbus.Run("localhost:9313")
+	serverBus.Run("localhost:9313")
+	// OR run https if you have certificates
+	serverBus.RunTLS(addr string, cert string, certKey string)
+
+	// OR generate certificates let's encrypt for a domain name, check https://github.com/kamalshkeir/ksbus for more infos
+	serverBus.RunAutoTLS(domainName string, subDomains ...string)
 }
 ```
 Then create admin user to connect to the dashboard
@@ -413,7 +419,7 @@ func main() {
 	if klog.CheckError(err) {return}
 
 	
-	bus := korm.WithBus(ksbus.NewServer())
+	serverBus := korm.WithBus(ksbus.NewServer())
 	// handler authentication	
 	korm.BeforeDataWS(func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) bool {
         klog.Printf("handle authentication here\n")
@@ -425,19 +431,19 @@ func main() {
 	})
 
 	// built in router to the bus, check it at https://github.com/kamalshkeir/ksbus
-	bus.App.GET("/",func(c *kmux.Context) {
-		go bus.SendToServer("localhost:9314",map[string]any{
+	serverBus.App.GET("/",func(c *kmux.Context) {
+		serverBus.SendToServer("localhost:9314",map[string]any{
 			"msg":"hello from server 1",
 		})
-		c.Status(200).Text("ok")
+		c.Text("ok")
 	})
 
 	
-	bus.Run("localhost:9313")
+	serverBus.Run("localhost:9313")
 	// OR run https if you have certificates
-	bus.RunTLS(addr string, cert string, certKey string)
+	serverBus.RunTLS(addr string, cert string, certKey string)
 	// OR generate certificates let's encrypt for a domain name, check https://github.com/kamalshkeir/ksbus for more details
-	bus.RunAutoTLS(domainName string, subDomains ...string)
+	serverBus.RunAutoTLS(domainName string, subDomains ...string)
 }
 ```
 KORM 2:
@@ -458,15 +464,15 @@ func main() {
 	if klog.CheckError(err) {return}
 
 	
-	bus := korm.WithBus(ksbus.NewServer())
+	serverBus := korm.WithBus(ksbus.NewServer())
 
 	korm.BeforeServersData(func(data any, conn *ws.Conn) {
         klog.Printf("grrecv orm2: %v\n",data)
 	})
 
 	// built in router to the bus, check it at https://github.com/kamalshkeir/ksbus
-	bus.App.GET("/",func(c *kmux.Context) {
-		go bus.SendToServer("localhost:9314",map[string]any{
+	serverBus.App.GET("/",func(c *kmux.Context) {
+		serverBus.SendToServer("localhost:9314",map[string]any{
 			"msg":"hello from server 2",
 		})
 		c.Status(200).Text("ok")
@@ -474,13 +480,13 @@ func main() {
 
 
     // Run Server Bus
-	bus.Run("localhost:9314")
+	serverBus.Run("localhost:9314")
 
 	// OR run https if you have certificates
-	bus.RunTLS(addr string, cert string, certKey string)
+	serverBus.RunTLS(addr string, cert string, certKey string)
 
 	// OR generate certificates let's encrypt for a domain name, check https://github.com/kamalshkeir/ksbus for more infos
-	bus.RunAutoTLS(domainName string, subDomains ...string)
+	serverBus.RunAutoTLS(domainName string, subDomains ...string)
 }
 ```
 
@@ -488,6 +494,7 @@ func main() {
 ```go
 korm.OnInsert(func(database, table string, data map[string]any) error {
 	fmt.Println("inserting into", database, table, data)
+	// if error returned, it will not insert
 	return nil
 })
 
@@ -534,7 +541,7 @@ func migrate() {
 	}
 }
 
-// korm.ManyToMany create relation table named m2m_table1_table2
+// korm.ManyToMany create relation table named m2m_classes_students
 
 // then you can use it like so to get related data
 
