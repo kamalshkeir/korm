@@ -995,8 +995,8 @@ func getStructInfos[T comparable](strctt *T, ignoreZeroValues ...bool) (fields [
 	return fields, fValues, fTypes, fTags
 }
 
-func adaptPlaceholdersToDialect(query *string, dialect string) *string {
-	if strings.Contains(*query, "?") && (dialect == POSTGRES || dialect == SQLITE) {
+func adaptPlaceholdersToDialect(query *string, dialect string) {
+	if strings.Contains(*query, "?") && (dialect != MYSQL) {
 		split := strings.Split(*query, "?")
 		counter := 0
 		for i := range split {
@@ -1007,7 +1007,6 @@ func adaptPlaceholdersToDialect(query *string, dialect string) *string {
 		}
 		*query = strings.Join(split, "")
 	}
-	return query
 }
 
 func adaptTrueFalseArgs(args *[]any) {

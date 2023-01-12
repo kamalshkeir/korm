@@ -264,6 +264,8 @@ func (b *BuilderM) One() (map[string]any, error) {
 	if b.limit > 0 {
 		i := strconv.Itoa(b.limit)
 		b.statement += " LIMIT " + i
+	} else {
+		b.statement += " LIMIT 1"
 	}
 
 	if b.debug {
@@ -761,63 +763,6 @@ func (b *BuilderM) Drop() (int, error) {
 	return int(aff), err
 }
 
-func (b *BuilderM) queryM(statement string, args ...any) ([]map[string]interface{}, error) {
-	db, err := GetMemoryDatabase(b.database)
-	if err != nil {
-		return nil, err
-	}
-	adaptPlaceholdersToDialect(&statement, db.Dialect)
-
-	if db.Conn == nil {
-		return nil, errors.New("no connection")
-	}
-	var rows *sql.Rows
-	if b.ctx != nil {
-		rows, err = db.Conn.QueryContext(b.ctx, statement, args...)
-	} else {
-		rows, err = db.Conn.Query(statement, args...)
-	}
-	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("no data found")
-	} else if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	columns, err := rows.Columns()
-	if err != nil {
-		return nil, err
-	}
-
-	models := make([]interface{}, len(columns))
-	modelsPtrs := make([]interface{}, len(columns))
-
-	listMap := make([]map[string]interface{}, 0)
-
-	for rows.Next() {
-		for i := range models {
-			models[i] = &modelsPtrs[i]
-		}
-
-		err := rows.Scan(models...)
-		if err != nil {
-			return nil, err
-		}
-
-		m := map[string]interface{}{}
-		for i := range columns {
-			if v, ok := modelsPtrs[i].([]byte); ok {
-				modelsPtrs[i] = string(v)
-			}
-			m[columns[i]] = modelsPtrs[i]
-		}
-		listMap = append(listMap, m)
-	}
-	if len(listMap) == 0 {
-		return nil, errors.New("no data found")
-	}
-	return listMap, nil
-}
-
 // AddRelated used for many to many, and after korm.ManyToMany, to add a class to a student or a student to a class, class or student should exist in the database before adding them
 func (b *BuilderM) AddRelated(relatedTable string, whereRelatedTable string, whereRelatedArgs ...any) (int, error) {
 	if b.tableName == "" {
@@ -1137,6 +1082,63 @@ func (b *BuilderM) DeleteRelated(relatedTable string, whereRelatedTable string, 
 	return n, nil
 }
 
+func (b *BuilderM) queryM(statement string, args ...any) ([]map[string]interface{}, error) {
+	db, err := GetMemoryDatabase(b.database)
+	if err != nil {
+		return nil, err
+	}
+	adaptPlaceholdersToDialect(&statement, db.Dialect)
+
+	if db.Conn == nil {
+		return nil, errors.New("no connection")
+	}
+	var rows *sql.Rows
+	if b.ctx != nil {
+		rows, err = db.Conn.QueryContext(b.ctx, statement, args...)
+	} else {
+		rows, err = db.Conn.Query(statement, args...)
+	}
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("no data found")
+	} else if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	columns, err := rows.Columns()
+	if err != nil {
+		return nil, err
+	}
+
+	models := make([]interface{}, len(columns))
+	modelsPtrs := make([]interface{}, len(columns))
+
+	listMap := make([]map[string]interface{}, 0)
+
+	for rows.Next() {
+		for i := range models {
+			models[i] = &modelsPtrs[i]
+		}
+
+		err := rows.Scan(models...)
+		if err != nil {
+			return nil, err
+		}
+
+		m := map[string]interface{}{}
+		for i := range columns {
+			if v, ok := modelsPtrs[i].([]byte); ok {
+				modelsPtrs[i] = string(v)
+			}
+			m[columns[i]] = modelsPtrs[i]
+		}
+		listMap = append(listMap, m)
+	}
+	if len(listMap) == 0 {
+		return nil, errors.New("no data found")
+	}
+	return listMap, nil
+}
+
 func (b *BuilderM) queryS(strct any, statement string, args ...any) error {
 	db, err := GetMemoryDatabase(b.database)
 	if err != nil {
@@ -1187,7 +1189,7 @@ func (b *BuilderM) queryS(strct any, statement string, args ...any) error {
 			return err
 		}
 
-		m := map[string]interface{}{}
+		m := map[string]any{}
 		for i := range columns {
 			if v, ok := modelsPtrs[i].([]byte); ok {
 				modelsPtrs[i] = string(v)

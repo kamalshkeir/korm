@@ -488,9 +488,9 @@ func TestDelete(t *testing.T) {
 	if n < 0 {
 		t.Error("nothing deleted, it should", n)
 	}
-	_, err = Model[TestUser]().Where("id = ?", 12).One()
+	u, err := Model[TestUser]().Where("id = ?", 12).One()
 	if err == nil {
-		t.Error("not errored, it should")
+		t.Error("not errored, it should : ", err, u)
 	}
 }
 

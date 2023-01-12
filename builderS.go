@@ -17,7 +17,7 @@ import (
 var (
 	cacheOneS        = kmap.New[dbCache, any](false)
 	cacheAllS        = kmap.New[dbCache, any](false)
-	errTableNotFound = errors.New("unable to find tableName")
+	ErrTableNotFound = errors.New("unable to find tableName")
 )
 
 // BuilderS is query builder for struct using generics
@@ -70,7 +70,7 @@ func (b *BuilderS[T]) Database(dbName string) *BuilderS[T] {
 // Insert insert a row into a table and return inserted PK
 func (b *BuilderS[T]) Insert(model *T) (int, error) {
 	if b == nil || b.tableName == "" {
-		return 0, errTableNotFound
+		return 0, ErrTableNotFound
 	}
 	if useCache {
 		cachebus.Publish(CACHE_TOPIC, map[string]any{
@@ -194,7 +194,7 @@ func (b *BuilderS[T]) Insert(model *T) (int, error) {
 // InsertR add row to a table using input struct, and return the inserted row
 func (b *BuilderS[T]) InsertR(model *T) (T, error) {
 	if b == nil || b.tableName == "" {
-		return *new(T), errTableNotFound
+		return *new(T), ErrTableNotFound
 	}
 	if useCache {
 		cachebus.Publish(CACHE_TOPIC, map[string]any{
@@ -322,7 +322,7 @@ func (b *BuilderS[T]) InsertR(model *T) (T, error) {
 // BulkInsert insert many row at the same time in one query
 func (b *BuilderS[T]) BulkInsert(models ...*T) ([]int, error) {
 	if b == nil || b.tableName == "" {
-		return nil, errTableNotFound
+		return nil, ErrTableNotFound
 	}
 	if useCache {
 		cachebus.Publish(CACHE_TOPIC, map[string]any{
@@ -459,7 +459,7 @@ func (b *BuilderS[T]) BulkInsert(models ...*T) ([]int, error) {
 // AddRelated used for many to many, and after korm.ManyToMany, to add a class to a student or a student to a class, class or student should exist in the database before adding them
 func (b *BuilderS[T]) AddRelated(relatedTable string, whereRelatedTable string, whereRelatedArgs ...any) (int, error) {
 	if b == nil || b.tableName == "" {
-		return 0, errTableNotFound
+		return 0, ErrTableNotFound
 	}
 	if useCache {
 		cachebus.Publish(CACHE_TOPIC, map[string]any{
@@ -565,7 +565,7 @@ func (b *BuilderS[T]) AddRelated(relatedTable string, whereRelatedTable string, 
 // DeleteRelated delete a relations many to many
 func (b *BuilderS[T]) DeleteRelated(relatedTable string, whereRelatedTable string, whereRelatedArgs ...any) (int, error) {
 	if b == nil || b.tableName == "" {
-		return 0, errTableNotFound
+		return 0, ErrTableNotFound
 	}
 	if useCache {
 		cachebus.Publish(CACHE_TOPIC, map[string]any{
@@ -637,7 +637,7 @@ func (b *BuilderS[T]) DeleteRelated(relatedTable string, whereRelatedTable strin
 // GetRelated used for many to many to get related classes to a student or related students to a class
 func (b *BuilderS[T]) GetRelated(relatedTable string, dest any) error {
 	if b == nil || b.tableName == "" {
-		return errTableNotFound
+		return ErrTableNotFound
 	}
 	relationTableName := "m2m_" + b.tableName + "-" + b.database + "-" + relatedTable
 	if _, ok := relationsMap.Get("m2m_" + b.tableName + "-" + b.database + "-" + relatedTable); !ok {
@@ -703,7 +703,7 @@ func (b *BuilderS[T]) GetRelated(relatedTable string, dest any) error {
 // JoinRelated same as get, but it join data
 func (b *BuilderS[T]) JoinRelated(relatedTable string, dest any) error {
 	if b == nil || b.tableName == "" {
-		return errTableNotFound
+		return ErrTableNotFound
 	}
 	relationTableName := "m2m_" + b.tableName + "-" + b.database + "-" + relatedTable
 	if _, ok := relationsMap.Get("m2m_" + b.tableName + "-" + b.database + "-" + relatedTable); !ok {
@@ -772,7 +772,7 @@ func (b *BuilderS[T]) JoinRelated(relatedTable string, dest any) error {
 // Set used to update, Set("email,is_admin","example@mail.com",true) or Set("email = ? AND is_admin = ?","example@mail.com",true)
 func (b *BuilderS[T]) Set(query string, args ...any) (int, error) {
 	if b == nil || b.tableName == "" {
-		return 0, errTableNotFound
+		return 0, ErrTableNotFound
 	}
 	if useCache {
 		cachebus.Publish(CACHE_TOPIC, map[string]any{
@@ -835,7 +835,7 @@ func (b *BuilderS[T]) Set(query string, args ...any) (int, error) {
 // Delete data from database, can be multiple, depending on the where, return affected rows(Not every database or database driver may support affected rows)
 func (b *BuilderS[T]) Delete() (int, error) {
 	if b == nil || b.tableName == "" {
-		return 0, errTableNotFound
+		return 0, ErrTableNotFound
 	}
 	if useCache {
 		cachebus.Publish(CACHE_TOPIC, map[string]any{
@@ -885,7 +885,7 @@ func (b *BuilderS[T]) Delete() (int, error) {
 // Drop drop table from db
 func (b *BuilderS[T]) Drop() (int, error) {
 	if b == nil || b.tableName == "" {
-		return 0, errTableNotFound
+		return 0, ErrTableNotFound
 	}
 	if useCache {
 		cachebus.Publish(CACHE_TOPIC, map[string]any{
@@ -1012,7 +1012,7 @@ func (b *BuilderS[T]) Debug() *BuilderS[T] {
 // All get all data
 func (b *BuilderS[T]) All() ([]T, error) {
 	if b == nil || b.tableName == "" {
-		return nil, errTableNotFound
+		return nil, ErrTableNotFound
 	}
 	c := dbCache{
 		database:   b.database,
@@ -1078,7 +1078,7 @@ func (b *BuilderS[T]) All() ([]T, error) {
 // One get single row
 func (b *BuilderS[T]) One() (T, error) {
 	if b == nil || b.tableName == "" {
-		return *new(T), errTableNotFound
+		return *new(T), ErrTableNotFound
 	}
 	c := dbCache{
 		database:   b.database,
@@ -1125,6 +1125,8 @@ func (b *BuilderS[T]) One() (T, error) {
 	if b.limit > 0 {
 		i := strconv.Itoa(b.limit)
 		b.statement += " LIMIT " + i
+	} else {
+		b.statement += " LIMIT 1"
 	}
 
 	if b.debug {
@@ -1132,19 +1134,19 @@ func (b *BuilderS[T]) One() (T, error) {
 		klog.Printf("args:%v\n", b.args)
 	}
 
-	models, err := b.queryS(b.statement, b.args...)
+	model, err := b.queryOneS(b.statement, b.args...)
 	if err != nil {
 		return *new(T), err
 	}
 	if useCache {
-		cacheOneS.Set(c, models[0])
+		cacheOneS.Set(c, model)
 	}
-	return models[0], nil
+	return model, nil
 }
 
 func (b *BuilderS[T]) queryS(query string, args ...any) ([]T, error) {
 	if b == nil || b.tableName == "" {
-		return nil, errTableNotFound
+		return nil, ErrTableNotFound
 	}
 	db, err := GetMemoryDatabase(b.database)
 	if klog.CheckError(err) {
@@ -1225,6 +1227,88 @@ func (b *BuilderS[T]) queryS(query string, args ...any) ([]T, error) {
 
 	if len(res) == 0 {
 		return nil, errors.New("no data found")
+	}
+	return res, nil
+}
+
+func (b *BuilderS[T]) queryOneS(query string, args ...any) (res T, err error) {
+	if b == nil || b.tableName == "" {
+		return res, ErrTableNotFound
+	}
+	db, err := GetMemoryDatabase(b.database)
+	if klog.CheckError(err) {
+		return res, err
+	}
+
+	adaptPlaceholdersToDialect(&query, db.Dialect)
+
+	stmt, err := db.Conn.Prepare(query)
+	if err != nil {
+		return res, err
+	}
+	defer stmt.Close()
+	var rows *sql.Rows
+	if b.ctx != nil {
+		rows, err = stmt.QueryContext(b.ctx, args...)
+	} else {
+		rows, err = stmt.Query(args...)
+	}
+
+	if err == sql.ErrNoRows {
+		return res, fmt.Errorf("no data found")
+	} else if err != nil {
+		return res, err
+	}
+	defer rows.Close()
+
+	var cols []string
+	if b.selected != "" && b.selected != "*" {
+		cols = strings.Split(b.selected, ",")
+	} else {
+		cols, err = rows.Columns()
+		if err != nil {
+			return res, err
+		}
+	}
+
+	columns_ptr_to_values := make([]any, len(cols))
+	values := make([]any, len(cols))
+	for rows.Next() {
+		for i := range values {
+			columns_ptr_to_values[i] = &values[i]
+		}
+
+		err := rows.Scan(columns_ptr_to_values...)
+		if err != nil {
+			return res, err
+		}
+
+		if db.Dialect == MYSQL || db.Dialect == MARIA || db.Dialect == "mariadb" {
+			db.Dialect = MYSQL
+			for i := range values {
+				if v, ok := values[i].([]byte); ok {
+					values[i] = string(v)
+				}
+			}
+		}
+
+		m := map[string]any{}
+		if b.selected != "" && b.selected != "*" {
+			for i, key := range strings.Split(b.selected, ",") {
+				m[key] = values[i]
+			}
+		} else {
+			for i, key := range cols {
+				m[key] = values[i]
+			}
+		}
+		err = kstrct.FillFromMap(&res, m)
+		if err != nil {
+			return res, err
+		}
+	}
+	if res == *new(T) {
+		return res, fmt.Errorf("no data")
 	}
 	return res, nil
 }

@@ -38,13 +38,16 @@
 ### It Has :
 - New: [Hooks](#hooks) : OnInsert OnSet OnDelete and OnDrop
 - Simple [API](#api)
-- CRUD [Admin dashboard](#example-with-dashboard-you-dont-need-kormwithbus-with-it-because-withdashboard-already-call-it-and-return-the-server-bus-for-you) 
+- CRUD [Admin dashboard](#example-with-dashboard-you-dont-need-kormwithbus-with-it-because-withdashboard-already-call-it-and-return-the-server-bus-for-you) with ready offline installable PWA (using /static/sw.js and /static/manifest.json). All statics mentionned in `sw.js` will be cached and served by the service worker, you can inspect the Network to check it. 
+- [Router/Mux](https://github.com/kamalshkeir/kmux) accessible from the serverBus after calling `korm.WithBus()` or `korm.WithDashboard()`
+- [PPROF](#pprof) Go std library profiling tool
 - [many to many](#manytomany-relationships-example) relationships 
 - Support for foreign keys, indexes , checks,... [See all](#automigrate)
 - [Interactive Shell](#interactive-shell), to CRUD in your databases `go run main.go shell` or `go run main.go mongoshell` for mongo
 - Network Bus allowing you to send and recv data in realtime using pubsub websockets between your ORMs, so you can decide how you data will be distributed between different databases, see [Example](#example-with-bus-between-2-korm) .
 - Compatible with std library database/sql, and the Mongo official driver, so if you want, know that you can always do your queries yourself using sql.DB or mongo.Client  `korm.GetConnection(dbName)` or `kormongo.GetConnection(dbName)`
 - [AutoMigrate](#automigrate) directly from struct, for mongo it will only link the struct to the tableName, allowing usage of BuilderS. For all sql, whenever you add or remove a field from a migrated struct, you will get a prompt proposing to add the column for the table in the database or remove a column, you can also only generate the query without execute, and then you can use the shell to migrate the generated file, to disable the check for sql, you can use `korm.DisableCheck()`.
+- [Load config](#load-config-from-env-directly-to-struct-using-kenv) from env directly to struct
 - Concurrency Safe access.
 
 
@@ -61,7 +64,7 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@v1.3.8 // latest version
+go get -u github.com/kamalshkeir/korm@v1.3.9 // latest version
 ```
 
 # Drivers moved outside this package to not get them all in your go.mod file
@@ -73,6 +76,44 @@ go get github.com/kamalshkeir/mysqldriver
 
 ```sh
 go get -u github.com/kamalshkeir/kormongo@latest // Mongo ORM
+```
+
+# Load config from env directly to struct using Kenv
+```go
+import "github.com/kamalshkeir/kenv"
+
+type EmbedS struct {
+	Static    bool `kenv:"EMBED_STATIC|false"`
+	Templates bool `kenv:"EMBED_TEMPLATES|false"`
+}
+
+type GlobalConfig struct {
+	Host       string `kenv:"HOST|localhost"` // DEFAULT to 'localhost': if HOST not found in env
+	Port       string `kenv:"PORT|9313"`
+	Embed 	   EmbedS
+	Db struct {
+		Name     string `kenv:"DB_NAME|db"` // NOT REQUIRED: if DB_NAME not found, defaulted to 'db'
+		Type     string `kenv:"DB_TYPE"` // REEQUIRED: this env var is required, you will have error if empty
+		DSN      string `kenv:"DB_DSN|"` // NOT REQUIRED: if DB_DSN not found it's not required, it's ok to stay empty
+	}
+	Smtp struct {
+		Email string `kenv:"SMTP_EMAIL|"`
+		Pass  string `kenv:"SMTP_PASS|"`
+		Host  string `kenv:"SMTP_HOST|"`
+		Port  string `kenv:"SMTP_PORT|"`
+	}
+	Profiler   bool   `kenv:"PROFILER|false"`
+	Docs       bool   `kenv:"DOCS|false"`
+	Logs       bool   `kenv:"LOGS|false"`
+	Monitoring bool   `kenv:"MONITORING|false"`
+}
+
+
+kenv.Load(".env") // load env file
+
+// Fill struct from env loaded before:
+Config := &GlobalConfig{}
+err := kenv.Fill(Config) // fill struct with env vars loaded before
 ```
 
 ### Connect to a database
@@ -92,6 +133,20 @@ err := korm.New(korm.MYSQL,"dbName","user:password@localhost:3306") // Connect
 korm.Shutdown(databasesName ...string) error
 kormongo.ShutdownDatabases(databasesName ...string) error
 ```
+
+### Global Vars
+```go
+// Debug when true show extra useful logs for queries executed for migrations and queries statements
+Debug = false
+// FlushCacheEvery execute korm.FlushCache() every 10 min by default, you should not worry about it, but useful that you can change it
+FlushCacheEvery = 10 * time.Minute
+// Connection pool
+MaxOpenConns    = 10
+MaxIdleConns    = 10
+MaxLifetime     = 30 * time.Minute
+MaxIdleTime     = 12 * time.Hour
+```
+
 
 ### AutoMigrate 
 
@@ -165,6 +220,7 @@ func New(dbType, dbName string, dbDSN ...string) error
 func NewFromConnection(dbType, dbName string, conn *sql.DB) error
 func NewFromConnection(dbName string,dbConn *mongo.Database) error (kormongo)
 func Exec(dbName, query string, args ...any) error
+func Transaction(dbName ...string) (*sql.Tx, error)
 func WithBus(bus *ksbus.Server) *ksbus.Server // Usage: WithBus(ksbus.NewServer()) or share an existing one
 func WithDashboard(staticAndTemplatesEmbeded ...embed.FS) *ksbus.Server
 func BeforeServersData(fn func(data any, conn *ws.Conn))
@@ -184,6 +240,8 @@ func ManyToMany(table1, table2 string, dbName ...string) error // add table rela
 ```
 #### Builder `Struct`:
 ```go
+korm.Exec(dbName, query string, args ...any) error
+korm.Transaction(dbName ...string) (*sql.Tx, error)
 // Model is a starter for Buider
 func Model[T comparable](tableName ...string) *BuilderS[T]
 // Database allow to choose database to execute query on
@@ -352,6 +410,20 @@ korm.Table("tableName").Where("id",1).Set("email","new@example.com")
 korm.Table("tableName").Where("id",1).Set("email","new@example.com") // Mongo
 ```
 
+### Dashboard defaults you can set
+```go
+korm.Pprof              = false
+korm.PaginationPer      = 10
+korm.EmbededDashboard   = false
+korm.MediaDir           = "media"
+korm.AssetsDir          = "assets"
+korm.StaticDir          = path.Join(AssetsDir, "/", "static")
+korm.TemplatesDir       = path.Join(AssetsDir, "/", "templates")
+korm.RepoUser           = "kamalshkeir"
+korm.RepoName           = "korm-dashboard"
+korm.AdminPathNameGroup = "/admin"
+// so you can create a custom dashboard, upload it to your repos and change like like above korm.RepoUser and korm.RepoName
+```
 
 ### Example With Dashboard (you don't need korm.WithBus with it, because WithDashboard already call it and return the server bus for you)
 
@@ -370,7 +442,18 @@ func main() {
 	err := korm.New(korm.SQLITE, "db")
 	klog.CheckError(err)
 
+
+
 	serverBus := korm.WithDashboard() 
+	// you can overwrite Admin and Auth middleware used for dashboard (dash_middlewares.go) 
+	//korm.Auth = func(handler kmux.Handler) kmux.Handler {}
+	//korm.Admin = func(handler kmux.Handler) kmux.Handler {}
+
+	// and also all handlers (dash_views.go)
+	//korm.LoginView = func(c *kmux.Context) {
+	//	c.Html("admin/new_admin_login.html", nil)
+	//}
+
 	// add extra static directory if you want
 	//serverBus.App.LocalStatics("assets/mystatic","myassets") // will be available at /myassets/*
 	//serverBus.App.LocalTemplates("assets/templates") // will make them available to use with c.Html
@@ -397,6 +480,97 @@ createsuperuser
 ```
 
 Then you can visit `/admin`
+
+
+### Admin middlewares
+
+```go
+// dash_middlewares.go
+package korm
+
+import (
+	"context"
+	"net/http"
+
+	"github.com/kamalshkeir/aes"
+	"github.com/kamalshkeir/kmux"
+)
+
+var Auth = func(handler kmux.Handler) kmux.Handler {
+	const key kmux.ContextKey = "user"
+	return func(c *kmux.Context) {
+		session, err := c.GetCookie("session")
+		if err != nil || session == "" {
+			// NOT AUTHENTICATED
+			c.DeleteCookie("session")
+			handler(c)
+			return
+		}
+		session, err = aes.Decrypt(session)
+		if err != nil {
+			handler(c)
+			return
+		}
+		// Check session
+		user, err := Model[User]().Where("uuid = ?", session).One()
+		if err != nil {
+			// session fail
+			handler(c)
+			return
+		}
+
+		// AUTHENTICATED AND FOUND IN DB
+		ctx := context.WithValue(c.Request.Context(), key, user)
+		*c = kmux.Context{
+			Params:         c.ParamsMap(),
+			Request:        c.Request.WithContext(ctx),
+			ResponseWriter: c.ResponseWriter,
+		}
+		handler(c)
+	}
+}
+
+var Admin = func(handler kmux.Handler) kmux.Handler {
+	const key kmux.ContextKey = "user"
+	return func(c *kmux.Context) {
+		session, err := c.GetCookie("session")
+		if err != nil || session == "" {
+			// NOT AUTHENTICATED
+			c.DeleteCookie("session")
+			c.Status(http.StatusTemporaryRedirect).Redirect("/admin/login")
+			return
+		}
+		session, err = aes.Decrypt(session)
+		if err != nil {
+			c.Status(http.StatusTemporaryRedirect).Redirect("/admin/login")
+			return
+		}
+		user, err := Model[User]().Where("uuid = ?", session).One()
+
+		if err != nil {
+			// AUTHENTICATED BUT NOT FOUND IN DB
+			c.Status(http.StatusTemporaryRedirect).Redirect("/admin/login")
+			return
+		}
+
+		// Not admin
+		if !user.IsAdmin {
+			c.Status(403).Text("Middleware : Not allowed to access this page")
+			return
+		}
+
+		ctx := context.WithValue(c.Request.Context(), key, user)
+		*c = kmux.Context{
+			Params:         c.ParamsMap(),
+			Request:        c.Request.WithContext(ctx),
+			ResponseWriter: c.ResponseWriter,
+		}
+
+		handler(c)
+	}
+}
+
+```
 
 ### Example With Bus between 2 KORM
 KORM 1:
@@ -490,6 +664,37 @@ func main() {
 }
 ```
 
+## Router/Mux github.com/kamalshkeir/kmux
+```go
+
+func main() {
+	sqlitedriver.Use()
+	err := korm.New(korm.SQLITE, "db")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	serverBus := korm.WithDashboard()
+
+	mux := serverBus.App
+	// add global middlewares
+	mux.Use((midws ...func(http.Handler) http.Handler))
+	mux.Use(kmux.Gzip(),kmux.Recover())
+	...
+}
+
+```
+
+### Pprof
+```go
+korm.Pprof=true (before WithDashboard)
+will enable:
+	- /debug/pprof
+	- /debug/pprof/profile
+	- /debug/pprof/heap
+	- /debug/pprof/trace
+```
+
 # Hooks
 ```go
 korm.OnInsert(func(database, table string, data map[string]any) error {
@@ -574,229 +779,52 @@ _, err = korm.Table("classes").Where("name = ?", "Math").DeleteRelated("students
 
 
 # Benchmarks
+goos: windows
+goarch: amd64
+pkg: github.com/kamalshkeir/korm/benchmarks
+cpu: Intel(R) Core(TM) i5-7300HQ CPU @ 2.50GHz
 ```go
-////////////////////////////////////////////    POSTGRES    //////////////////////////////////////////////
-BenchmarkGetAllS_GORM-4            10000            106229 ns/op            5612 B/op        157 allocs/op
-BenchmarkGetAllM_GORM-4             3036           5820141 ns/op         2094855 B/op      23046 allocs/op
-BenchmarkGetRowS_GORM-4            10000            101521 ns/op            5940 B/op        133 allocs/op
-BenchmarkGetRowM_GORM-4            10000            103402 ns/op            6392 B/op        165 allocs/op
-
-BenchmarkGetAllS-4               3023593               385.7 ns/op           240 B/op          2 allocs/op
-BenchmarkGetAllM-4               3767484               325.2 ns/op           240 B/op          2 allocs/op
-BenchmarkGetRowS-4               2522994               480.2 ns/op           260 B/op          4 allocs/op
-BenchmarkGetRowM-4               2711182               423.0 ns/op           260 B/op          4 allocs/op
-BenchmarkGetAllTables-4         50003124                22.68 ns/op            0 B/op          0 allocs/op
-BenchmarkGetAllColumns-4        24498944                47.71 ns/op            0 B/op          0 allocs/op
-
-////////////////////////////////////////////    SQLITE      //////////////////////////////////////////////
-BenchmarkGetAllS_GORM-4            12949             91299 ns/op            4171 B/op         95 allocs/op
-BenchmarkGetAllM_GORM-4             3162           6063702 ns/op         2181614 B/op      23993 allocs/op
-BenchmarkGetRowS_GORM-4            11848             95822 ns/op            5908 B/op        133 allocs/op
-BenchmarkGetRowM_GORM-4            10000            103733 ns/op            6360 B/op        165 allocs/op
-
-BenchmarkGetAllS-4               2982590               393.1 ns/op           240 B/op          2 allocs/op
-BenchmarkGetAllM-4               3454128               334.3 ns/op           240 B/op          2 allocs/op
-BenchmarkGetRowS-4               2406265               495.2 ns/op           260 B/op          4 allocs/op
-BenchmarkGetRowM-4               2757932               437.2 ns/op           260 B/op          4 allocs/op
-BenchmarkGetAllTables-4         51738410                22.68 ns/op            0 B/op          0 allocs/op
-BenchmarkGetAllColumns-4        24481651                46.93 ns/op            0 B/op          0 allocs/op
-////////////////////////////////////////////    MYSQL       //////////////////////////////////////////////
-BenchmarkGetAllS-4               2933072               414.5 ns/op           208 B/op          2 allocs/op
-BenchmarkGetAllM-4               6704588               180.4 ns/op            16 B/op          1 allocs/op
-BenchmarkGetRowS-4               2136634               545.4 ns/op           240 B/op          4 allocs/op
-BenchmarkGetRowM-4               4111814               292.6 ns/op            48 B/op          3 allocs/op
-BenchmarkGetAllTables-4         58835394                21.52 ns/op            0 B/op          0 allocs/op
-BenchmarkGetAllColumns-4        59059225                19.99 ns/op            0 B/op          0 allocs/op
-
+////////////////////////////////////////////  query 5000 rows  //////////////////////////////////////////////
+BenchmarkGetAllS_GORM-4               33          41601094 ns/op         8796852 B/op     234780 allocs/op
+BenchmarkGetAllS-4               2771838               390.3 ns/op           224 B/op          1 allocs/op
+BenchmarkGetAllM_GORM-4               25          44866500 ns/op         9433536 B/op     334631 allocs/op
+BenchmarkGetAllM-4               4113112               268.6 ns/op           224 B/op          1 allocs/op
+BenchmarkGetRowS_GORM-4            12170             97829 ns/op            5962 B/op        142 allocs/op
+BenchmarkGetRowS-4               1448455               828.9 ns/op           336 B/op          7 allocs/op
+BenchmarkGetRowM_GORM-4            11899            101547 ns/op            7096 B/op        200 allocs/op
+BenchmarkGetRowM-4               1731766               693.2 ns/op           336 B/op          7 allocs/op
+BenchmarkGetAllTables-4         47112411                25.61 ns/op            0 B/op          0 allocs/op
+BenchmarkGetAllColumns-4        30015081                41.07 ns/op            0 B/op          0 allocs/op
+////////////////////////////////////////////  query 1000 rows  //////////////////////////////////////////////
+BenchmarkGetAllS_GORM-4              158           7131799 ns/op         1684076 B/op      46736 allocs/op
+BenchmarkGetAllS-4               2665074               416.9 ns/op           224 B/op          1 allocs/op
+BenchmarkGetAllM_GORM-4              130           8388724 ns/op         1887113 B/op      66626 allocs/op
+BenchmarkGetAllM-4               3835689               294.8 ns/op           224 B/op          1 allocs/op
+BenchmarkGetRowS_GORM-4            12292             95914 ns/op            5967 B/op        142 allocs/op
+BenchmarkGetRowS-4               1324114               886.1 ns/op           336 B/op          7 allocs/op
+BenchmarkGetRowM_GORM-4            10000            102954 ns/op            7096 B/op        200 allocs/op
+BenchmarkGetRowM-4               1614579               754.4 ns/op           336 B/op          7 allocs/op
+BenchmarkGetAllTables-4         42066442                25.67 ns/op            0 B/op          0 allocs/op
+BenchmarkGetAllColumns-4        27996565                41.50 ns/op            0 B/op          0 allocs/op
+////////////////////////////////////////////  query 100 rows  //////////////////////////////////////////////
+BenchmarkGetAllS_GORM-4             1585            726960 ns/op          164736 B/op       4575 allocs/op
+BenchmarkGetAllS-4               3050307               389.4 ns/op           224 B/op          1 allocs/op
+BenchmarkGetAllM_GORM-4             1252            884975 ns/op          191158 B/op       6629 allocs/op
+BenchmarkGetAllM-4               4131709               310.1 ns/op           224 B/op          1 allocs/op
+BenchmarkGetRowS_GORM-4            11154             98986 ns/op            5966 B/op        142 allocs/op
+BenchmarkGetRowS-4               1379994               873.6 ns/op           336 B/op          7 allocs/op
+BenchmarkGetRowM_GORM-4            10000            106291 ns/op            7096 B/op        200 allocs/op
+BenchmarkGetRowM-4               1652276               728.3 ns/op           336 B/op          7 allocs/op
+BenchmarkGetAllTables-4         47458011                26.52 ns/op            0 B/op          0 allocs/op
+BenchmarkGetAllColumns-4        27860600                42.02 ns/op            0 B/op          0 allocs/op
 ////////////////////////////////////////////    MONGO       //////////////////////////////////////////////
-BenchmarkGetAllS-4               2876449               409.8 ns/op           240 B/op          2 allocs/op
-BenchmarkGetAllM-4               3431334               322.6 ns/op           240 B/op          2 allocs/op
-BenchmarkGetRowS-4               2407183               506.7 ns/op           260 B/op          4 allocs/op
-BenchmarkGetRowM-4               2690869               438.2 ns/op           260 B/op          4 allocs/op
-BenchmarkGetAllTables-4         51621339                23.52 ns/op            0 B/op          0 allocs/op
+BenchmarkGetAllS-4               3121384               385.6 ns/op           224 B/op          1 allocs/op
+BenchmarkGetAllM-4               4570059               264.2 ns/op           224 B/op          1 allocs/op
+BenchmarkGetRowS-4               1404399               866.6 ns/op           336 B/op          7 allocs/op
+BenchmarkGetRowM-4               1691026               722.6 ns/op           336 B/op          7 allocs/op
+BenchmarkGetAllTables-4         47424489                25.34 ns/op            0 B/op          0 allocs/op
+BenchmarkGetAllColumns-4        27039632                42.22 ns/op            0 B/op          0 allocs/op
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-
-package benchmarks
-
-import (
-	"testing"
-
-	"github.com/kamalshkeir/klog"
-	"github.com/kamalshkeir/korm"
-	"github.com/kamalshkeir/sqlitedriver"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
-)
-
-type TestTable struct {
-	Id      uint   `korm:"pk"`
-	Content string `korm:"size:50"`
-}
-
-type TestTableGorm struct {
-	ID      uint `gorm:"primarykey"`
-	Content string
-}
-
-var gormDB *gorm.DB
-
-func init() {
-	var err error
-	sqlitedriver.Use()
-	gormDB, err = gorm.Open(sqlite.Open("benchgorm.sqlite"), &gorm.Config{
-		SkipDefaultTransaction: true,
-	})
-	if klog.CheckError(err) {
-		return
-	}
-	err = gormDB.AutoMigrate(&TestTableGorm{})
-	if klog.CheckError(err) {
-		return
-	}
-	dest := []TestTableGorm{}
-	err = gormDB.Find(&dest,&TestTableGorm{}).Error
-	if err != nil || len(dest) == 0 {
-		err := gormDB.Create(&TestTableGorm{
-			Content: "test",
-		}).Error
-		if klog.CheckError(err) {
-			return
-		}
-	}
-	_ = korm.New(korm.SQLITE, "bench")
-	// migrate table test_table from struct TestTable
-	err = korm.AutoMigrate[TestTable]("test_table")
-	if klog.CheckError(err) {
-		return
-	}
-	t, _ := korm.Table("test_table").All()
-	if len(t) == 0 {
-		_, err := korm.Model[TestTable]().Insert(&TestTable{
-			Content: "test",
-		})
-		klog.CheckError(err)
-	}
-}
-
-func BenchmarkGetAllS_GORM(b *testing.B) {
-	a := []TestTableGorm{}
-	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		err := gormDB.Find(&a).Error
-		if err != nil {
-			b.Error("error BenchmarkGetAllS_GORM:", err)
-		}
-	}
-}
-
-func BenchmarkGetAllM_GORM(b *testing.B) {
-	a := []map[string]any{}
-	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		err := gormDB.Find(&TestTableGorm{}).Scan(&a).Error
-		if err != nil {
-			b.Error("error BenchmarkGetAllM_GORM:", err)
-		}
-	}
-}
-
-func BenchmarkGetRowS_GORM(b *testing.B) {
-	u := TestTableGorm{}
-	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		err := gormDB.Where(&TestTableGorm{
-			Content: "test",
-		}).First(&u).Error
-		if err != nil {
-			b.Error("error BenchmarkGetRowS_GORM:", err)
-		}
-	}
-}
-
-func BenchmarkGetRowM_GORM(b *testing.B) {
-	u := map[string]any{}
-	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		err := gormDB.Model(&TestTableGorm{}).Where(&TestTableGorm{
-			Content: "test",
-		}).First(&u).Error
-		if err != nil {
-			b.Error("error BenchmarkGetRowS_GORM:", err)
-		}
-	}
-}
-
-func BenchmarkGetAllS(b *testing.B) {
-	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, err := korm.Model[TestTable]().All()
-		if err != nil {
-			b.Error("error BenchmarkGetAllS:", err)
-		}
-	}
-}
-
-func BenchmarkGetAllM(b *testing.B) {
-	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, err := korm.Table("test_table").All()
-		if err != nil {
-			b.Error("error BenchmarkGetAllM:", err)
-		}
-	}
-}
-
-func BenchmarkGetRowS(b *testing.B) {
-	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, err := korm.Model[TestTable]().Where("content = ?", "test").One()
-		if err != nil {
-			b.Error("error BenchmarkGetRowS:", err)
-		}
-	}
-}
-
-func BenchmarkGetRowM(b *testing.B) {
-	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, err := korm.Table("test_table").Where("content = ?", "test").One()
-		if err != nil {
-			b.Error("error BenchmarkGetRowM:", err)
-		}
-	}
-}
-
-func BenchmarkGetAllTables(b *testing.B) {
-	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		t := korm.GetAllTables()
-		if len(t) == 0 {
-			b.Error("error BenchmarkGetAllTables: no data")
-		}
-	}
-}
-
-func BenchmarkGetAllColumns(b *testing.B) {
-	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		c := korm.GetAllColumnsTypes("test_table")
-		if len(c) == 0 {
-			b.Error("error BenchmarkGetAllColumns: no data")
-		}
-	}
-}
 ```
 
 

@@ -9,7 +9,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/kamalshkeir/klog"
 	"github.com/kamalshkeir/kmap"
@@ -18,10 +17,6 @@ import (
 )
 
 var (
-	// Debug when true show extra useful logs for queries executed for migrations and queries statements
-	Debug = false
-	// FlushCacheEvery execute korm.FlushCache() every 30 min by default, you should not worry about it, but useful that you can change it
-	FlushCacheEvery = 10 * time.Minute
 	// defaultDB keep tracking of the first database connected
 	defaultDB       = ""
 	useCache        = true
@@ -37,10 +32,6 @@ var (
 	serverBus      *ksbus.Server
 	cachebus       *ksbus.Bus
 	switchBusMutex sync.Mutex
-	MaxOpenConns   = 10
-	MaxIdleConns   = 10
-	MaxLifetime    = 30 * time.Minute
-	MaxIdleTime    = 12 * time.Hour
 	onInsert       DbHook
 	onSet          DbHook
 	onDelete       func(database, table string, query string, args ...any) error
@@ -241,8 +232,6 @@ func ManyToMany(table1, table2 string, dbName ...string) error {
 	default:
 		klog.Printf("dialect can be sqlite, postgres, coakroach or mysql,maria only, not %s\n", dben.Dialect)
 	}
-	//klog.Printfs("many to many field:%v\n", tableName+"_"+table)
-	//klog.Printfs("table: %v, fields: %v, fkeys: %v, cols: %v, ftags:%v \n", tableName+"_"+table, res, fkeys, cols, mFieldName_Tags)
 
 	fkeys = append(fkeys, foreignkeyStat(table1+"_id", table1, "cascade", "cascade"))
 	fkeys = append(fkeys, foreignkeyStat(table2+"_id", table2, "cascade", "cascade"))
@@ -415,6 +404,10 @@ func BeforeDataWS(fn func(data map[string]any, conn *ws.Conn, originalRequest *h
 	ksbus.BeforeDataWS = fn
 }
 
+func Transaction(dbName ...string) (*sql.Tx, error) {
+	return GetConnection(dbName...).Begin()
+}
+
 // FlushCache send msg to the cache system to Flush all the cache, safe to use in concurrent mode, and safe to use in general, it's done every 30 minutes(korm.FlushCacheEvery) and on update , create, delete , drop
 func FlushCache() {
 	go cachebus.Publish(CACHE_TOPIC, map[string]any{
@@ -562,7 +555,7 @@ func GetAllColumnsTypes(table string, dbName ...string) map[string]string {
 		var singleColName string
 		var singleColType string
 		var fake1 int
-		var fake2 interface{}
+		var fake2 any
 		var fake3 int
 		for row.Next() {
 			err := row.Scan(&num, &singleColName, &singleColType, &fake1, &fake2, &fake3)
@@ -743,7 +736,7 @@ func DropTrigger(onField, tableName string, dbName ...string) {
 	}
 }
 
-func Query(dbName string, statement string, args ...any) ([]map[string]interface{}, error) {
+func Query(dbName string, statement string, args ...any) ([]map[string]any, error) {
 	if dbName == "" {
 		dbName = databases[0].Name
 	}
@@ -766,10 +759,10 @@ func Query(dbName string, statement string, args ...any) ([]map[string]interface
 		return nil, err
 	}
 
-	models := make([]interface{}, len(columns))
-	modelsPtrs := make([]interface{}, len(columns))
+	models := make([]any, len(columns))
+	modelsPtrs := make([]any, len(columns))
 
-	listMap := make([]map[string]interface{}, 0)
+	listMap := make([]map[string]any, 0)
 
 	for rows.Next() {
 		for i := range models {
@@ -781,7 +774,7 @@ func Query(dbName string, statement string, args ...any) ([]map[string]interface
 			return nil, err
 		}
 
-		m := map[string]interface{}{}
+		m := map[string]any{}
 		for i := range columns {
 			if v, ok := modelsPtrs[i].([]byte); ok {
 				modelsPtrs[i] = string(v)

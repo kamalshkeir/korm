@@ -7,7 +7,6 @@ import (
 	"net/http/pprof"
 	"strings"
 
-	"github.com/kamalshkeir/aes"
 	"github.com/kamalshkeir/kmux"
 )
 
@@ -41,7 +40,7 @@ func initAdminUrlPatterns(r *kmux.Router, StaticAndTemplatesEmbeded ...embed.FS)
 	r.GET("/sw.js", ServiceWorkerView)
 	r.GET("/robots.txt", RobotsTxtView)
 	adminGroup := r.Group(AdminPathNameGroup)
-	adminGroup.GET("", Admin(IndexView))
+	adminGroup.GET("/", Admin(IndexView))
 	adminGroup.GET("/login", Auth(LoginView))
 	adminGroup.POST("/login", Auth(LoginPOSTView))
 	adminGroup.GET("/logout", LogoutView)
@@ -65,79 +64,5 @@ func initAdminUrlPatterns(r *kmux.Router, StaticAndTemplatesEmbeded ...embed.FS)
 			}
 			pprof.Index(c.ResponseWriter, c.Request)
 		})
-	}
-}
-
-var Auth = func(handler kmux.Handler) kmux.Handler {
-	const key kmux.ContextKey = "user"
-	return func(c *kmux.Context) {
-		session, err := c.GetCookie("session")
-		if err != nil || session == "" {
-			// NOT AUTHENTICATED
-			c.DeleteCookie("session")
-			handler(c)
-			return
-		}
-		session, err = aes.Decrypt(session)
-		if err != nil {
-			handler(c)
-			return
-		}
-		// Check session
-		user, err := Model[User]().Where("uuid = ?", session).One()
-		if err != nil {
-			// session fail
-			handler(c)
-			return
-		}
-
-		// AUTHENTICATED AND FOUND IN DB
-		ctx := context.WithValue(c.Request.Context(), key, user)
-		*c = kmux.Context{
-			Params:         c.ParamsMap(),
-			Request:        c.Request.WithContext(ctx),
-			ResponseWriter: c.ResponseWriter,
-		}
-		handler(c)
-	}
-}
-
-var Admin = func(handler kmux.Handler) kmux.Handler {
-	const key kmux.ContextKey = "user"
-	return func(c *kmux.Context) {
-		session, err := c.GetCookie("session")
-		if err != nil || session == "" {
-			// NOT AUTHENTICATED
-			c.DeleteCookie("session")
-			c.Status(http.StatusTemporaryRedirect).Redirect("/admin/login")
-			return
-		}
-		session, err = aes.Decrypt(session)
-		if err != nil {
-			c.Status(http.StatusTemporaryRedirect).Redirect("/admin/login")
-			return
-		}
-		user, err := Model[User]().Where("uuid = ?", session).One()
-
-		if err != nil {
-			// AUTHENTICATED BUT NOT FOUND IN DB
-			c.Status(http.StatusTemporaryRedirect).Redirect("/admin/login")
-			return
-		}
-
-		// Not admin
-		if !user.IsAdmin {
-			c.Status(403).Text("Middleware : Not allowed to access this page")
-			return
-		}
-
-		ctx := context.WithValue(c.Request.Context(), key, user)
-		*c = kmux.Context{
-			Params:         c.ParamsMap(),
-			Request:        c.Request.WithContext(ctx),
-			ResponseWriter: c.ResponseWriter,
-		}
-
-		handler(c)
 	}
 }

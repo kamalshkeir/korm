@@ -9,7 +9,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/kamalshkeir/argon"
 	"github.com/kamalshkeir/kinput"
@@ -214,12 +213,11 @@ func newuser(email, password string, admin bool) error {
 		return err
 	}
 	_, err = Table("users").Insert(map[string]any{
-		"uuid":       GenerateUUID(),
-		"email":      email,
-		"password":   hash,
-		"is_admin":   admin,
-		"image":      "",
-		"created_at": time.Now(),
+		"uuid":     GenerateUUID(),
+		"email":    email,
+		"password": hash,
+		"is_admin": admin,
+		"image":    "",
 	})
 	if err != nil {
 		return err
@@ -232,7 +230,7 @@ func getRow() {
 	whereField := kinput.Input(kinput.Blue, "Where field : ")
 	equalTo := kinput.Input(kinput.Blue, "Equal to : ")
 	if tableName != "" && whereField != "" && equalTo != "" {
-		var data map[string]interface{}
+		var data map[string]any
 		var err error
 		data, err = Table(tableName).Database(usedDB).Where(whereField+" = ?", equalTo).One()
 		if err == nil {
