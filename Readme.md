@@ -41,6 +41,7 @@
 - CRUD [Admin dashboard](#example-with-dashboard-you-dont-need-kormwithbus-with-it-because-withdashboard-already-call-it-and-return-the-server-bus-for-you) with ready offline installable PWA (using /static/sw.js and /static/manifest.json). All statics mentionned in `sw.js` will be cached and served by the service worker, you can inspect the Network to check it. 
 - [Router/Mux](https://github.com/kamalshkeir/kmux) accessible from the serverBus after calling `korm.WithBus()` or `korm.WithDashboard()`
 - [PPROF](#pprof) Go std library profiling tool
+- [Kenv](#example-not-required-load-config-from-env-directly-to-struct-using-kenv) load env vars to struct
 - [many to many](#manytomany-relationships-example) relationships 
 - Support for foreign keys, indexes , checks,... [See all](#automigrate)
 - [Interactive Shell](#interactive-shell), to CRUD in your databases `go run main.go shell` or `go run main.go mongoshell` for mongo
@@ -78,42 +79,17 @@ go get github.com/kamalshkeir/mysqldriver
 go get -u github.com/kamalshkeir/kormongo@latest // Mongo ORM
 ```
 
-# Load config from env directly to struct using Kenv
+### Global Vars
 ```go
-import "github.com/kamalshkeir/kenv"
-
-type EmbedS struct {
-	Static    bool `kenv:"EMBED_STATIC|false"`
-	Templates bool `kenv:"EMBED_TEMPLATES|false"`
-}
-
-type GlobalConfig struct {
-	Host       string `kenv:"HOST|localhost"` // DEFAULT to 'localhost': if HOST not found in env
-	Port       string `kenv:"PORT|9313"`
-	Embed 	   EmbedS
-	Db struct {
-		Name     string `kenv:"DB_NAME|db"` // NOT REQUIRED: if DB_NAME not found, defaulted to 'db'
-		Type     string `kenv:"DB_TYPE"` // REEQUIRED: this env var is required, you will have error if empty
-		DSN      string `kenv:"DB_DSN|"` // NOT REQUIRED: if DB_DSN not found it's not required, it's ok to stay empty
-	}
-	Smtp struct {
-		Email string `kenv:"SMTP_EMAIL|"`
-		Pass  string `kenv:"SMTP_PASS|"`
-		Host  string `kenv:"SMTP_HOST|"`
-		Port  string `kenv:"SMTP_PORT|"`
-	}
-	Profiler   bool   `kenv:"PROFILER|false"`
-	Docs       bool   `kenv:"DOCS|false"`
-	Logs       bool   `kenv:"LOGS|false"`
-	Monitoring bool   `kenv:"MONITORING|false"`
-}
-
-
-kenv.Load(".env") // load env file
-
-// Fill struct from env loaded before:
-Config := &GlobalConfig{}
-err := kenv.Fill(Config) // fill struct with env vars loaded before
+// Debug when true show extra useful logs for queries executed for migrations and queries statements
+Debug = false
+// FlushCacheEvery execute korm.FlushCache() every 10 min by default, you should not worry about it, but useful that you can change it
+FlushCacheEvery = 10 * time.Minute
+// Connection pool
+MaxOpenConns = 20
+MaxIdleConns = 7
+MaxLifetime = 1 * time.Hour
+MaxIdleTime = 1 * time.Hour
 ```
 
 ### Connect to a database
@@ -134,18 +110,7 @@ korm.Shutdown(databasesName ...string) error
 kormongo.ShutdownDatabases(databasesName ...string) error
 ```
 
-### Global Vars
-```go
-// Debug when true show extra useful logs for queries executed for migrations and queries statements
-Debug = false
-// FlushCacheEvery execute korm.FlushCache() every 10 min by default, you should not worry about it, but useful that you can change it
-FlushCacheEvery = 10 * time.Minute
-// Connection pool
-MaxOpenConns    = 10
-MaxIdleConns    = 10
-MaxLifetime     = 30 * time.Minute
-MaxIdleTime     = 12 * time.Hour
-```
+
 
 
 ### AutoMigrate 
@@ -776,6 +741,46 @@ _, err = korm.Model[Class]().Where("name = ?", "Math").DeleteRelated("students",
 _, err = korm.Table("classes").Where("name = ?", "Math").DeleteRelated("students", "name = ?", "hisName")
 
 ```
+
+
+# Example, not required, Load config from env directly to struct using Kenv
+```go
+import "github.com/kamalshkeir/kenv"
+
+type EmbedS struct {
+	Static    bool `kenv:"EMBED_STATIC|false"`
+	Templates bool `kenv:"EMBED_TEMPLATES|false"`
+}
+
+type GlobalConfig struct {
+	Host       string `kenv:"HOST|localhost"` // DEFAULT to 'localhost': if HOST not found in env
+	Port       string `kenv:"PORT|9313"`
+	Embed 	   EmbedS
+	Db struct {
+		Name     string `kenv:"DB_NAME|db"` // NOT REQUIRED: if DB_NAME not found, defaulted to 'db'
+		Type     string `kenv:"DB_TYPE"` // REEQUIRED: this env var is required, you will have error if empty
+		DSN      string `kenv:"DB_DSN|"` // NOT REQUIRED: if DB_DSN not found it's not required, it's ok to stay empty
+	}
+	Smtp struct {
+		Email string `kenv:"SMTP_EMAIL|"`
+		Pass  string `kenv:"SMTP_PASS|"`
+		Host  string `kenv:"SMTP_HOST|"`
+		Port  string `kenv:"SMTP_PORT|"`
+	}
+	Profiler   bool   `kenv:"PROFILER|false"`
+	Docs       bool   `kenv:"DOCS|false"`
+	Logs       bool   `kenv:"LOGS|false"`
+	Monitoring bool   `kenv:"MONITORING|false"`
+}
+
+
+kenv.Load(".env") // load env file
+
+// Fill struct from env loaded before:
+Config := &GlobalConfig{}
+err := kenv.Fill(Config) // fill struct with env vars loaded before
+```
+
 
 
 # Benchmarks
