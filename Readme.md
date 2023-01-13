@@ -36,21 +36,30 @@
 ##### All drivers are written in Go, so you will never encounter gcc or c missing compiler
 
 ### It Has :
-- New: [Hooks](#hooks) : OnInsert OnSet OnDelete and OnDrop
 - Simple [API](#api)
-- CRUD [Admin dashboard](#example-with-dashboard-you-dont-need-kormwithbus-with-it-because-withdashboard-already-call-it-and-return-the-server-bus-for-you) with ready offline installable PWA (using /static/sw.js and /static/manifest.json). All statics mentionned in `sw.js` will be cached and served by the service worker, you can inspect the Network to check it. 
-- [Router/Mux](https://github.com/kamalshkeir/kmux) accessible from the serverBus after calling `korm.WithBus()` or `korm.WithDashboard()`
-- [PPROF](#pprof) Go std library profiling tool
-- [Kenv](#example-not-required-load-config-from-env-directly-to-struct-using-kenv) load env vars to struct
-- [many to many](#manytomany-relationships-example) relationships 
-- Support for foreign keys, indexes , checks,... [See all](#automigrate)
-- [Interactive Shell](#interactive-shell), to CRUD in your databases `go run main.go shell` or `go run main.go mongoshell` for mongo
-- Network Bus allowing you to send and recv data in realtime using pubsub websockets between your ORMs, so you can decide how you data will be distributed between different databases, see [Example](#example-with-bus-between-2-korm) .
-- Compatible with std library database/sql, and the Mongo official driver, so if you want, know that you can always do your queries yourself using sql.DB or mongo.Client  `korm.GetConnection(dbName)` or `kormongo.GetConnection(dbName)`
-- [AutoMigrate](#automigrate) directly from struct, for mongo it will only link the struct to the tableName, allowing usage of BuilderS. For all sql, whenever you add or remove a field from a migrated struct, you will get a prompt proposing to add the column for the table in the database or remove a column, you can also only generate the query without execute, and then you can use the shell to migrate the generated file, to disable the check for sql, you can use `korm.DisableCheck()`.
-- [Load config](#load-config-from-env-directly-to-struct-using-kenv) from env directly to struct
-- Concurrency Safe access.
 
+- CRUD [Admin dashboard](#example-with-dashboard-you-dont-need-kormwithbus-with-it-because-withdashboard-already-call-it-and-return-the-server-bus-for-you) with ready offline and installable PWA (using /static/sw.js and /static/manifest.webmanifest). All statics mentionned in `sw.js` will be cached and served by the service worker, you can inspect the Network Tab in the browser to check it
+
+- [Interactive Shell](#interactive-shell), to CRUD in your databases `go run main.go shell` or `go run main.go mongoshell` for mongo
+
+
+- Network Bus allowing you to send and recv data in realtime using pubsub websockets between your ORMs, so you can decide how you data will be distributed between different databases, see [Example](#example-with-bus-between-2-korm) 
+
+- Compatible with official database/sql, and the Mongo official driver, so you can do your queries yourself using sql.DB or mongo.Client  `korm.GetConnection(dbName)` or `kormongo.GetConnection(dbName)`, and overall a painless integration of your existing codebases using database/sql
+
+- [AutoMigrate](#automigrate) directly from struct, for mongo it will only link the struct to the tableName, allowing usage of BuilderS. For all sql, whenever you add or remove a field from a migrated struct, you will get a prompt proposing to add the column for the table in the database or remove a column, you can also only generate the query without execute, and then you can use the shell to migrate the generated file, to disable the check for sql, you can use `korm.DisableCheck()`
+
+- [Router/Mux](https://github.com/kamalshkeir/kmux) accessible from the serverBus after calling `korm.WithBus()` or `korm.WithDashboard()`
+
+- [Hooks](#hooks) : OnInsert OnSet OnDelete and OnDrop
+
+- [many to many](#manytomany-relationships-example) relationships
+
+- Support for foreign keys, indexes , checks,... [See all](#automigrate)
+
+- [PPROF](#pprof) Go std library profiling tool
+
+- [Kenv](#example-not-required-load-config-from-env-directly-to-struct-using-kenv) load env vars to struct
 
 #### Supported databases:
 - Sqlite
@@ -629,7 +638,8 @@ func main() {
 }
 ```
 
-## Router/Mux github.com/kamalshkeir/kmux
+## Router/Mux 
+Learn more about [Kmux](https://github.com/kamalshkeir/kmux)
 ```go
 
 func main() {
@@ -652,7 +662,9 @@ func main() {
 
 ### Pprof
 ```go
+
 korm.Pprof=true (before WithDashboard)
+
 will enable:
 	- /debug/pprof
 	- /debug/pprof/profile
@@ -743,6 +755,48 @@ _, err = korm.Table("classes").Where("name = ?", "Math").DeleteRelated("students
 ```
 
 
+### Interactive shell
+```shell
+AVAILABLE COMMANDS:
+[databases, use, tables, columns, migrate, createsuperuser, createuser, getall, get, drop, delete, clear/cls, q/quit/exit, help/commands]
+  'databases':
+	  list all connected databases
+
+  'use':
+	  use a specific database
+
+  'tables':
+	  list all tables in database
+
+  'columns':
+	  list all columns of a table
+
+  'migrate':
+	  migrate or execute sql file
+
+  'createsuperuser': #only with korm.WithDashboard()
+	  create a admin user
+  
+  'createuser':  #only with korm.WithDashboard()
+	  create a regular user
+
+  'getall':
+	  get all rows given a table name
+
+  'get':
+	  get single row wher field equal_to
+
+  'delete':
+	  delete rows where field equal_to
+
+  'drop':
+	  drop a table given table name
+
+  'clear/cls':
+	  clear console
+```
+
+
 # Example, not required, Load config from env directly to struct using Kenv
 ```go
 import "github.com/kamalshkeir/kenv"
@@ -784,10 +838,13 @@ err := kenv.Fill(Config) // fill struct with env vars loaded before
 
 
 # Benchmarks
+```sh
 goos: windows
 goarch: amd64
 pkg: github.com/kamalshkeir/korm/benchmarks
 cpu: Intel(R) Core(TM) i5-7300HQ CPU @ 2.50GHz
+```
+
 ```go
 ////////////////////////////////////////////  query 5000 rows  //////////////////////////////////////////////
 BenchmarkGetAllS_GORM-4               33          41601094 ns/op         8796852 B/op     234780 allocs/op
@@ -1008,47 +1065,6 @@ Available 'on_delete' and 'on_update' options: cascade,(donothing,noaction),(set
 </table>
 
 ---
-
-### Interactive shell
-```shell
-AVAILABLE COMMANDS:
-[databases, use, tables, columns, migrate, createsuperuser, createuser, getall, get, drop, delete, clear/cls, q/quit/exit, help/commands]
-  'databases':
-	  list all connected databases
-
-  'use':
-	  use a specific database
-
-  'tables':
-	  list all tables in database
-
-  'columns':
-	  list all columns of a table
-
-  'migrate':
-	  migrate or execute sql file
-
-  'createsuperuser': #only with korm.WithDashboard()
-	  create a admin user
-  
-  'createuser':  #only with korm.WithDashboard()
-	  create a regular user
-
-  'getall':
-	  get all rows given a table name
-
-  'get':
-	  get single row wher field equal_to
-
-  'delete':
-	  delete rows where field equal_to
-
-  'drop':
-	  drop a table given table name
-
-  'clear/cls':
-	  clear console
-```
 
 
 # 🔗 Links
