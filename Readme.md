@@ -36,6 +36,8 @@
 ##### All drivers are written in Go, so you will never encounter gcc or c missing compiler
 
 ### It Has :
+- New: [Benchmarks](#benchmarks) Updated , still need some benchmarks for select, orderBy, ...
+
 - Simple [API](#api)
 
 - CRUD [Admin dashboard](#example-with-dashboard-you-dont-need-kormwithbus-with-it-because-withdashboard-already-call-it-and-return-the-server-bus-for-you) with ready offline and installable PWA (using /static/sw.js and /static/manifest.webmanifest). All statics mentionned in `sw.js` will be cached and served by the service worker, you can inspect the Network Tab in the browser to check it
@@ -119,7 +121,80 @@ korm.Shutdown(databasesName ...string) error
 kormongo.ShutdownDatabases(databasesName ...string) error
 ```
 
+### Hello world example
 
+```go
+package main
+
+import (
+	"fmt"
+	"log"
+	"strings"
+	"time"
+
+	"github.com/kamalshkeir/argon"
+	"github.com/kamalshkeir/klog"
+	"github.com/kamalshkeir/korm"
+	"github.com/kamalshkeir/sqlitedriver"
+)
+
+type User struct {
+	Id        int       `korm:"pk"`              // AUTO Increment ID primary key
+	Uuid      string    `korm:"size:40"`         // VARCHAR(40)
+	Email     string    `korm:"size:50;iunique"` // VARCHAR(50) insensitive unique constraint
+	Password  string    `korm:"size:150"`        // VARCHAR(150)
+	IsAdmin   bool      `korm:"default:false"`   // NOT NULL CHECK is_admin IN (0,1) DEFAULT 0
+	Image     string    `korm:"size:100;default:''"` // VARCHAR(100) DEFAULT ''
+	CreatedAt time.Time `korm:"now"` // auto now
+}
+
+func main() {
+	sqlitedriver.Use()
+	err := korm.New(korm.SQLITE, "db")
+	if klog.CheckError(err) {return}
+
+	err = korm.AutoMigrate[User]("users")
+	if klog.CheckError(err) {return}
+
+	defer func() {
+		err := korm.Shutdown("db")
+		klog.CheckError(err)
+	}()
+
+	
+	password := "password"
+	hashedPass, _ := argon.Hash(password)
+
+	// Insert return the inserted PK
+	insertedId, err = korm.Model[User]().Insert(&User{
+		Uuid:      korm.GenerateUUID(),
+		Email:     "test@example.com",
+		Password:  hashedPass,
+		IsAdmin:   false,
+		Image:     "",
+		//CreatedAt: time.Now(), // not needed because it's auto new
+	})
+	if klog.CheckError(err) {return}
+	klog.Printf("grinserted userd id : %d \n",insertedId)
+
+	// InsertR return the inserted model , here it's User
+	insertedUser, err = korm.Model[User]().InsertR(&User{
+		Uuid:      korm.GenerateUUID(),
+		Email:     "test2@example.com",
+		Password:  hashedPass,
+		IsAdmin:   false,
+		Image:     "",
+	})
+	if klog.CheckError(err) {return}
+	klog.Printf("grinserted userd email returned : %s \n",insertedUser.Email) // should be "test2@example.com"
+
+	// users, err := korm.Model[User]().Select("email", "uuid").OrderBy("-id").Limit(10).Page(1).All()
+	users, err := korm.Model[User]().All()
+	klog.CheckError(err)
+
+	klog.Printf("ylusers: %v\n",users)
+}
+```
 
 
 ### AutoMigrate 
