@@ -36,7 +36,7 @@
 ##### All drivers are written in Go, so you will never encounter gcc or c missing compiler
 
 ### It Has :
-- New: [Benchmarks](#benchmarks) Updated , still need some benchmarks for select, orderBy, ...
+- New: [Benchmarks](#benchmarks) Updated
 
 - Simple [API](#api)
 
@@ -921,39 +921,85 @@ cpu: Intel(R) Core(TM) i5-7300HQ CPU @ 2.50GHz
 ```
 
 ```go
+type TestTable struct {
+	Id        uint `korm:"pk"`
+	Email     string
+	Content   string
+	Password  string
+	IsAdmin   bool
+	CreatedAt time.Time `korm:"now"`
+	UpdatedAt time.Time `korm:"update"`
+}
+
+type TestTableGorm struct {
+	Id        uint `gorm:"primarykey"`
+	Email     string
+	Content   string
+	Password  string
+	IsAdmin   bool
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+////////////////////////////////////////////  query 7000 rows  //////////////////////////////////////////////
+BenchmarkGetAllS_GORM-4                       19          56049832 ns/op        12163316 B/op     328790 allocs/op
+BenchmarkGetAllS-4                       2708934               395.3 ns/op           224 B/op          1 allocs/op
+BenchmarkGetAllM_GORM-4                       18          62989567 ns/op        13212278 B/op     468632 allocs/op
+BenchmarkGetAllM-4                       4219461               273.5 ns/op           224 B/op          1 allocs/op
+BenchmarkGetRowS_GORM-4                    12188             96988 ns/op            5930 B/op        142 allocs/op
+BenchmarkGetRowS-4                       1473164               805.1 ns/op           336 B/op          7 allocs/op
+BenchmarkGetRowM_GORM-4                    11402            101638 ns/op            7408 B/op        203 allocs/op
+BenchmarkGetRowM-4                       1752652               671.9 ns/op           336 B/op          7 allocs/op
+BenchmarkPagination10_GORM-4                7714            153304 ns/op           19357 B/op        549 allocs/op
+BenchmarkPagination10-4                  1285722               934.5 ns/op           400 B/op          7 allocs/op
+BenchmarkPagination100_GORM-4               1364            738934 ns/op          165423 B/op       4704 allocs/op
+BenchmarkPagination100-4                 1278724               956.5 ns/op           400 B/op          7 allocs/op
+BenchmarkGetAllTables-4                 47465865                25.48 ns/op            0 B/op          0 allocs/op
+BenchmarkGetAllColumns-4                23657019                42.82 ns/op            0 B/op          0 allocs/op
 ////////////////////////////////////////////  query 5000 rows  //////////////////////////////////////////////
-BenchmarkGetAllS_GORM-4               33          41601094 ns/op         8796852 B/op     234780 allocs/op
-BenchmarkGetAllS-4               2771838               390.3 ns/op           224 B/op          1 allocs/op
-BenchmarkGetAllM_GORM-4               25          44866500 ns/op         9433536 B/op     334631 allocs/op
-BenchmarkGetAllM-4               4113112               268.6 ns/op           224 B/op          1 allocs/op
-BenchmarkGetRowS_GORM-4            12170             97829 ns/op            5962 B/op        142 allocs/op
-BenchmarkGetRowS-4               1448455               828.9 ns/op           336 B/op          7 allocs/op
-BenchmarkGetRowM_GORM-4            11899            101547 ns/op            7096 B/op        200 allocs/op
-BenchmarkGetRowM-4               1731766               693.2 ns/op           336 B/op          7 allocs/op
-BenchmarkGetAllTables-4         47112411                25.61 ns/op            0 B/op          0 allocs/op
-BenchmarkGetAllColumns-4        30015081                41.07 ns/op            0 B/op          0 allocs/op
+BenchmarkGetAllS_GORM-4                       24          43247546 ns/op         8796840 B/op     234784 allocs/op
+BenchmarkGetAllS-4                       2854401               426.8 ns/op           224 B/op          1 allocs/op
+BenchmarkGetAllM_GORM-4                       24          46329242 ns/op         9433050 B/op     334631 allocs/op
+BenchmarkGetAllM-4                       4076317               283.4 ns/op           224 B/op          1 allocs/op
+BenchmarkGetRowS_GORM-4                    11445            101107 ns/op            5962 B/op        142 allocs/op
+BenchmarkGetRowS-4                       1344831               848.4 ns/op           336 B/op          7 allocs/op
+BenchmarkGetRowM_GORM-4                    10000            100969 ns/op            7440 B/op        203 allocs/op
+BenchmarkGetRowM-4                       1721742               688.5 ns/op           336 B/op          7 allocs/op
+BenchmarkPagination10_GORM-4                7500            156208 ns/op           19423 B/op        549 allocs/op
+BenchmarkPagination10-4                  1253757               952.3 ns/op           400 B/op          7 allocs/op
+BenchmarkPagination100_GORM-4               1564            749408 ns/op          165766 B/op       4704 allocs/op
+BenchmarkPagination100-4                 1236270               957.5 ns/op           400 B/op          7 allocs/op
+BenchmarkGetAllTables-4                 44399386                25.43 ns/op            0 B/op          0 allocs/op
+BenchmarkGetAllColumns-4                27906392                41.45 ns/op            0 B/op          0 allocs/op
 ////////////////////////////////////////////  query 1000 rows  //////////////////////////////////////////////
-BenchmarkGetAllS_GORM-4              158           7131799 ns/op         1684076 B/op      46736 allocs/op
-BenchmarkGetAllS-4               2665074               416.9 ns/op           224 B/op          1 allocs/op
-BenchmarkGetAllM_GORM-4              130           8388724 ns/op         1887113 B/op      66626 allocs/op
-BenchmarkGetAllM-4               3835689               294.8 ns/op           224 B/op          1 allocs/op
-BenchmarkGetRowS_GORM-4            12292             95914 ns/op            5967 B/op        142 allocs/op
-BenchmarkGetRowS-4               1324114               886.1 ns/op           336 B/op          7 allocs/op
-BenchmarkGetRowM_GORM-4            10000            102954 ns/op            7096 B/op        200 allocs/op
-BenchmarkGetRowM-4               1614579               754.4 ns/op           336 B/op          7 allocs/op
-BenchmarkGetAllTables-4         42066442                25.67 ns/op            0 B/op          0 allocs/op
-BenchmarkGetAllColumns-4        27996565                41.50 ns/op            0 B/op          0 allocs/op
-////////////////////////////////////////////  query 100 rows  //////////////////////////////////////////////
-BenchmarkGetAllS_GORM-4             1585            726960 ns/op          164736 B/op       4575 allocs/op
-BenchmarkGetAllS-4               3050307               389.4 ns/op           224 B/op          1 allocs/op
-BenchmarkGetAllM_GORM-4             1252            884975 ns/op          191158 B/op       6629 allocs/op
-BenchmarkGetAllM-4               4131709               310.1 ns/op           224 B/op          1 allocs/op
-BenchmarkGetRowS_GORM-4            11154             98986 ns/op            5966 B/op        142 allocs/op
-BenchmarkGetRowS-4               1379994               873.6 ns/op           336 B/op          7 allocs/op
-BenchmarkGetRowM_GORM-4            10000            106291 ns/op            7096 B/op        200 allocs/op
-BenchmarkGetRowM-4               1652276               728.3 ns/op           336 B/op          7 allocs/op
-BenchmarkGetAllTables-4         47458011                26.52 ns/op            0 B/op          0 allocs/op
-BenchmarkGetAllColumns-4        27860600                42.02 ns/op            0 B/op          0 allocs/op
+BenchmarkGetAllS_GORM-4                      163           6766871 ns/op         1683919 B/op      46735 allocs/op
+BenchmarkGetAllS-4                       2882660               399.0 ns/op           224 B/op          1 allocs/op
+BenchmarkGetAllM_GORM-4                      140           8344988 ns/op         1886922 B/op      66626 allocs/op
+BenchmarkGetAllM-4                       3826730               296.5 ns/op           224 B/op          1 allocs/op
+BenchmarkGetRowS_GORM-4                    11940             97725 ns/op            5935 B/op        142 allocs/op
+BenchmarkGetRowS-4                       1333258               903.0 ns/op           336 B/op          7 allocs/op
+BenchmarkGetRowM_GORM-4                    10000            106079 ns/op            7408 B/op        203 allocs/op
+BenchmarkGetRowM-4                       1601274               748.2 ns/op           336 B/op          7 allocs/op
+BenchmarkPagination10_GORM-4                7534            159991 ns/op           19409 B/op        549 allocs/op
+BenchmarkPagination10-4                  1153982              1022 ns/op             400 B/op          7 allocs/op
+BenchmarkPagination100_GORM-4               1468            766269 ns/op          165876 B/op       4705 allocs/op
+BenchmarkPagination100-4                 1000000              1016 ns/op             400 B/op          7 allocs/op
+BenchmarkGetAllTables-4                 56200297                25.36 ns/op            0 B/op          0 allocs/op
+BenchmarkGetAllColumns-4                25478679                41.30 ns/op            0 B/op          0 allocs/op
+////////////////////////////////////////////  query 300 rows  //////////////////////////////////////////////
+BenchmarkGetAllS_GORM-4                      558           2046830 ns/op          458475 B/op      13823 allocs/op
+BenchmarkGetAllS-4                       2798872               411.5 ns/op           224 B/op          1 allocs/op
+BenchmarkGetAllM_GORM-4                      428           2605646 ns/op          567011 B/op      19721 allocs/op
+BenchmarkGetAllM-4                       4093662               287.9 ns/op           224 B/op          1 allocs/op
+BenchmarkGetRowS_GORM-4                    12182             97764 ns/op            5966 B/op        142 allocs/op
+BenchmarkGetRowS-4                       1347084               886.4 ns/op           336 B/op          7 allocs/op
+BenchmarkGetRowM_GORM-4                    10000            105311 ns/op            7440 B/op        203 allocs/op
+BenchmarkGetRowM-4                       1390363               780.0 ns/op           336 B/op          7 allocs/op
+BenchmarkPagination10_GORM-4                7502            155949 ns/op           19437 B/op        549 allocs/op
+BenchmarkPagination10-4                  1000000              1046 ns/op             400 B/op          7 allocs/op
+BenchmarkPagination100_GORM-4               1479            779700 ns/op          165679 B/op       4705 allocs/op
+BenchmarkPagination100-4                 1000000              1054 ns/op             400 B/op          7 allocs/op
+BenchmarkGetAllTables-4                 52255704                26.00 ns/op            0 B/op          0 allocs/op
+BenchmarkGetAllColumns-4                29292368                42.09 ns/op            0 B/op          0 allocs/op
 ////////////////////////////////////////////    MONGO       //////////////////////////////////////////////
 BenchmarkGetAllS-4               3121384               385.6 ns/op           224 B/op          1 allocs/op
 BenchmarkGetAllM-4               4570059               264.2 ns/op           224 B/op          1 allocs/op

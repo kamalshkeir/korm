@@ -14,7 +14,7 @@ import (
 )
 
 var DB_BENCH_NAME = "bench"
-var NumberOfModel = 20 // minimum 11
+var NumberOfModel = 300 // min 300
 
 type TestTable struct {
 	Id        uint `korm:"pk"`
@@ -86,7 +86,8 @@ func TestMain(m *testing.M) {
 	// 		}
 	// 	}
 	// }
-	// run tests
+
+	//run tests
 	exitCode := m.Run()
 
 	err = korm.Shutdown(DB_BENCH_NAME)
@@ -200,10 +201,10 @@ func BenchmarkGetRowS(b *testing.B) {
 }
 
 // func BenchmarkGetRowM_GORM(b *testing.B) {
-// 	u := map[string]any{}
 // 	b.ReportAllocs()
 // 	b.ResetTimer()
 // 	for i := 0; i < b.N; i++ {
+// 		u := map[string]any{}
 // 		err := gormDB.Model(&TestTableGorm{}).Where(&TestTableGorm{
 // 			Email: "test-10@example.com",
 // 		}).First(&u).Error
@@ -226,6 +227,84 @@ func BenchmarkGetRowM(b *testing.B) {
 		}
 		if u["email"] != "test-10@example.com" {
 			b.Error("gorm failed BenchmarkGetRowM:", u)
+		}
+	}
+}
+
+// func BenchmarkPagination10_GORM(b *testing.B) {
+// 	page := 2
+// 	pageSize := 10
+// 	b.ReportAllocs()
+// 	b.ResetTimer()
+// 	for i := 0; i < b.N; i++ {
+// 		u := []TestTableGorm{}
+// 		offset := (page - 1) * pageSize
+// 		err := gormDB.Model(&TestTableGorm{}).Where(&TestTableGorm{
+// 			IsAdmin: true,
+// 		}).Offset(offset).Limit(pageSize).Find(&u).Error
+// 		if err != nil {
+// 			b.Error("error BenchmarkPagination10_GORM:", err)
+// 		}
+// 		if len(u) != pageSize || u[0].Email == "" {
+// 			b.Error("error len BenchmarkPagination10_GORM:", len(u))
+// 		}
+// 	}
+// }
+
+func BenchmarkPagination10(b *testing.B) {
+	page := 2
+	pageSize := 10
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		u, err := korm.Model[TestTable]().Where("is_admin", true).Page(page).Limit(pageSize).All()
+		if err != nil {
+			b.Error("error BenchmarkPagination10:", err)
+		}
+		if len(u) != pageSize || u[0].Email == "" {
+			b.Error("error len BenchmarkPagination10:", len(u))
+		}
+	}
+}
+
+// func BenchmarkPagination100_GORM(b *testing.B) {
+// 	page := 2
+// 	pageSize := 100
+// 	if NumberOfModel <= pageSize {
+// 		return
+// 	}
+// 	b.ReportAllocs()
+// 	b.ResetTimer()
+// 	for i := 0; i < b.N; i++ {
+// 		u := []TestTableGorm{}
+// 		offset := (page - 1) * pageSize
+// 		err := gormDB.Model(&TestTableGorm{}).Where(&TestTableGorm{
+// 			IsAdmin: true,
+// 		}).Offset(offset).Limit(pageSize).Find(&u).Error
+// 		if err != nil {
+// 			b.Error("error BenchmarkPagination10_GORM:", err)
+// 		}
+// 		if len(u) != pageSize || u[0].Email == "" {
+// 			b.Error("error len BenchmarkPagination10_GORM:", len(u))
+// 		}
+// 	}
+// }
+
+func BenchmarkPagination100(b *testing.B) {
+	page := 2
+	pageSize := 100
+	if NumberOfModel <= pageSize {
+		return
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		u, err := korm.Model[TestTable]().Where("is_admin", true).Page(page).Limit(pageSize).All()
+		if err != nil {
+			b.Error("error BenchmarkPagination10:", err)
+		}
+		if len(u) != pageSize || u[0].Email == "" {
+			b.Error("error len BenchmarkPagination10:", len(u))
 		}
 	}
 }
