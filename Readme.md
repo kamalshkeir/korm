@@ -920,6 +920,14 @@ pkg: github.com/kamalshkeir/korm/benchmarks
 cpu: Intel(R) Core(TM) i5-7300HQ CPU @ 2.50GHz
 ```
 
+To execute these benchmarks on your machine, very easy :
+
+- git clone https://github.com/kamalshkeir/korm.git
+- cd korm
+- uncomment commented code at benchmarks/bench-test.go
+- go mod tidy
+- go test -bench ^ .\benchmarks\ -benchmem
+
 ```go
 type TestTable struct {
 	Id        uint `korm:"pk"`
