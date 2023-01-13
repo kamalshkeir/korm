@@ -924,7 +924,7 @@ To execute these benchmarks on your machine, very easy :
 
 - git clone https://github.com/kamalshkeir/korm.git
 - cd korm
-- uncomment commented code at benchmarks/bench-test.go
+- uncomment commented code at benchmarks/bench-test.go and Save
 - go mod tidy
 - go test -bench ^ .\benchmarks\ -benchmem
 
