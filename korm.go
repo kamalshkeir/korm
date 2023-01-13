@@ -126,7 +126,7 @@ func New(dbType Dialect, dbName string, dbDSN ...string) error {
 		}
 	default:
 		dbType = SQLITE
-		klog.Printf("%s not handled, choices are: postgres,mysql,sqlite,maria,coakroach\n", dbType)
+		klog.Printf("%s not handled, choices are: postgres,mysql,sqlite,maria,cockroach\n", dbType)
 		dsn = dbName + ".sqlite"
 		if dsn == "" {
 			dsn = "db.sqlite"
@@ -230,7 +230,7 @@ func ManyToMany(table1, table2 string, dbName ...string) error {
 	case MYSQL, MARIA:
 		autoinc = "INTEGER NOT NULL PRIMARY KEY AUTO_INCREMENT"
 	default:
-		klog.Printf("dialect can be sqlite, postgres, coakroach or mysql,maria only, not %s\n", dben.Dialect)
+		klog.Printf("dialect can be sqlite, postgres, cockroach or mysql,maria only, not %s\n", dben.Dialect)
 	}
 
 	fkeys = append(fkeys, foreignkeyStat(table1+"_id", table1, "cascade", "cascade"))
@@ -510,7 +510,7 @@ func GetAllTables(dbName ...string) []string {
 			tables = append(tables, table)
 		}
 	default:
-		klog.Printf("rddatabase type not supported, should be sqlite, postgres, coakroach, maria or mysql")
+		klog.Printf("rddatabase type not supported, should be sqlite, postgres, cockroach, maria or mysql")
 		return nil
 	}
 	if useCache && len(tables) > 0 {
@@ -680,7 +680,7 @@ func AddTrigger(onTable, col, bf_af_UpdateInsertDelete string, ofColumn, stmt st
 		st += bf_af_UpdateInsertDelete + ofColumn + " ON " + onTable
 		st += " BEGIN " + stmt + ";End;"
 		stat = append(stat, st)
-	case POSTGRES, "coakroach", "pg", "coakroachdb":
+	case POSTGRES, "cockroach", "pg", "cockroachdb":
 		if ofColumn != "" {
 			ofColumn = " OF " + col
 		}

@@ -66,7 +66,7 @@
 - Postgres
 - Mysql
 - Maria
-- Coakroach
+- Cockroach
 - Mongo via [MONGO](https://github.com/kamalshkeir/kormongo)
 
 
@@ -74,7 +74,7 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@v1.3.9 // latest version
+go get -u github.com/kamalshkeir/korm@v1.4.0 // latest version
 ```
 
 # Drivers moved outside this package to not get them all in your go.mod file
@@ -108,7 +108,7 @@ err := kormongo.New("dbmongo", "localhost:27017")
 // sqlite
 sqlitedriver.Use() // load sqlite driver --> go get github.com/kamalshkeir/sqlitedriver
 err := korm.New(korm.SQLITE, "db") // Connect
-// postgres, coakroach
+// postgres, cockroach
 pgdriver.Use() // load postgres driver  --> go get github.com/kamalshkeir/pgdriver
 err := korm.New(korm.POSTGRES,"dbName", "user:password@localhost:5432") // Connect
 // mysql, maria
@@ -150,7 +150,7 @@ type Bookmark struct {
 	IsDone	bool   
 	ToCheck string `korm:"size:50; notnull; check: len(to_check) > 2 AND len(to_check) < 10; check: is_done=true"`  // column type will be VARCHAR(50)
 	Content string `korm:"text"` // column type will be TEXT not VARCHAR
-	UpdatedAt time.Time `korm:"update"` // will update when model updated, handled by triggers for sqlite, coakroach and postgres, and on migration for mysql
+	UpdatedAt time.Time `korm:"update"` // will update when model updated, handled by triggers for sqlite, cockroach and postgres, and on migration for mysql
 	CreatedAt time.Time `korm:"now"` // now is default to current timestamp and of type TEXT for sqlite
 }
 

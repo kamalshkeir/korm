@@ -44,12 +44,18 @@ func Table(tableName string) *BuilderM {
 
 // Database allow to choose database to execute query on
 func (b *BuilderM) Database(dbName string) *BuilderM {
+	if b == nil || b.tableName == "" {
+		return nil
+	}
 	b.database = dbName
 	return b
 }
 
 // Select select table columns to return
 func (b *BuilderM) Select(columns ...string) *BuilderM {
+	if b == nil || b.tableName == "" {
+		return nil
+	}
 	b.selected = strings.Join(columns, ",")
 	b.order = append(b.order, "select")
 	return b
@@ -57,6 +63,9 @@ func (b *BuilderM) Select(columns ...string) *BuilderM {
 
 // Where can be like: Where("id > ?",1) or Where("id",1) = Where("id = ?",1)
 func (b *BuilderM) Where(query string, args ...any) *BuilderM {
+	if b == nil || b.tableName == "" {
+		return nil
+	}
 	adaptWhereQuery(&query, b.tableName)
 	adaptTrueFalseArgs(&args)
 	b.whereQuery = query
@@ -67,6 +76,9 @@ func (b *BuilderM) Where(query string, args ...any) *BuilderM {
 
 // Query can be used like: Query("select * from table") or Query("select * from table where col like '?'","%something%")
 func (b *BuilderM) Query(query string, args ...any) *BuilderM {
+	if b == nil || b.tableName == "" {
+		return nil
+	}
 	b.query = query
 	adaptTrueFalseArgs(&args)
 	b.args = append(b.args, args...)
@@ -76,8 +88,7 @@ func (b *BuilderM) Query(query string, args ...any) *BuilderM {
 
 // Limit set limit
 func (b *BuilderM) Limit(limit int) *BuilderM {
-	if b.tableName == "" {
-		klog.Printf("rdUse db.Table before Limit\n")
+	if b == nil || b.tableName == "" {
 		return nil
 	}
 	b.limit = limit
@@ -87,8 +98,7 @@ func (b *BuilderM) Limit(limit int) *BuilderM {
 
 // Page return paginated elements using Limit for specific page
 func (b *BuilderM) Page(pageNumber int) *BuilderM {
-	if b.tableName == "" {
-		klog.Printf("rdUse db.Table before Page\n")
+	if b == nil || b.tableName == "" {
 		return nil
 	}
 	b.page = pageNumber
@@ -98,8 +108,7 @@ func (b *BuilderM) Page(pageNumber int) *BuilderM {
 
 // OrderBy can be used like: OrderBy("-id","-email") OrderBy("id","-email") OrderBy("+id","email")
 func (b *BuilderM) OrderBy(fields ...string) *BuilderM {
-	if b.tableName == "" {
-		klog.Printf("rdUse db.Table before OrderBy\n")
+	if b == nil || b.tableName == "" {
 		return nil
 	}
 	b.orderBys = "ORDER BY "
@@ -138,8 +147,7 @@ func (b *BuilderM) OrderBy(fields ...string) *BuilderM {
 
 // Context allow to query or execute using ctx
 func (b *BuilderM) Context(ctx context.Context) *BuilderM {
-	if b.tableName == "" {
-		klog.Printf("rdUse db.Table before Context\n")
+	if b == nil || b.tableName == "" {
 		return nil
 	}
 	b.ctx = ctx
@@ -148,8 +156,7 @@ func (b *BuilderM) Context(ctx context.Context) *BuilderM {
 
 // Debug print prepared statement and values for this operation
 func (b *BuilderM) Debug() *BuilderM {
-	if b.tableName == "" {
-		klog.Printf("rdUse db.Table before Debug\n")
+	if b == nil || b.tableName == "" {
 		return nil
 	}
 	b.debug = true
@@ -158,8 +165,8 @@ func (b *BuilderM) Debug() *BuilderM {
 
 // All get all data
 func (b *BuilderM) All() ([]map[string]any, error) {
-	if b.tableName == "" {
-		return nil, errors.New("unable to find table, try db.Table before")
+	if b == nil || b.tableName == "" {
+		return nil, ErrTableNotFound
 	}
 
 	c := dbCache{
@@ -225,8 +232,8 @@ func (b *BuilderM) All() ([]map[string]any, error) {
 
 // One get single row
 func (b *BuilderM) One() (map[string]any, error) {
-	if b.tableName == "" {
-		return nil, errors.New("unable to find table, try db.Table before")
+	if b == nil || b.tableName == "" {
+		return nil, ErrTableNotFound
 	}
 	c := dbCache{
 		database:   b.database,
@@ -290,8 +297,8 @@ func (b *BuilderM) One() (map[string]any, error) {
 
 // Insert add row to a table using input map, and return PK of the inserted row
 func (b *BuilderM) Insert(rowData map[string]any) (int, error) {
-	if b.tableName == "" {
-		return 0, errors.New("unable to find table, try db.Table before")
+	if b == nil || b.tableName == "" {
+		return 0, ErrTableNotFound
 	}
 	if useCache {
 		cachebus.Publish(CACHE_TOPIC, map[string]any{
@@ -393,8 +400,8 @@ func (b *BuilderM) Insert(rowData map[string]any) (int, error) {
 
 // InsertR add row to a table using input map, and return the inserted row
 func (b *BuilderM) InsertR(rowData map[string]any) (map[string]any, error) {
-	if b.tableName == "" {
-		return nil, errors.New("unable to find table, try db.Table before")
+	if b == nil || b.tableName == "" {
+		return nil, ErrTableNotFound
 	}
 	if useCache {
 		cachebus.Publish(CACHE_TOPIC, map[string]any{
@@ -500,8 +507,8 @@ func (b *BuilderM) InsertR(rowData map[string]any) (map[string]any, error) {
 
 // BulkInsert insert many row at the same time in one query
 func (b *BuilderM) BulkInsert(rowsData ...map[string]any) ([]int, error) {
-	if b.tableName == "" {
-		return nil, errors.New("unable to find table, try db.Table before")
+	if b == nil || b.tableName == "" {
+		return nil, ErrTableNotFound
 	}
 	if useCache {
 		cachebus.Publish(CACHE_TOPIC, map[string]any{
@@ -617,8 +624,8 @@ func (b *BuilderM) BulkInsert(rowsData ...map[string]any) ([]int, error) {
 
 // Set used to update, Set("email,is_admin","example@mail.com",true) or Set("email = ? AND is_admin = ?","example@mail.com",true)
 func (b *BuilderM) Set(query string, args ...any) (int, error) {
-	if b.tableName == "" {
-		return 0, errors.New("unable to find model, try db.Table before")
+	if b == nil || b.tableName == "" {
+		return 0, ErrTableNotFound
 	}
 	if useCache {
 		cachebus.Publish(CACHE_TOPIC, map[string]any{
@@ -678,8 +685,8 @@ func (b *BuilderM) Set(query string, args ...any) (int, error) {
 
 // Delete data from database, can be multiple, depending on the where, return affected rows(Not every database or database driver may support affected rows)
 func (b *BuilderM) Delete() (int, error) {
-	if b.tableName == "" {
-		return 0, errors.New("unable to find model, try korm.AutoMigrate before")
+	if b == nil || b.tableName == "" {
+		return 0, ErrTableNotFound
 	}
 	if useCache {
 		cachebus.Publish(CACHE_TOPIC, map[string]any{
@@ -727,8 +734,8 @@ func (b *BuilderM) Delete() (int, error) {
 
 // Drop drop table from db
 func (b *BuilderM) Drop() (int, error) {
-	if b.tableName == "" {
-		return 0, errors.New("unable to find model, try korm.LinkModel before Update")
+	if b == nil || b.tableName == "" {
+		return 0, ErrTableNotFound
 	}
 	if useCache {
 		cachebus.Publish(CACHE_TOPIC, map[string]any{
@@ -765,7 +772,7 @@ func (b *BuilderM) Drop() (int, error) {
 
 // AddRelated used for many to many, and after korm.ManyToMany, to add a class to a student or a student to a class, class or student should exist in the database before adding them
 func (b *BuilderM) AddRelated(relatedTable string, whereRelatedTable string, whereRelatedArgs ...any) (int, error) {
-	if b.tableName == "" {
+	if b == nil || b.tableName == "" {
 		return 0, errors.New("unable to find model, try korm.AutoMigrate before")
 	}
 	if useCache {
@@ -871,7 +878,7 @@ func (b *BuilderM) AddRelated(relatedTable string, whereRelatedTable string, whe
 
 // GetRelated used for many to many to get related classes to a student or related students to a class
 func (b *BuilderM) GetRelated(relatedTable string, dest *[]map[string]any) error {
-	if b.tableName == "" {
+	if b == nil || b.tableName == "" {
 		return errors.New("unable to find model, try db.Table before")
 	}
 	relationTableName := "m2m_" + b.tableName + "-" + b.database + "-" + relatedTable
@@ -942,7 +949,7 @@ func (b *BuilderM) GetRelated(relatedTable string, dest *[]map[string]any) error
 
 // JoinRelated same as get, but it join data
 func (b *BuilderM) JoinRelated(relatedTable string, dest *[]map[string]any) error {
-	if b.tableName == "" {
+	if b == nil || b.tableName == "" {
 		return errors.New("unable to find model, try db.Table before")
 	}
 	relationTableName := "m2m_" + b.tableName + "-" + b.database + "-" + relatedTable
@@ -1012,7 +1019,7 @@ func (b *BuilderM) JoinRelated(relatedTable string, dest *[]map[string]any) erro
 
 // DeleteRelated delete a relations many to many
 func (b *BuilderM) DeleteRelated(relatedTable string, whereRelatedTable string, whereRelatedArgs ...any) (int, error) {
-	if b.tableName == "" {
+	if b == nil || b.tableName == "" {
 		return 0, errors.New("unable to find model, try db.Table before")
 	}
 	if useCache {
@@ -1083,6 +1090,9 @@ func (b *BuilderM) DeleteRelated(relatedTable string, whereRelatedTable string, 
 }
 
 func (b *BuilderM) queryM(statement string, args ...any) ([]map[string]interface{}, error) {
+	if b == nil || b.tableName == "" {
+		return nil, ErrTableNotFound
+	}
 	db, err := GetMemoryDatabase(b.database)
 	if err != nil {
 		return nil, err
@@ -1140,6 +1150,9 @@ func (b *BuilderM) queryM(statement string, args ...any) ([]map[string]interface
 }
 
 func (b *BuilderM) queryS(strct any, statement string, args ...any) error {
+	if b == nil || b.tableName == "" {
+		return ErrTableNotFound
+	}
 	db, err := GetMemoryDatabase(b.database)
 	if err != nil {
 		return err

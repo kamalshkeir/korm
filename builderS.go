@@ -57,6 +57,9 @@ func Model[T comparable](tableName ...string) *BuilderS[T] {
 
 // Database allow to choose database to execute query on
 func (b *BuilderS[T]) Database(dbName string) *BuilderS[T] {
+	if b == nil || b.tableName == "" {
+		return nil
+	}
 	b.database = dbName
 	db, err := GetMemoryDatabase(b.database)
 	if err != nil {
@@ -922,6 +925,9 @@ func (b *BuilderS[T]) Drop() (int, error) {
 
 // Select usage: Select("email","password")
 func (b *BuilderS[T]) Select(columns ...string) *BuilderS[T] {
+	if b == nil || b.tableName == "" {
+		return nil
+	}
 	b.selected = strings.Join(columns, ",")
 	b.order = append(b.order, "select")
 	return b
@@ -929,6 +935,9 @@ func (b *BuilderS[T]) Select(columns ...string) *BuilderS[T] {
 
 // Where can be like : Where("id > ?",1) or Where("id",1) = Where("id = ?",1)
 func (b *BuilderS[T]) Where(query string, args ...any) *BuilderS[T] {
+	if b == nil || b.tableName == "" {
+		return nil
+	}
 	adaptWhereQuery(&query, b.tableName)
 	adaptTrueFalseArgs(&args)
 	b.whereQuery = query
@@ -939,6 +948,9 @@ func (b *BuilderS[T]) Where(query string, args ...any) *BuilderS[T] {
 
 // Query can be used like: Query("select * from table") or Query("select * from table where col like '?'","%something%")
 func (b *BuilderS[T]) Query(query string, args ...any) *BuilderS[T] {
+	if b == nil || b.tableName == "" {
+		return nil
+	}
 	b.query = query
 	adaptTrueFalseArgs(&args)
 	b.args = append(b.args, args...)
@@ -948,6 +960,9 @@ func (b *BuilderS[T]) Query(query string, args ...any) *BuilderS[T] {
 
 // Limit set limit
 func (b *BuilderS[T]) Limit(limit int) *BuilderS[T] {
+	if b == nil || b.tableName == "" {
+		return nil
+	}
 	b.limit = limit
 	b.order = append(b.order, "limit")
 	return b
@@ -955,12 +970,18 @@ func (b *BuilderS[T]) Limit(limit int) *BuilderS[T] {
 
 // Context allow to query or execute using ctx
 func (b *BuilderS[T]) Context(ctx context.Context) *BuilderS[T] {
+	if b == nil || b.tableName == "" {
+		return nil
+	}
 	b.ctx = ctx
 	return b
 }
 
 // Page return paginated elements using Limit for specific page
 func (b *BuilderS[T]) Page(pageNumber int) *BuilderS[T] {
+	if b == nil || b.tableName == "" {
+		return nil
+	}
 	b.page = pageNumber
 	b.order = append(b.order, "page")
 	return b
@@ -968,6 +989,9 @@ func (b *BuilderS[T]) Page(pageNumber int) *BuilderS[T] {
 
 // OrderBy can be used like: OrderBy("-id","-email") OrderBy("id","-email") OrderBy("+id","email")
 func (b *BuilderS[T]) OrderBy(fields ...string) *BuilderS[T] {
+	if b == nil || b.tableName == "" {
+		return nil
+	}
 	b.orderBys = "ORDER BY "
 	orders := []string{}
 
@@ -1005,6 +1029,9 @@ func (b *BuilderS[T]) OrderBy(fields ...string) *BuilderS[T] {
 
 // Debug print prepared statement and values for this operation
 func (b *BuilderS[T]) Debug() *BuilderS[T] {
+	if b == nil || b.tableName == "" {
+		return nil
+	}
 	b.debug = true
 	return b
 }
