@@ -15,9 +15,8 @@ import (
 )
 
 var (
-	cacheOneS        = kmap.New[dbCache, any](false)
-	cacheAllS        = kmap.New[dbCache, any](false)
-	ErrTableNotFound = errors.New("unable to find tableName")
+	cacheOneS = kmap.New[dbCache, any](false)
+	cacheAllS = kmap.New[dbCache, any](false)
 )
 
 // BuilderS is query builder for struct using generics
@@ -43,7 +42,9 @@ func Model[T comparable](tableName ...string) *BuilderS[T] {
 	tName := getTableName[T]()
 	if tName == "" {
 		if len(tableName) > 0 {
+			mutexModelTablename.Lock()
 			mModelTablename[*new(T)] = tableName[0]
+			mutexModelTablename.Unlock()
 			tName = tableName[0]
 		} else {
 			return nil
@@ -128,7 +129,7 @@ func (b *BuilderS[T]) Insert(model *T) (int, error) {
 					pk = name
 					ig = true
 				default:
-					if strings.Contains(tag, "m2m") {
+					if strings.Contains(tag, "generated") {
 						ig = true
 					}
 				}
@@ -252,7 +253,7 @@ func (b *BuilderS[T]) InsertR(model *T) (T, error) {
 					pk = name
 					ig = true
 				default:
-					if strings.Contains(tag, "m2m") {
+					if strings.Contains(tag, "generated") {
 						ig = true
 					}
 				}
@@ -384,7 +385,7 @@ func (b *BuilderS[T]) BulkInsert(models ...*T) ([]int, error) {
 						ig = true
 						pk = name
 					default:
-						if strings.Contains(tag, "m2m") {
+						if strings.Contains(tag, "generated") {
 							ig = true
 						}
 					}
@@ -502,6 +503,7 @@ func (b *BuilderS[T]) AddRelated(relatedTable string, whereRelatedTable string, 
 	}
 
 	adaptTrueFalseArgs(&whereRelatedArgs)
+	whereRelatedTable = adaptConcatAndLen(whereRelatedTable, db.Dialect)
 	adaptWhereQuery(&whereRelatedTable, relatedTable)
 	data, err := Table(relatedTable).Where(whereRelatedTable, whereRelatedArgs...).One()
 	if err != nil {
@@ -603,6 +605,14 @@ func (b *BuilderS[T]) DeleteRelated(relatedTable string, whereRelatedTable strin
 	}
 	ids := make([]any, 2)
 	adaptTrueFalseArgs(&whereRelatedArgs)
+	if b.database == "" && len(databases) == 1 {
+		whereRelatedTable = adaptConcatAndLen(whereRelatedTable, databases[0].Dialect)
+	} else if b.database != "" {
+		db, err := GetMemoryDatabase(b.database)
+		if err == nil {
+			whereRelatedTable = adaptConcatAndLen(whereRelatedTable, db.Dialect)
+		}
+	}
 	adaptWhereQuery(&whereRelatedTable, relatedTable)
 	data, err := Table(relatedTable).Where(whereRelatedTable, whereRelatedArgs...).One()
 	if err != nil {
@@ -938,6 +948,14 @@ func (b *BuilderS[T]) Where(query string, args ...any) *BuilderS[T] {
 	if b == nil || b.tableName == "" {
 		return nil
 	}
+	if b.database == "" && len(databases) == 1 {
+		query = adaptConcatAndLen(query, databases[0].Dialect)
+	} else if b.database != "" {
+		db, err := GetMemoryDatabase(b.database)
+		if err == nil {
+			query = adaptConcatAndLen(query, db.Dialect)
+		}
+	}
 	adaptWhereQuery(&query, b.tableName)
 	adaptTrueFalseArgs(&args)
 	b.whereQuery = query
@@ -1224,7 +1242,7 @@ func (b *BuilderS[T]) queryS(query string, args ...any) ([]T, error) {
 			return nil, err
 		}
 
-		if db.Dialect == MYSQL || db.Dialect == MARIA || db.Dialect == "mariadb" {
+		if db.Dialect == MYSQL || db.Dialect == MARIA {
 			db.Dialect = MYSQL
 			for i := range values {
 				if v, ok := values[i].([]byte); ok {
@@ -1310,7 +1328,7 @@ func (b *BuilderS[T]) queryOneS(query string, args ...any) (res T, err error) {
 			return res, err
 		}
 
-		if db.Dialect == MYSQL || db.Dialect == MARIA || db.Dialect == "mariadb" {
+		if db.Dialect == MYSQL || db.Dialect == MARIA {
 			db.Dialect = MYSQL
 			for i := range values {
 				if v, ok := values[i].([]byte); ok {

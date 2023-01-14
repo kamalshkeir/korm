@@ -18,54 +18,22 @@ import (
 
 var (
 	// defaultDB keep tracking of the first database connected
-	defaultDB       = ""
-	useCache        = true
-	databases       = []DatabaseEntity{}
-	mModelTablename = map[any]string{}
-	cachesOneM      = kmap.New[dbCache, map[string]any](false)
-	cacheAllM       = kmap.New[dbCache, []map[string]any](false)
-	cacheAllTables  = kmap.New[string, []string](false)
-	cacheAllCols    = kmap.New[string, map[string]string](false)
-	relationsMap    = kmap.New[string, struct{}](false)
+	defaultDB           = ""
+	useCache            = true
+	databases           = []DatabaseEntity{}
+	mutexModelTablename sync.RWMutex
+	mModelTablename     = map[any]string{}
+	cacheAllTables      = kmap.New[string, []string](false)
+	cacheAllCols        = kmap.New[string, map[string]string](false)
+	relationsMap        = kmap.New[string, struct{}](false)
 
 	onceDone       = false
 	serverBus      *ksbus.Server
 	cachebus       *ksbus.Bus
 	switchBusMutex sync.Mutex
-	onInsert       DbHook
-	onSet          DbHook
-	onDelete       func(database, table string, query string, args ...any) error
-	onDrop         func(database, table string) error
+
+	ErrTableNotFound = errors.New("unable to find tableName")
 )
-
-type Dialect = string
-type DbHook func(database, table string, data map[string]any) error
-
-const (
-	MIGRATION_FOLDER         = "migrations"
-	CACHE_TOPIC              = "internal-db-cache"
-	SQLITE           Dialect = "sqlite"
-	POSTGRES         Dialect = "postgres"
-	MYSQL            Dialect = "mysql"
-	MARIA            Dialect = "maria"
-	COCKROACH        Dialect = "cockroach"
-)
-
-type TableEntity struct {
-	Types      map[string]string
-	ModelTypes map[string]string
-	Tags       map[string][]string
-	Columns    []string
-	Pk         string
-	Name       string
-}
-
-type DatabaseEntity struct {
-	Tables  []TableEntity
-	Name    string
-	Dialect string
-	Conn    *sql.DB
-}
 
 // NewDatabaseFromDSN the generic way to connect to all handled databases
 func New(dbType Dialect, dbName string, dbDSN ...string) error {
@@ -93,7 +61,7 @@ func New(dbType Dialect, dbName string, dbDSN ...string) error {
 		} else {
 			dsn += "?sslmode=disable"
 		}
-	case MYSQL, MARIA, "mariadb":
+	case MYSQL, MARIA:
 		dbType = MYSQL
 		if len(dbDSN) == 0 {
 			return errors.New("dbDSN for mysql cannot be empty")
@@ -265,46 +233,12 @@ func ManyToMany(table1, table2 string, dbName ...string) error {
 	return nil
 }
 
-// foreignkeyStat options are : "cascade","donothing", "noaction","setnull", "null","setdefault", "default"
-func foreignkeyStat(fName, toTable, onDelete, onUpdate string) string {
-	toPk := "id"
-	if strings.Contains(toTable, ".") {
-		sp := strings.Split(toTable, ".")
-		if len(sp) == 2 {
-			toPk = sp[1]
-		}
-	}
-	fkey := "FOREIGN KEY (" + fName + ") REFERENCES " + toTable + "(" + toPk + ")"
-	switch onDelete {
-	case "cascade":
-		fkey += " ON DELETE CASCADE"
-	case "donothing", "noaction":
-		fkey += " ON DELETE NO ACTION"
-	case "setnull", "null":
-		fkey += " ON DELETE SET NULL"
-	case "setdefault", "default":
-		fkey += " ON DELETE SET DEFAULT"
-	}
-
-	switch onUpdate {
-	case "cascade":
-		fkey += " ON UPDATE CASCADE"
-	case "donothing", "noaction":
-		fkey += " ON UPDATE NO ACTION"
-	case "setnull", "null":
-		fkey += " ON UPDATE SET NULL"
-	case "setdefault", "default":
-		fkey += " ON UPDATE SET DEFAULT"
-	}
-	return fkey
-}
-
 // NewSQLDatabaseFromConnection register a new database from connection, without the need for a dsn, if you are already connected to it
 func NewFromConnection(dbType, dbName string, conn *sql.DB) error {
 	if strings.HasPrefix(dbType, "cockroach") {
 		dbType = POSTGRES
 	}
-	if dbType == MARIA || dbType == "mariadb" {
+	if dbType == MARIA {
 		dbType = MYSQL
 	}
 	if defaultDB == "" {
@@ -317,7 +251,7 @@ func NewFromConnection(dbType, dbName string, conn *sql.DB) error {
 	dbFound := false
 	for _, dbb := range databases {
 		if dbb.Conn == conn && dbb.Name == dbName {
-			if dbb.Dialect == "mariadb" || dbb.Dialect == MARIA {
+			if dbb.Dialect == MARIA {
 				dbb.Dialect = MYSQL
 			} else if strings.HasPrefix(dbb.Dialect, "cockroach") {
 				dbb.Dialect = POSTGRES
@@ -591,52 +525,6 @@ func GetAllColumnsTypes(table string, dbName ...string) map[string]string {
 	return columns
 }
 
-// GetMemoryTable get a table from memory for specified or first connected db
-func GetMemoryTable(tbName string, dbName ...string) (TableEntity, error) {
-	dName := databases[0].Name
-	if len(dbName) > 0 {
-		dName = dbName[0]
-	}
-	db, err := GetMemoryDatabase(dName)
-	if err != nil {
-		return TableEntity{}, err
-	}
-	for _, t := range db.Tables {
-		if t.Name == tbName {
-			return t, nil
-		}
-	}
-	return TableEntity{}, errors.New("nothing found")
-}
-
-// GetMemoryDatabases get all databases from memory
-func GetMemoryDatabases() []DatabaseEntity {
-	return databases
-}
-
-// GetMemoryDatabase return the first connected database korm.DefaultDatabase if dbName "" or "default" else the matched db
-func GetMemoryDatabase(dbName string) (*DatabaseEntity, error) {
-	if defaultDB == "" {
-		defaultDB = databases[0].Name
-	}
-	switch dbName {
-	case "", "default":
-		for i := range databases {
-			if databases[i].Name == defaultDB {
-				return &databases[i], nil
-			}
-		}
-		return nil, errors.New(dbName + "database not found")
-	default:
-		for i := range databases {
-			if databases[i].Name == dbName {
-				return &databases[i], nil
-			}
-		}
-		return nil, errors.New(dbName + "database not found")
-	}
-}
-
 // Shutdown shutdown many database
 func Shutdown(dbNames ...string) error {
 	if len(dbNames) > 0 {
@@ -655,84 +543,6 @@ func Shutdown(dbNames ...string) error {
 			}
 		}
 		return nil
-	}
-}
-
-func AddTrigger(onTable, col, bf_af_UpdateInsertDelete string, ofColumn, stmt string, dbName ...string) {
-	stat := []string{}
-	if len(dbName) == 0 {
-		dbName = append(dbName, databases[0].Name)
-	}
-	if strings.Contains(strings.ToLower(ofColumn), "of") {
-		ofColumn = strings.ReplaceAll(strings.ToLower(ofColumn), "of", "")
-	}
-	var dialect = ""
-	db, err := GetMemoryDatabase(dbName[0])
-	if !klog.CheckError(err) {
-		dialect = db.Dialect
-	}
-	switch dialect {
-	case "sqlite", "sqlite3", "":
-		if ofColumn != "" {
-			ofColumn = " OF " + col
-		}
-		st := "CREATE TRIGGER IF NOT EXISTS " + onTable + "_trig_" + col + " "
-		st += bf_af_UpdateInsertDelete + ofColumn + " ON " + onTable
-		st += " BEGIN " + stmt + ";End;"
-		stat = append(stat, st)
-	case POSTGRES, "cockroach", "pg", "cockroachdb":
-		if ofColumn != "" {
-			ofColumn = " OF " + col
-		}
-		name := onTable + "_trig_" + col
-		st := "CREATE OR REPLACE FUNCTION " + name + "_func() RETURNS trigger AS $$"
-		st += " BEGIN " + stmt + ";RETURN NEW;"
-		st += "END;$$ LANGUAGE plpgsql;"
-		stat = append(stat, st)
-		trigCreate := "CREATE OR REPLACE TRIGGER " + name
-		trigCreate += " " + bf_af_UpdateInsertDelete + ofColumn + " ON public." + onTable
-		trigCreate += " FOR EACH ROW EXECUTE PROCEDURE " + name + "_func();"
-		stat = append(stat, trigCreate)
-	case MYSQL, MARIA:
-		stat = append(stat, "DROP TRIGGER "+onTable+"_trig_"+col+";")
-		st := "CREATE TRIGGER " + onTable + "_trig_" + col + " "
-		st += bf_af_UpdateInsertDelete + " ON " + onTable
-		st += " FOR EACH ROW " + stmt + ";"
-		stat = append(stat, st)
-	default:
-		return
-	}
-
-	if Debug {
-		klog.Printf("statement: %s \n", stat)
-	}
-
-	for _, s := range stat {
-		err := Exec(dbName[0], s)
-		if err != nil {
-			if !strings.Contains(err.Error(), "Trigger does not exist") {
-				klog.Printf("rdcould not add trigger %v\n", err)
-				return
-			}
-		}
-	}
-}
-
-func DropTrigger(onField, tableName string, dbName ...string) {
-	stat := "DROP TRIGGER " + tableName + "_trig_" + onField + ";"
-	if Debug {
-		klog.Printf("yl%s\n", stat)
-	}
-	n := databases[0].Name
-	if len(dbName) > 0 {
-		n = dbName[0]
-	}
-	err := Exec(n, stat)
-	if err != nil {
-		if !strings.Contains(err.Error(), "Trigger does not exist") {
-			return
-		}
-		klog.Printf("rderr:%v\n", err)
 	}
 }
 
@@ -802,18 +612,12 @@ func Exec(dbName, query string, args ...any) error {
 	return nil
 }
 
-func OnInsert(fn DbHook) {
-	onInsert = fn
-}
-
-func OnSet(fn DbHook) {
-	onSet = fn
-}
-
-func OnDelete(fn func(database, table string, query string, args ...any) error) {
-	onDelete = fn
-}
-
-func OnDrop(fn func(database, table string) error) {
-	onDrop = fn
+func getTableName[T comparable]() string {
+	mutexModelTablename.RLock()
+	defer mutexModelTablename.RUnlock()
+	if v, ok := mModelTablename[*new(T)]; ok {
+		return v
+	} else {
+		return ""
+	}
 }

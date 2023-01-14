@@ -23,11 +23,11 @@ var (
 	// MaxOpenConns set max open connections for db pool
 	MaxOpenConns = 20
 	// MaxIdleConns set max idle connections for db pool
-	MaxIdleConns = 7
+	MaxIdleConns = 20
 	// MaxLifetime set max lifetime for a connection in the db pool
-	MaxLifetime = 1 * time.Hour
+	MaxLifetime = 30 * time.Minute
 	// MaxIdleTime set max idletime for a connection in the db pool
-	MaxIdleTime = 1 * time.Hour
+	MaxIdleTime = 15 * time.Minute
 )
 
 type User struct {

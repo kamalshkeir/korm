@@ -2,6 +2,7 @@ package korm
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -32,6 +33,7 @@ type TestUser struct {
 	Id        *uint   `korm:"pk"`
 	Uuid      string  `korm:"size:40;iunique"`
 	Email     *string `korm:"size:100;iunique"`
+	Gen       string  `korm:"size:250;generated: concat(uuid,'working',len(password))"`
 	Password  string
 	IsAdmin   *bool
 	CreatedAt time.Time `korm:"now"`
@@ -186,6 +188,53 @@ func TestGetRelatedS(t *testing.T) {
 	}
 	if len(users) != 2 {
 		t.Error("len(users) != 2 , got: ", users)
+	}
+}
+
+func TestConcatANDLen(t *testing.T) {
+	groupes, err := Model[Group]().Where("name = concat(?,'min') AND len(name) = ?", "ad", 5).All()
+	// translated to select * from groups WHERE name = 'ad' || 'min'  AND  length(name) = 5 (sqlite)
+	// translated to select * from groups WHERE name = concat('ad','min')  AND  char_length(name) = 5 (postgres, mysql)
+	if err != nil {
+		t.Error(err)
+	}
+	if len(groupes) != 1 || groupes[0].Name != "admin" {
+		t.Error("len(groupes) != 1 , got: ", groupes)
+	}
+}
+
+func TestGetRelatedSWithLen(t *testing.T) {
+	users := []TestUser{}
+	err := Model[Group]().Where("name = ? AND len(name) = ?", "admin", 5).GetRelated("users", &users)
+	if err != nil {
+		t.Error(err)
+	}
+	if len(users) != 2 {
+		t.Error("len(users) != 2 , got: ", users)
+	}
+}
+
+func TestGetRelatedSWithConcatANDLen(t *testing.T) {
+	users := []TestUser{}
+	err := Model[Group]().Where("name = concat(?,'min') AND len(name) = ?", "ad", 5).GetRelated("users", &users)
+	if err != nil {
+		t.Error(err)
+	}
+	if len(users) != 2 {
+		t.Error("len(users) != 2 , got: ", users)
+	}
+}
+
+func TestGeneratedAs(t *testing.T) {
+	u, err := Model[TestUser]().Limit(3).All()
+	if err != nil {
+		t.Error(err)
+	}
+	if len(u) != 3 {
+		t.Error("len not 20")
+	}
+	if u[0].Gen != u[0].Uuid+"working"+fmt.Sprintf("%d", len(u[0].Password)) {
+		t.Error("generated not working:", u[0].Gen)
 	}
 }
 

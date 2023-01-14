@@ -1,21 +1,13 @@
 package korm
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
-	"io"
 	"os"
-	"reflect"
-	"strconv"
 	"strings"
 	"sync"
-	"testing"
-	"time"
 
 	"github.com/kamalshkeir/kinput"
 	"github.com/kamalshkeir/klog"
-	"github.com/kamalshkeir/kstrct"
 )
 
 type dbCache struct {
@@ -62,14 +54,14 @@ func linkModel[T comparable](to_table_name string, db *DatabaseEntity) {
 		}
 	}
 
-	diff := difference(fields, cols)
+	diff := DifferenceBetweenSlices(fields, cols)
 	if pk == "" {
 		pk = "id"
 		ftypes["id"] = "int"
 		if !SliceContains(fields, "id") {
 			fields = append([]string{"id"}, fields...)
 		}
-		sliceRemove(&diff, "id")
+		RemoveFromSlice(&diff, "id")
 	}
 
 	var wg sync.WaitGroup
@@ -368,7 +360,7 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 					continue loop
 				}
 				for _, vv := range v {
-					if strings.Contains(vv, "m2m") {
+					if strings.Contains(vv, "generated") {
 						continue loop
 					}
 				}
@@ -953,194 +945,6 @@ func handleRename(to_table_name string, fields, cols, diff []string, db *Databas
 	}
 }
 
-func getTableName[T comparable]() string {
-	if v, ok := mModelTablename[*new(T)]; ok {
-		return v
-	} else {
-		return ""
-	}
-}
-
-// getStructInfos very useful to access all struct fields data using reflect package
-func getStructInfos[T comparable](strctt *T, ignoreZeroValues ...bool) (fields []string, fValues map[string]any, fTypes map[string]string, fTags map[string][]string) {
-	fields = []string{}
-	fValues = map[string]any{}
-	fTypes = map[string]string{}
-	fTags = map[string][]string{}
-
-	s := reflect.ValueOf(strctt).Elem()
-	typeOfT := s.Type()
-	for i := 0; i < s.NumField(); i++ {
-		f := s.Field(i)
-		fname := typeOfT.Field(i).Name
-		fname = kstrct.ToSnakeCase(fname)
-		fvalue := f.Interface()
-		ftype := f.Type().Name()
-
-		if len(ignoreZeroValues) > 0 && ignoreZeroValues[0] && strings.Contains(ftype, "Time") {
-			if v, ok := fvalue.(time.Time); ok {
-				if v.IsZero() {
-					continue
-				}
-			}
-		}
-		fields = append(fields, fname)
-		fTypes[fname] = ftype
-		fValues[fname] = fvalue
-		if ftag, ok := typeOfT.Field(i).Tag.Lookup("korm"); ok {
-			tags := strings.Split(ftag, ";")
-			fTags[fname] = tags
-		}
-	}
-	return fields, fValues, fTypes, fTags
-}
-
-func adaptPlaceholdersToDialect(query *string, dialect string) {
-	if strings.Contains(*query, "?") && (dialect != MYSQL) {
-		split := strings.Split(*query, "?")
-		counter := 0
-		for i := range split {
-			if i < len(split)-1 {
-				counter++
-				split[i] = split[i] + "$" + strconv.Itoa(counter)
-			}
-		}
-		*query = strings.Join(split, "")
-	}
-}
-
-func adaptTrueFalseArgs(args *[]any) {
-	for i := range *args {
-		if (*args)[i] == true {
-			(*args)[i] = 1
-		} else if (*args)[i] == false {
-			(*args)[i] = 0
-		}
-	}
-}
-
-func Benchmark(f func(), name string, iterations int) {
-	// Start the timer
-	start := time.Now()
-
-	// Run the function multiple times
-	var allocs int64
-	for i := 0; i < iterations; i++ {
-		allocs += int64(testing.AllocsPerRun(1, f))
-	}
-
-	// Stop the timer and calculate the elapsed time
-	elapsed := time.Since(start)
-
-	// Calculate the number of operations per second
-	opsPerSec := float64(iterations) / elapsed.Seconds()
-
-	// Calculate the number of allocations per operation
-	allocsPerOp := float64(allocs) / float64(iterations)
-
-	// Print the results
-	fmt.Println("---------------------------")
-	fmt.Println("Function", name)
-	fmt.Printf("Operations per second: %f\n", opsPerSec)
-	fmt.Printf("Allocations per operation: %f\n", allocsPerOp)
-	fmt.Println("---------------------------")
-}
-
-func adaptWhereQuery(query *string, tableName ...string) {
-	tbName := ""
-	if len(tableName) > 0 {
-		tbName = tableName[0]
-	}
-	*query = strings.ToLower(*query)
-	q := []rune(*query)
-	hasComparaisonSign := false
-	hasQuestionMark := false
-	for i := range q {
-		switch q[i] {
-		case '?':
-			hasQuestionMark = true
-		case '=', '>', '<', '!':
-			hasComparaisonSign = true
-		}
-	}
-
-	if !hasQuestionMark {
-		var b strings.Builder
-		fieldStart := -1
-		for i, c := range q {
-			if c == ',' || c == '|' {
-				if fieldStart >= 0 {
-					if tbName != "" {
-						b.WriteString(tbName)
-						b.WriteString(".")
-					}
-					b.WriteString(string(q[fieldStart:i]))
-					if !hasComparaisonSign {
-						b.WriteString(" = ?")
-					}
-					if i < len(q)-1 {
-						if c == '|' {
-							b.WriteString(" OR ")
-						} else {
-							b.WriteString(" AND ")
-						}
-					}
-					fieldStart = -1
-				}
-			} else if fieldStart < 0 {
-				fieldStart = i
-			}
-		}
-		if fieldStart >= 0 {
-			if tbName != "" {
-				b.WriteString(tbName)
-				b.WriteString(".")
-			}
-			b.WriteString(string(q[fieldStart:]))
-			if !hasComparaisonSign {
-				b.WriteString(" = ?")
-			}
-		}
-		*query = b.String()
-	} else {
-		spAnd := strings.Split(*query, "and")
-		tbToAdd := false
-		for i := range spAnd {
-			spOr := strings.Split(spAnd[i], "or")
-			for j := range spOr {
-				if tbToAdd || (tbName != "" && !strings.HasPrefix(spOr[j], tbName)) {
-					if !tbToAdd {
-						tbToAdd = true
-					}
-					spOr[j] = tbName + "." + strings.TrimSpace(spOr[j])
-				}
-				spAnd[i] = strings.Join(spOr, " OR ")
-			}
-		}
-		*query = strings.Join(spAnd, " AND ")
-	}
-}
-
-func adaptSetQuery(query *string) {
-	sp := strings.Split(*query, ",")
-	q := []rune(*query)
-	hasQuestionMark := false
-	hasEqual := false
-	for i := range q {
-		if q[i] == '?' {
-			hasQuestionMark = true
-		} else if q[i] == '=' {
-			hasEqual = true
-		}
-	}
-	for i := range sp {
-		if !hasQuestionMark && !hasEqual {
-			sp[i] = sp[i] + "= ?"
-		}
-	}
-	*query = strings.Join(sp, ",")
-}
-
 func handleCache(data map[string]any) {
 	switch data["type"] {
 	case "create", "delete", "update":
@@ -1161,95 +965,5 @@ func handleCache(data map[string]any) {
 		}()
 	default:
 		klog.Printf("CACHE DB: default case triggered %v \n", data)
-	}
-}
-
-func GenerateUUID() string {
-	var uuid [16]byte
-	_, err := io.ReadFull(rand.Reader, uuid[:])
-	if err != nil {
-		return ""
-	}
-	uuid[6] = (uuid[6] & 0x0f) | 0x40 // Version 4
-	uuid[8] = (uuid[8] & 0x3f) | 0x80 // Variant is 10
-	var buf [36]byte
-	encodeHex(buf[:], uuid)
-	return string(buf[:])
-}
-
-func encodeHex(dst []byte, uuid [16]byte) {
-	hex.Encode(dst, uuid[:4])
-	dst[8] = '-'
-	hex.Encode(dst[9:13], uuid[4:6])
-	dst[13] = '-'
-	hex.Encode(dst[14:18], uuid[6:8])
-	dst[18] = '-'
-	hex.Encode(dst[19:23], uuid[8:10])
-	dst[23] = '-'
-	hex.Encode(dst[24:], uuid[10:])
-}
-
-func RunEvery(t time.Duration, function any) {
-	//Usage : go RunEvery(2 * time.Second,func(){})
-	fn, ok := function.(func())
-	if !ok {
-		klog.Printf("rdERROR : fn is not a function\n")
-		return
-	}
-
-	fn()
-	c := time.NewTicker(t)
-
-	for range c.C {
-		fn()
-	}
-}
-
-func SliceContains[T comparable](elems []T, vs ...T) bool {
-	for _, s := range elems {
-		for _, v := range vs {
-			if v == s {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func difference[T comparable](slice1 []T, slice2 []T) []T {
-	var diff []T
-
-	// Loop two times, first to find slice1 strings not in slice2,
-	// second loop to find slice2 strings not in slice1
-	for i := 0; i < 2; i++ {
-		for _, s1 := range slice1 {
-			found := false
-			for _, s2 := range slice2 {
-				if s1 == s2 {
-					found = true
-					break
-				}
-			}
-			// String not found. We add it to return slice
-			if !found {
-				diff = append(diff, s1)
-			}
-		}
-		// Swap the slices, only if it was the first loop
-		if i == 0 {
-			slice1, slice2 = slice2, slice1
-		}
-	}
-
-	return diff
-}
-
-func sliceRemove[T comparable](slice *[]T, elemsToRemove ...T) {
-	for i, elem := range *slice {
-		for _, e := range elemsToRemove {
-			if e == elem {
-				*slice = append((*slice)[:i], (*slice)[i+1:]...)
-			}
-		}
 	}
 }

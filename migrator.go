@@ -115,16 +115,10 @@ func autoMigrate[T comparable](db *DatabaseEntity, tableName string, execute boo
 			case "time.Time", "*time.Time":
 				handleMigrationTime(mi)
 			default:
-				isM2M := false
 				if tags, ok := mFieldName_Tags[fName]; ok {
-					for _, tag := range tags {
-						if strings.Contains(tag, "m2m") {
-							isM2M = true
-						}
+					if !strings.Contains(strings.Join(tags, ","), "generated") {
+						klog.Printf("rd%s of type %s not handled\n", fName, ty)
 					}
-				}
-				if !isM2M {
-					klog.Printf("rd%s of type %s not handled\n", fName, ty)
 				}
 			}
 		}
@@ -177,6 +171,7 @@ func autoMigrate[T comparable](db *DatabaseEntity, tableName string, execute boo
 	if execute {
 		ress, err := db.Conn.ExecContext(c, statement)
 		if err != nil {
+			klog.Printf("ylstat:%s\n", statement)
 			return "", err
 		}
 		_, err = ress.RowsAffected()
@@ -283,9 +278,11 @@ func autoMigrate[T comparable](db *DatabaseEntity, tableName string, execute boo
 }
 
 func AutoMigrate[T comparable](tableName string, dbName ...string) error {
+	mutexModelTablename.Lock()
 	if _, ok := mModelTablename[*new(T)]; !ok {
 		mModelTablename[*new(T)] = tableName
 	}
+	mutexModelTablename.Unlock()
 	var db *DatabaseEntity
 	var err error
 	dbname := ""
@@ -363,7 +360,7 @@ type migrationInput struct {
 }
 
 func handleMigrationInt(mi *migrationInput) {
-	primary, index, autoinc, notnull, defaultt, checks, unique := "", "", "", "", "", []string{}, ""
+	genas, primary, index, autoinc, notnull, defaultt, checks, unique := "", "", "", "", "", "", []string{}, ""
 	tags := (*mi.fTags)[mi.fName]
 	if len(tags) == 1 && tags[0] == "-" {
 		(*mi.res)[mi.fName] = ""
@@ -397,11 +394,15 @@ func handleMigrationInt(mi *migrationInput) {
 				klog.Printf("%s not handled for migration int\n", tag)
 			}
 		} else {
+			// with params
 			sp := strings.Split(tag, ":")
 			tg := sp[0]
 			switch tg {
 			case "default":
 				defaultt = " DEFAULT " + sp[1]
+			case "generated":
+				sp[1] = adaptConcatAndLen(sp[1], mi.dialect)
+				genas = " GENERATED ALWAYS AS (" + sp[1] + ") STORED "
 			case "fk":
 				ref := strings.Split(sp[1], ".")
 				if len(ref) == 2 {
@@ -439,16 +440,7 @@ func handleMigrationInt(mi *migrationInput) {
 					klog.Printf("allowed options cascade/donothing/noaction\n")
 				}
 			case "check":
-				if strings.Contains(strings.ToLower(sp[1]), "len") {
-					switch mi.dialect {
-					case SQLITE, "":
-						sp[1] = strings.Replace(strings.ToLower(sp[1]), "len", "length", -1)
-					case POSTGRES, MYSQL, MARIA:
-						sp[1] = strings.Replace(strings.ToLower(sp[1]), "len", "char_length", -1)
-					default:
-						klog.Printf("check not handled for dialect:%s\n", mi.dialect)
-					}
-				}
+				sp[1] = adaptConcatAndLen(sp[1], mi.dialect)
 				checks = append(checks, strings.TrimSpace(sp[1]))
 			case "mindex":
 				if v, ok := (*mi.mindexes)[mi.fName]; ok {
@@ -500,7 +492,13 @@ func handleMigrationInt(mi *migrationInput) {
 			(*mi.res)[mi.fName] += index
 		}
 		if defaultt != "" {
-			(*mi.res)[mi.fName] += defaultt
+			if genas == "" {
+				(*mi.res)[mi.fName] += defaultt
+			} else {
+				(*mi.res)[mi.fName] += genas
+			}
+		} else if genas != "" {
+			(*mi.res)[mi.fName] += genas
 		}
 		if len(checks) > 0 {
 			joined := strings.TrimSpace(strings.Join(checks, " AND "))
@@ -606,7 +604,7 @@ func handleMigrationBool(mi *migrationInput) {
 }
 
 func handleMigrationString(mi *migrationInput) {
-	unique, notnull, text, defaultt, size, pk, checks := "", "", "", "", "", "", []string{}
+	unique, notnull, text, defaultt, genas, size, pk, checks := "", "", "", "", "", "", "", []string{}
 	tags := (*mi.fTags)[mi.fName]
 	if len(tags) == 1 && tags[0] == "-" {
 		(*mi.res)[mi.fName] = ""
@@ -642,6 +640,9 @@ func handleMigrationString(mi *migrationInput) {
 			switch sp[0] {
 			case "default":
 				defaultt = " DEFAULT " + sp[1]
+			case "generated":
+				sp[1] = adaptConcatAndLen(sp[1], mi.dialect)
+				genas = " GENERATED ALWAYS AS (" + sp[1] + ") STORED "
 			case "mindex":
 				if v, ok := (*mi.mindexes)[mi.fName]; ok {
 					if v == "" {
@@ -708,16 +709,7 @@ func handleMigrationString(mi *migrationInput) {
 					size = sp[1]
 				}
 			case "check":
-				if strings.Contains(strings.ToLower(sp[1]), "len") {
-					switch mi.dialect {
-					case SQLITE, "":
-						sp[1] = strings.Replace(strings.ToLower(sp[1]), "len", "length", -1)
-					case POSTGRES, MYSQL, MARIA:
-						sp[1] = strings.Replace(strings.ToLower(sp[1]), "len", "char_length", -1)
-					default:
-						klog.Printf("check not handled for dialect:%s\n", mi.dialect)
-					}
-				}
+				sp[1] = adaptConcatAndLen(sp[1], mi.dialect)
 				checks = append(checks, strings.TrimSpace(sp[1]))
 			default:
 				klog.Printf("MIGRATION STRING: not handled %s for %s , field: %s \n", sp[0], tag, mi.fName)
@@ -745,7 +737,13 @@ func handleMigrationString(mi *migrationInput) {
 		(*mi.res)[mi.fName] += pk
 	}
 	if defaultt != "" {
-		(*mi.res)[mi.fName] += defaultt
+		if genas == "" {
+			(*mi.res)[mi.fName] += defaultt
+		} else {
+			(*mi.res)[mi.fName] += genas
+		}
+	} else if genas != "" {
+		(*mi.res)[mi.fName] += genas
 	}
 	if len(checks) > 0 {
 		joined := strings.TrimSpace(strings.Join(checks, " AND "))
@@ -787,6 +785,9 @@ func handleMigrationFloat(mi *migrationInput) {
 				if sp[1] != "" {
 					mtags["default"] = " DEFAULT " + sp[1]
 				}
+			case "generated":
+				sp[1] = adaptConcatAndLen(sp[1], mi.dialect)
+				mtags["default"] = " GENERATED ALWAYS AS (" + sp[1] + ") STORED "
 			case "fk":
 				ref := strings.Split(sp[1], ".")
 				if len(ref) == 2 {
@@ -848,16 +849,7 @@ func handleMigrationFloat(mi *migrationInput) {
 					(*mi.uindexes)[mi.fName] = sp[1]
 				}
 			case "check":
-				if strings.Contains(strings.ToLower(sp[1]), "len") {
-					switch mi.dialect {
-					case SQLITE, "":
-						sp[1] = strings.Replace(strings.ToLower(sp[1]), "len", "length", -1)
-					case POSTGRES, MYSQL, MARIA:
-						sp[1] = strings.Replace(strings.ToLower(sp[1]), "len", "char_length", -1)
-					default:
-						klog.Printf("check not handled for dialect: %s \n", mi.dialect)
-					}
-				}
+				sp[1] = adaptConcatAndLen(sp[1], mi.dialect)
 				if v, ok := mtags["check"]; ok && v != "" {
 					mtags["check"] += " AND " + strings.TrimSpace(sp[1])
 				} else if v == "" {
@@ -973,16 +965,7 @@ func handleMigrationTime(mi *migrationInput) {
 					klog.Printf("wtf ?, it should be fk:users.id:cascade/donothing\n")
 				}
 			case "check":
-				if strings.Contains(strings.ToLower(sp[1]), "len") {
-					switch mi.dialect {
-					case SQLITE, "":
-						sp[1] = strings.Replace(strings.ToLower(sp[1]), "len", "length", -1)
-					case POSTGRES, MARIA:
-						sp[1] = strings.Replace(strings.ToLower(sp[1]), "len", "char_length", -1)
-					default:
-						klog.Printf("check not handled for dialect:%s\n", mi.dialect)
-					}
-				}
+				sp[1] = adaptConcatAndLen(sp[1], mi.dialect)
 				if check != "" {
 					check += " AND " + strings.TrimSpace(sp[1])
 				} else {

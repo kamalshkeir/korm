@@ -11,10 +11,15 @@ import (
 	"time"
 
 	"github.com/kamalshkeir/klog"
+	"github.com/kamalshkeir/kmap"
 	"github.com/kamalshkeir/kstrct"
 )
 
-var setReplacer = strings.NewReplacer("=", "", "?", "")
+var (
+	cachesOneM  = kmap.New[dbCache, map[string]any](false)
+	cacheAllM   = kmap.New[dbCache, []map[string]any](false)
+	setReplacer = strings.NewReplacer("=", "", "?", "")
+)
 
 // BuilderM is query builder map string any
 type BuilderM struct {
@@ -65,6 +70,14 @@ func (b *BuilderM) Select(columns ...string) *BuilderM {
 func (b *BuilderM) Where(query string, args ...any) *BuilderM {
 	if b == nil || b.tableName == "" {
 		return nil
+	}
+	if b.database == "" && len(databases) == 1 {
+		query = adaptConcatAndLen(query, databases[0].Dialect)
+	} else if b.database != "" {
+		db, err := GetMemoryDatabase(b.database)
+		if err == nil {
+			query = adaptConcatAndLen(query, db.Dialect)
+		}
 	}
 	adaptWhereQuery(&query, b.tableName)
 	adaptTrueFalseArgs(&args)
@@ -333,7 +346,7 @@ func (b *BuilderM) Insert(rowData map[string]any) (int, error) {
 		switch db.Dialect {
 		case POSTGRES, SQLITE:
 			placeholdersSlice = append(placeholdersSlice, "$"+strconv.Itoa(count+1))
-		case MYSQL, MARIA, "mariadb":
+		case MYSQL, MARIA:
 			placeholdersSlice = append(placeholdersSlice, "?")
 		default:
 			return 0, errors.New("database is neither sqlite, postgres or mysql")
@@ -436,7 +449,7 @@ func (b *BuilderM) InsertR(rowData map[string]any) (map[string]any, error) {
 		switch db.Dialect {
 		case POSTGRES, SQLITE:
 			placeholdersSlice = append(placeholdersSlice, "$"+strconv.Itoa(count+1))
-		case MYSQL, MARIA, "mariadb":
+		case MYSQL, MARIA:
 			placeholdersSlice = append(placeholdersSlice, "?")
 		default:
 			return nil, errors.New("database is neither sqlite, postgres or mysql")
@@ -549,7 +562,7 @@ func (b *BuilderM) BulkInsert(rowsData ...map[string]any) ([]int, error) {
 			switch db.Dialect {
 			case POSTGRES, SQLITE:
 				placeholdersSlice = append(placeholdersSlice, "$"+strconv.Itoa(count+1))
-			case MYSQL, MARIA, "mariadb":
+			case MYSQL, MARIA:
 				placeholdersSlice = append(placeholdersSlice, "?")
 			default:
 				return nil, errors.New("database is neither sqlite, postgres or mysql")
@@ -814,6 +827,7 @@ func (b *BuilderM) AddRelated(relatedTable string, whereRelatedTable string, whe
 	}
 	ids := make([]any, 4)
 	adaptTrueFalseArgs(&whereRelatedArgs)
+	whereRelatedTable = adaptConcatAndLen(whereRelatedTable, db.Dialect)
 	adaptWhereQuery(&whereRelatedTable, relatedTable)
 	data, err := Table(relatedTable).Where(whereRelatedTable, whereRelatedArgs...).One()
 	if err != nil {
@@ -1055,6 +1069,15 @@ func (b *BuilderM) DeleteRelated(relatedTable string, whereRelatedTable string, 
 	}
 	ids := make([]any, 2)
 	adaptTrueFalseArgs(&whereRelatedArgs)
+	if b.database == "" && len(databases) == 1 {
+		whereRelatedTable = adaptConcatAndLen(whereRelatedTable, databases[0].Dialect)
+	} else if b.database != "" {
+		db, err := GetMemoryDatabase(b.database)
+		if err == nil {
+			whereRelatedTable = adaptConcatAndLen(whereRelatedTable, db.Dialect)
+		}
+	}
+
 	adaptWhereQuery(&whereRelatedTable, relatedTable)
 	data, err := Table(relatedTable).Where(whereRelatedTable, whereRelatedArgs...).One()
 	if err != nil {

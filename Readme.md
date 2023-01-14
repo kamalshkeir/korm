@@ -36,7 +36,10 @@
 ##### All drivers are written in Go, so you will never encounter gcc or c missing compiler
 
 ### It Has :
-- New: [Benchmarks](#benchmarks) Updated
+
+- <strong>New :</strong> [GENERATED ALWAYS AS](#example-generated-tag) tag added (all dialects)
+
+- <strong>New :</strong> [Concatination and Length](#example-concat-and-len-from-korm_testgo) support for `Where` and for tags: `check` and `generated` (all dialects)
 
 - Simple [API](#api)
 
@@ -76,7 +79,7 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@v1.4.0 // latest version
+go get -u github.com/kamalshkeir/korm@v1.4.1 // latest version
 ```
 
 # Drivers moved outside this package to not get them all in your go.mod file
@@ -98,9 +101,9 @@ Debug = false
 FlushCacheEvery = 10 * time.Minute
 // Connection pool
 MaxOpenConns = 20
-MaxIdleConns = 7
-MaxLifetime = 1 * time.Hour
-MaxIdleTime = 1 * time.Hour
+MaxIdleConns = 20
+MaxLifetime = 30 * time.Minute
+MaxIdleTime = 15 * time.Minute
 ```
 
 ### Connect to a database
@@ -712,6 +715,54 @@ func main() {
 	serverBus.RunAutoTLS(domainName string, subDomains ...string)
 }
 ```
+
+### Example generated tag
+```go
+// generated example using concatination and length
+type TestUser struct {
+	Id        *uint   `korm:"pk"`
+	Uuid      string  `korm:"size:40;iunique"`
+	Email     *string `korm:"size:100;iunique"`
+	Gen       string  `korm:"size:250;generated: concat(uuid,'working',len(password))"`
+	Password  string
+	IsAdmin   *bool
+	CreatedAt time.Time `korm:"now"`
+	UpdatedAt time.Time `korm:"update"`
+}
+
+func TestGeneratedAs(t *testing.T) {
+	u, err := Model[TestUser]().Limit(3).All()
+	if err != nil {
+		t.Error(err)
+	}
+	if len(u) != 3 {
+		t.Error("len not 20")
+	}
+	if u[0].Gen != u[0].Uuid+"working"+fmt.Sprintf("%d", len(u[0].Password)) {
+		t.Error("generated not working:", u[0].Gen)
+	}
+}
+```
+
+
+### Example concat and len from korm_test.go
+```go
+// Where example
+func TestConcatANDLen(t *testing.T) {
+	groupes, err := Model[Group]().Where("name = concat(?,'min') AND len(name) = ?", "ad", 5).Debug().All()
+	// translated to select * from groups WHERE name = 'ad' || 'min'  AND  length(name) = 5 (sqlite)
+	// translated to select * from groups WHERE name = concat('ad','min')  AND  char_length(name) = 5 (postgres, mysql)
+	if err != nil {
+		t.Error(err)
+	}
+	if len(groupes) != 1 || groupes[0].Name != "admin" {
+		t.Error("len(groupes) != 1 , got: ", groupes)
+	}
+}
+```
+
+
+
 
 ## Router/Mux 
 Learn more about [Kmux](https://github.com/kamalshkeir/kmux)
