@@ -84,9 +84,9 @@ go get -u github.com/kamalshkeir/korm@v1.4.1 // latest version
 
 # Drivers moved outside this package to not get them all in your go.mod file
 ```sh
-go get github.com/kamalshkeir/sqlitedriver
-go get github.com/kamalshkeir/pgdriver
-go get github.com/kamalshkeir/mysqldriver
+go get -u github.com/kamalshkeir/sqlitedriver@v1.2.1
+go get -u github.com/kamalshkeir/pgdriver@v1.0.0
+go get -u github.com/kamalshkeir/mysqldriver@v1.0.0
 ```
 
 ```sh
