@@ -35,6 +35,7 @@ type TestUser struct {
 	Email     *string `korm:"size:100;iunique"`
 	Gen       string  `korm:"size:250;generated: concat(uuid,'working',len(password))"`
 	Password  string
+	Gen2      int `korm:"generated:len(password)*2"`
 	IsAdmin   *bool
 	CreatedAt time.Time `korm:"now"`
 	UpdatedAt time.Time `korm:"update"`
@@ -233,7 +234,7 @@ func TestGeneratedAs(t *testing.T) {
 	if len(u) != 3 {
 		t.Error("len not 20")
 	}
-	if u[0].Gen != u[0].Uuid+"working"+fmt.Sprintf("%d", len(u[0].Password)) {
+	if (u[0].Gen != u[0].Uuid+"working"+fmt.Sprintf("%d", len(u[0].Password))) || u[0].Gen2 != len(u[0].Password)*2 {
 		t.Error("generated not working:", u[0].Gen)
 	}
 }

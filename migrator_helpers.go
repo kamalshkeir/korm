@@ -364,7 +364,6 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 						continue loop
 					}
 				}
-				continue loop
 			}
 			if _, err := os.Stat("migrations/" + fileName); err == nil {
 				continue loop
