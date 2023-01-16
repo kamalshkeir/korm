@@ -15,8 +15,8 @@ import (
 )
 
 var (
-	cacheOneS = kmap.New[dbCache, any](false)
-	cacheAllS = kmap.New[dbCache, any](false)
+	cacheOneS = kmap.New[dbCache, any](false, 100)
+	cacheAllS = kmap.New[dbCache, any](false, 100)
 )
 
 // BuilderS is query builder for struct using generics
@@ -1115,7 +1115,10 @@ func (b *BuilderS[T]) All() ([]T, error) {
 		return nil, err
 	}
 	if useCache {
-		cacheAllS.Set(c, models)
+		err := cacheAllS.Set(c, models)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return models, nil
 }
@@ -1184,7 +1187,10 @@ func (b *BuilderS[T]) One() (T, error) {
 		return *new(T), err
 	}
 	if useCache {
-		cacheOneS.Set(c, model)
+		err := cacheOneS.Set(c, model)
+		if err != nil {
+			return *new(T), err
+		}
 	}
 	return model, nil
 }

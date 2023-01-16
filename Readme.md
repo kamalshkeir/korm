@@ -79,7 +79,7 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@v1.4.2 // latest version
+go get -u github.com/kamalshkeir/korm@v1.4.3 // latest version
 ```
 
 # Drivers moved outside this package to not get them all in your go.mod file
@@ -99,6 +99,8 @@ go get -u github.com/kamalshkeir/kormongo@latest // Mongo ORM
 Debug = false
 // FlushCacheEvery execute korm.FlushCache() every 10 min by default, you should not worry about it, but useful that you can change it
 FlushCacheEvery = 10 * time.Minute
+// SetCacheMaxMemory set max size of each cache cacheAllS AllM RowS ...
+korm.SetCacheMaxMemory(megaByte int)
 // Connection pool
 MaxOpenConns = 20
 MaxIdleConns = 20
@@ -130,9 +132,6 @@ kormongo.ShutdownDatabases(databasesName ...string) error
 package main
 
 import (
-	"fmt"
-	"log"
-	"strings"
 	"time"
 
 	"github.com/kamalshkeir/argon"
@@ -141,61 +140,88 @@ import (
 	"github.com/kamalshkeir/sqlitedriver"
 )
 
-type User struct {
-	Id        int       `korm:"pk"`              // AUTO Increment ID primary key
-	Uuid      string    `korm:"size:40"`         // VARCHAR(40)
+type Profile struct {
+	Id        int       `korm:"pk"` // AUTO Increment ID primary key
+	Name      string    // VARCHAR(40)
 	Email     string    `korm:"size:50;iunique"` // VARCHAR(50) insensitive unique constraint
 	Password  string    `korm:"size:150"`        // VARCHAR(150)
 	IsAdmin   bool      `korm:"default:false"`   // NOT NULL CHECK is_admin IN (0,1) DEFAULT 0
-	Image     string    `korm:"size:100;default:''"` // VARCHAR(100) DEFAULT ''
-	CreatedAt time.Time `korm:"now"` // auto now
+	CreatedAt time.Time `korm:"now"`             // auto now
+	UpdatedAt time.Time `korm:"update"`          // auto update
+	Age       int
+	AgeTwice  int `korm:"generated:age*2"`
+	//Role string `korm:"default:'worker'"`
 }
 
 func main() {
 	sqlitedriver.Use()
 	err := korm.New(korm.SQLITE, "db")
-	if klog.CheckError(err) {return}
+	if klog.CheckError(err) {
+		return
+	}
 
-	err = korm.AutoMigrate[User]("users")
-	if klog.CheckError(err) {return}
+	err = korm.AutoMigrate[Profile]("profiles")
+	if klog.CheckError(err) {
+		return
+	}
+
+	//srv := korm.WithDashboard()
+	//app := srv.App
 
 	defer func() {
 		err := korm.Shutdown("db")
 		klog.CheckError(err)
 	}()
 
-	
-	password := "password"
+	password := "123456"
 	hashedPass, _ := argon.Hash(password)
 
 	// Insert return the inserted PK
-	insertedId, err = korm.Model[User]().Insert(&User{
-		Uuid:      korm.GenerateUUID(),
-		Email:     "test@example.com",
-		Password:  hashedPass,
-		IsAdmin:   false,
-		Image:     "",
+	insertedId, err := korm.Model[Profile]().Insert(&Profile{
+		Name:     "sarra",
+		Email:    "test@example.com",
+		Password: hashedPass,
+		IsAdmin:  false,
+		Age:      20,
 		//CreatedAt: time.Now(), // not needed because it's auto new
 	})
-	if klog.CheckError(err) {return}
-	klog.Printf("grinserted userd id : %d \n",insertedId)
+	if klog.CheckError(err) {
+		return
+	}
+	klog.Printf("inserted profile id : %d \n", insertedId)
 
 	// InsertR return the inserted model , here it's User
-	insertedUser, err = korm.Model[User]().InsertR(&User{
-		Uuid:      korm.GenerateUUID(),
-		Email:     "test2@example.com",
-		Password:  hashedPass,
-		IsAdmin:   false,
-		Image:     "",
+	insertedProfile, err := korm.Model[Profile]().InsertR(&Profile{
+		Name:     "ali",
+		Email:    "test1@example.com",
+		Password: hashedPass,
+		IsAdmin:  !true,
+		Age:      20,
 	})
-	if klog.CheckError(err) {return}
-	klog.Printf("grinserted userd email returned : %s \n",insertedUser.Email) // should be "test2@example.com"
+	if klog.CheckError(err) {
+		return
+	}
 
-	// users, err := korm.Model[User]().Select("email", "uuid").OrderBy("-id").Limit(10).Page(1).All()
-	users, err := korm.Model[User]().All()
+	insertedProfile2, err := korm.Model[Profile]().InsertR(&Profile{
+		Name:     "sarra",
+		Email:    "test2@example.com",
+		Password: hashedPass,
+		IsAdmin:  true,
+		Age:      40,
+	})
+	if klog.CheckError(err) {
+		return
+	}
+
+	klog.Printf("inserted userd name returned : %s \n", insertedProfile.Name)  // should be "ali"
+	klog.Printf("inserted userd name returned : %s \n", insertedProfile2.Name) // should be "sarra"
+
+	// profiles, err := korm.Model[Profile]().Select("email", "uuid").OrderBy("-id").Limit(10).Page(1).All()
+	profiles, err := korm.Model[Profile]().All()
 	klog.CheckError(err)
 
-	klog.Printf("ylusers: %v\n",users)
+	klog.Printf("all users: %v\n", profiles)
+	//srv.Run(":9313")
 }
 ```
 

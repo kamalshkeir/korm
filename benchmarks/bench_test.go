@@ -14,7 +14,7 @@ import (
 )
 
 var DB_BENCH_NAME = "bench"
-var NumberOfModel = 300 // min 300
+var NumberOfModel = 1000 // min 300
 
 type TestTable struct {
 	Id        uint `korm:"pk"`

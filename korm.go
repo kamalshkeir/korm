@@ -20,19 +20,20 @@ var (
 	// defaultDB keep tracking of the first database connected
 	defaultDB           = ""
 	useCache            = true
+	cacheMaxMemoryMb    = 100
 	databases           = []DatabaseEntity{}
 	mutexModelTablename sync.RWMutex
 	mModelTablename     = map[any]string{}
-	cacheAllTables      = kmap.New[string, []string](false)
-	cacheAllCols        = kmap.New[string, map[string]string](false)
+	cacheAllTables      = kmap.New[string, []string](false, cacheMaxMemoryMb/2)
+	cacheAllCols        = kmap.New[string, map[string]string](false, cacheMaxMemoryMb/2)
 	relationsMap        = kmap.New[string, struct{}](false)
-
-	onceDone       = false
-	serverBus      *ksbus.Server
-	cachebus       *ksbus.Bus
-	switchBusMutex sync.Mutex
+	onceDone            = false
+	serverBus           *ksbus.Server
+	cachebus            *ksbus.Bus
+	switchBusMutex      sync.Mutex
 
 	ErrTableNotFound = errors.New("unable to find tableName")
+	ErrBigData       = kmap.ErrLargeData
 )
 
 // NewDatabaseFromDSN the generic way to connect to all handled databases
@@ -159,6 +160,18 @@ func New(dbType Dialect, dbName string, dbDSN ...string) error {
 	return nil
 }
 
+// SetCacheMaxMemory set max size of each cache cacheAllS AllM RowS ...
+func SetCacheMaxMemory(megaByte int) {
+	cacheMaxMemoryMb = megaByte
+	cacheAllTables = kmap.New[string, []string](false, cacheMaxMemoryMb/2)
+	cacheAllCols = kmap.New[string, map[string]string](false, cacheMaxMemoryMb/2)
+	cachesOneM = kmap.New[dbCache, map[string]any](false, cacheMaxMemoryMb)
+	cacheAllM = kmap.New[dbCache, []map[string]any](false, cacheMaxMemoryMb)
+	cacheOneS = kmap.New[dbCache, any](false, cacheMaxMemoryMb)
+	cacheAllS = kmap.New[dbCache, any](false, cacheMaxMemoryMb)
+}
+
+// ManyToMany create m2m_table1_table2 many 2 many table
 func ManyToMany(table1, table2 string, dbName ...string) error {
 	var err error
 	mdbName := databases[0].Name
@@ -174,7 +187,7 @@ func ManyToMany(table1, table2 string, dbName ...string) error {
 	autoinc := ""
 
 	defer func() {
-		relationsMap.Set("m2m_"+table1+"-"+mdbName+"-"+table2, struct{}{})
+		klog.CheckError(relationsMap.Set("m2m_"+table1+"-"+mdbName+"-"+table2, struct{}{}))
 	}()
 
 	if _, ok := relationsMap.Get("m2m_" + table1 + "-" + mdbName + "-" + table2); ok {
@@ -338,6 +351,7 @@ func BeforeDataWS(fn func(data map[string]any, conn *ws.Conn, originalRequest *h
 	ksbus.BeforeDataWS = fn
 }
 
+// Transaction create new database/sql transaction and return it, it can be rollback ...
 func Transaction(dbName ...string) (*sql.Tx, error) {
 	return GetConnection(dbName...).Begin()
 }
@@ -359,6 +373,7 @@ func DisableCache() {
 	useCache = false
 }
 
+// GetConnection get connection of dbName, if not specified , it return default, first database connected
 func GetConnection(dbName ...string) *sql.DB {
 	var name string
 	if len(dbName) > 0 {
@@ -448,7 +463,7 @@ func GetAllTables(dbName ...string) []string {
 		return nil
 	}
 	if useCache && len(tables) > 0 {
-		cacheAllTables.Set(name, tables)
+		klog.CheckError(cacheAllTables.Set(name, tables))
 	}
 
 	return tables
@@ -499,7 +514,7 @@ func GetAllColumnsTypes(table string, dbName ...string) map[string]string {
 			columns[singleColName] = singleColType
 		}
 		if useCache {
-			cacheAllCols.Set(dName+table, columns)
+			klog.CheckError(cacheAllCols.Set(dName+table, columns))
 		}
 		return columns
 	}
@@ -520,7 +535,7 @@ func GetAllColumnsTypes(table string, dbName ...string) map[string]string {
 		columns[singleColName] = singleColType
 	}
 	if useCache {
-		cacheAllCols.Set(dName+table, columns)
+		klog.CheckError(cacheAllCols.Set(dName+table, columns))
 	}
 	return columns
 }
@@ -546,6 +561,7 @@ func Shutdown(dbNames ...string) error {
 	}
 }
 
+// Query query sql and return result as slice maps
 func Query(dbName string, statement string, args ...any) ([]map[string]any, error) {
 	if dbName == "" {
 		dbName = databases[0].Name
@@ -599,6 +615,7 @@ func Query(dbName string, statement string, args ...any) ([]map[string]any, erro
 	return listMap, nil
 }
 
+// Exec exec sql and return error if any
 func Exec(dbName, query string, args ...any) error {
 	conn := GetConnection(dbName)
 	if conn == nil {
