@@ -859,9 +859,14 @@ async def pythonTopicHandler(data,subs):
     # Unsubscribe
     #await subs.Unsubscribe()
 
+async def recvData(data):
+    print("recv:",data)
+
 # onOpen callback that let you know when connection is ready, it take the bus as param
 async def onOpen(bus):
     print("connected")
+    bus.autorestart=True
+    bus.OnData = recvData
     # Publish publish to topic
     await bus.Publish("top",{
         "data":"hello from python"
