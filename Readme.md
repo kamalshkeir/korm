@@ -847,40 +847,40 @@ korm.OnDrop(func(database, table string) error {})
 
 ## Python bus client example
 ```sh
-pip install ksbus
+pip install ksbus==1.1.0
+# if it doesn't work , execute it again 
 ```
 ```py
 from ksbus import Bus
 
 
-# pythonTopicHandler handle topic 'python'
-async def pythonTopicHandler(data,subs):
-    print("recv on topic python:",data)
-    # Unsubscribe
-    #await subs.Unsubscribe()
-
-async def recvData(data):
-    print("recv:",data)
-
 # onOpen callback that let you know when connection is ready, it take the bus as param
-async def onOpen(bus):
+def onOpen(bus):
     print("connected")
-    bus.autorestart=True
-    bus.OnData = recvData
+    # bus.autorestart=True
     # Publish publish to topic
-    await bus.Publish("top",{
-        "data":"hello from python"
+    bus.Publish("top", {
+        "data": "hello from python"
     })
     # Subscribe, it also return the subscription
-    await bus.Subscribe("python",pythonTopicHandler)
+    bus.Subscribe("python", pythonTopicHandler)
     # SendTo publish to named topic
-    await bus.SendTo("top:srv",{
-        "data":"hello again from python"
+    bus.SendTo("top:srv", {
+        "data": "hello again from python"
     })
-    
+    # bus.Unsubscribe("python")
+    print("finish everything")
+
+
+# pythonTopicHandler handle topic 'python'
+def pythonTopicHandler(data, subs):
+    print("recv on topic python:", data)
+    # Unsubscribe
+    #subs.Unsubscribe()
 
 if __name__ == "__main__":
-    Bus("localhost:9313",onOpen=onOpen)
+    Bus("localhost:9313", onOpen=onOpen) # blocking
+    print("prorgram exited")
 ```
 
 # ManyToMany Relationships Example
