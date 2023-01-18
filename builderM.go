@@ -16,8 +16,8 @@ import (
 )
 
 var (
-	cachesOneM  = kmap.New[dbCache, map[string]any](false, 100)
-	cacheAllM   = kmap.New[dbCache, []map[string]any](false, 100)
+	cachesOneM  = kmap.New[dbCache, map[string]any](false)
+	cacheAllM   = kmap.New[dbCache, []map[string]any](false, cacheMaxMemoryMb)
 	setReplacer = strings.NewReplacer("=", "", "?", "")
 )
 
@@ -238,10 +238,7 @@ func (b *BuilderM) All() ([]map[string]any, error) {
 		return nil, err
 	}
 	if useCache {
-		err := cacheAllM.Set(c, models)
-		if err != nil {
-			return nil, err
-		}
+		cacheAllM.Set(c, models)
 	}
 	return models, nil
 }
@@ -305,10 +302,7 @@ func (b *BuilderM) One() (map[string]any, error) {
 		return nil, errors.New("no data")
 	}
 	if useCache {
-		err := cachesOneM.Set(c, models[0])
-		if err != nil {
-			return nil, err
-		}
+		cachesOneM.Set(c, models[0])
 	}
 
 	return models[0], nil

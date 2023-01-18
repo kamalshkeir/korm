@@ -81,7 +81,7 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@v1.4.3 // latest version
+go get -u github.com/kamalshkeir/korm@v1.4.4 // latest version
 ```
 
 # Drivers moved outside this package to not get them all in your go.mod file
@@ -102,7 +102,7 @@ Debug = false
 // FlushCacheEvery execute korm.FlushCache() every 10 min by default, you should not worry about it, but useful that you can change it
 FlushCacheEvery = 10 * time.Minute
 // SetCacheMaxMemory set max size of each cache cacheAllS AllM RowS ...
-korm.SetCacheMaxMemory(megaByte int)
+korm.SetCacheMaxMemory(megaByte int) // default maximum of 50 Mb , cannot be lower
 // Connection pool
 MaxOpenConns = 20
 MaxIdleConns = 20

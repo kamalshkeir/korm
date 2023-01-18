@@ -20,12 +20,12 @@ var (
 	// defaultDB keep tracking of the first database connected
 	defaultDB           = ""
 	useCache            = true
-	cacheMaxMemoryMb    = 100
+	cacheMaxMemoryMb    = 50
 	databases           = []DatabaseEntity{}
 	mutexModelTablename sync.RWMutex
 	mModelTablename     = map[any]string{}
-	cacheAllTables      = kmap.New[string, []string](false, cacheMaxMemoryMb/2)
-	cacheAllCols        = kmap.New[string, map[string]string](false, cacheMaxMemoryMb/2)
+	cacheAllTables      = kmap.New[string, []string](false)
+	cacheAllCols        = kmap.New[string, map[string]string](false)
 	relationsMap        = kmap.New[string, struct{}](false)
 	onceDone            = false
 	serverBus           *ksbus.Server
@@ -160,14 +160,13 @@ func New(dbType Dialect, dbName string, dbDSN ...string) error {
 	return nil
 }
 
-// SetCacheMaxMemory set max size of each cache cacheAllS AllM RowS ...
+// SetCacheMaxMemory set max size of each cache cacheAllS AllM, minimum of 50 ...
 func SetCacheMaxMemory(megaByte int) {
+	if megaByte < 50 {
+		megaByte = 50
+	}
 	cacheMaxMemoryMb = megaByte
-	cacheAllTables = kmap.New[string, []string](false, cacheMaxMemoryMb/2)
-	cacheAllCols = kmap.New[string, map[string]string](false, cacheMaxMemoryMb/2)
-	cachesOneM = kmap.New[dbCache, map[string]any](false, cacheMaxMemoryMb)
 	cacheAllM = kmap.New[dbCache, []map[string]any](false, cacheMaxMemoryMb)
-	cacheOneS = kmap.New[dbCache, any](false, cacheMaxMemoryMb)
 	cacheAllS = kmap.New[dbCache, any](false, cacheMaxMemoryMb)
 }
 
@@ -187,7 +186,7 @@ func ManyToMany(table1, table2 string, dbName ...string) error {
 	autoinc := ""
 
 	defer func() {
-		klog.CheckError(relationsMap.Set("m2m_"+table1+"-"+mdbName+"-"+table2, struct{}{}))
+		relationsMap.Set("m2m_"+table1+"-"+mdbName+"-"+table2, struct{}{})
 	}()
 
 	if _, ok := relationsMap.Get("m2m_" + table1 + "-" + mdbName + "-" + table2); ok {
@@ -463,7 +462,7 @@ func GetAllTables(dbName ...string) []string {
 		return nil
 	}
 	if useCache && len(tables) > 0 {
-		klog.CheckError(cacheAllTables.Set(name, tables))
+		cacheAllTables.Set(name, tables)
 	}
 
 	return tables
@@ -514,7 +513,7 @@ func GetAllColumnsTypes(table string, dbName ...string) map[string]string {
 			columns[singleColName] = singleColType
 		}
 		if useCache {
-			klog.CheckError(cacheAllCols.Set(dName+table, columns))
+			cacheAllCols.Set(dName+table, columns)
 		}
 		return columns
 	}
@@ -535,7 +534,7 @@ func GetAllColumnsTypes(table string, dbName ...string) map[string]string {
 		columns[singleColName] = singleColType
 	}
 	if useCache {
-		klog.CheckError(cacheAllCols.Set(dName+table, columns))
+		cacheAllCols.Set(dName+table, columns)
 	}
 	return columns
 }
