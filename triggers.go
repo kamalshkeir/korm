@@ -101,3 +101,34 @@ func DropTrigger(tableName, column string, dbName ...string) {
 		klog.Printf("rderr:%v\n", err)
 	}
 }
+
+type sizeDb struct {
+	Size float64
+}
+
+func StorageSize(dbName string) float64 {
+	db, err := GetMemoryDatabase(dbName)
+	if klog.CheckError(err) {
+		return -1
+	}
+	var statement string
+	switch db.Dialect {
+	case SQLITE:
+		statement = "SELECT (page_count * page_size) as size FROM pragma_page_count(), pragma_page_size();"
+	case POSTGRES, COCKROACH:
+		statement = "SELECT pg_database_size('" + db.Name + "') as size;"
+	case MYSQL, MARIA:
+		statement = "SELECT SUM(data_length + index_length) as size FROM information_schema.tables WHERE table_schema = '" + db.Name + "';"
+	default:
+		return -1
+	}
+
+	m, err := QueryS[sizeDb](db.Name, statement)
+	if klog.CheckError(err) {
+		return -1
+	}
+	if len(m) > 0 {
+		return m[0].Size / (1024 * 1024)
+	}
+	return -1
+}

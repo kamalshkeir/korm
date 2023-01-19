@@ -81,7 +81,7 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@v1.4.4 // latest version
+go get -u github.com/kamalshkeir/korm@v1.4.5 // latest version
 ```
 
 # Drivers moved outside this package to not get them all in your go.mod file
@@ -299,6 +299,8 @@ all, _ := korm.Model[FirstTable]()
 func New(dbType, dbName string, dbDSN ...string) error
 func NewFromConnection(dbType, dbName string, conn *sql.DB) error
 func NewFromConnection(dbName string,dbConn *mongo.Database) error (kormongo)
+func QueryS[T any](dbName string, statement string, args ...any) ([]T, error)
+func Query(dbName string, statement string, args ...any) ([]map[string]any, error)
 func Exec(dbName, query string, args ...any) error
 func Transaction(dbName ...string) (*sql.Tx, error)
 func WithBus(bus *ksbus.Server) *ksbus.Server // Usage: WithBus(ksbus.NewServer()) or share an existing one

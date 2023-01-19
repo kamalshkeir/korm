@@ -1197,20 +1197,18 @@ func (b *BuilderS[T]) queryS(query string, args ...any) ([]T, error) {
 	if klog.CheckError(err) {
 		return nil, err
 	}
-
+	if db.Conn == nil {
+		return nil, errors.New("no connection")
+	}
 	adaptPlaceholdersToDialect(&query, db.Dialect)
+	adaptTrueFalseArgs(&args)
 	res := make([]T, 0)
 
-	stmt, err := db.Conn.Prepare(query)
-	if err != nil {
-		return nil, err
-	}
-	defer stmt.Close()
 	var rows *sql.Rows
 	if b.ctx != nil {
-		rows, err = stmt.QueryContext(b.ctx, args...)
+		rows, err = db.Conn.QueryContext(b.ctx, query, args...)
 	} else {
-		rows, err = stmt.Query(args...)
+		rows, err = db.Conn.Query(query, args...)
 	}
 
 	if err == sql.ErrNoRows {
@@ -1230,8 +1228,8 @@ func (b *BuilderS[T]) queryS(query string, args ...any) ([]T, error) {
 		}
 	}
 
-	columns_ptr_to_values := make([]interface{}, len(cols))
-	values := make([]interface{}, len(cols))
+	columns_ptr_to_values := make([]any, len(cols))
+	values := make([]any, len(cols))
 	for rows.Next() {
 		for i := range values {
 			columns_ptr_to_values[i] = &values[i]
@@ -1242,24 +1240,25 @@ func (b *BuilderS[T]) queryS(query string, args ...any) ([]T, error) {
 			return nil, err
 		}
 
-		if db.Dialect == MYSQL || db.Dialect == MARIA {
-			db.Dialect = MYSQL
-			for i := range values {
-				if v, ok := values[i].([]byte); ok {
-					values[i] = string(v)
-				}
-			}
-		}
-
 		row := new(T)
 
 		m := map[string]any{}
 		if b.selected != "" && b.selected != "*" {
 			for i, key := range strings.Split(b.selected, ",") {
+				if db.Dialect == MYSQL || db.Dialect == MARIA {
+					if v, ok := values[i].([]byte); ok {
+						values[i] = string(v)
+					}
+				}
 				m[key] = values[i]
 			}
 		} else {
 			for i, key := range cols {
+				if db.Dialect == MYSQL || db.Dialect == MARIA {
+					if v, ok := values[i].([]byte); ok {
+						values[i] = string(v)
+					}
+				}
 				m[key] = values[i]
 			}
 		}
@@ -1286,17 +1285,15 @@ func (b *BuilderS[T]) queryOneS(query string, args ...any) (res T, err error) {
 	}
 
 	adaptPlaceholdersToDialect(&query, db.Dialect)
-
-	stmt, err := db.Conn.Prepare(query)
-	if err != nil {
-		return res, err
+	adaptTrueFalseArgs(&args)
+	if db.Conn == nil {
+		return res, errors.New("no connection")
 	}
-	defer stmt.Close()
 	var rows *sql.Rows
 	if b.ctx != nil {
-		rows, err = stmt.QueryContext(b.ctx, args...)
+		rows, err = db.Conn.QueryContext(b.ctx, query, args...)
 	} else {
-		rows, err = stmt.Query(args...)
+		rows, err = db.Conn.Query(query, args...)
 	}
 
 	if err == sql.ErrNoRows {
@@ -1328,22 +1325,23 @@ func (b *BuilderS[T]) queryOneS(query string, args ...any) (res T, err error) {
 			return res, err
 		}
 
-		if db.Dialect == MYSQL || db.Dialect == MARIA {
-			db.Dialect = MYSQL
-			for i := range values {
-				if v, ok := values[i].([]byte); ok {
-					values[i] = string(v)
-				}
-			}
-		}
-
 		m := map[string]any{}
 		if b.selected != "" && b.selected != "*" {
 			for i, key := range strings.Split(b.selected, ",") {
+				if db.Dialect == MYSQL || db.Dialect == MARIA {
+					if v, ok := values[i].([]byte); ok {
+						values[i] = string(v)
+					}
+				}
 				m[key] = values[i]
 			}
 		} else {
 			for i, key := range cols {
+				if db.Dialect == MYSQL || db.Dialect == MARIA {
+					if v, ok := values[i].([]byte); ok {
+						values[i] = string(v)
+					}
+				}
 				m[key] = values[i]
 			}
 		}

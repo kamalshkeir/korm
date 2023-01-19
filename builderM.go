@@ -640,6 +640,10 @@ func (b *BuilderM) Set(query string, args ...any) (int, error) {
 	if b == nil || b.tableName == "" {
 		return 0, ErrTableNotFound
 	}
+	db, err := GetMemoryDatabase(b.database)
+	if err != nil {
+		return 0, err
+	}
 	if useCache {
 		cachebus.Publish(CACHE_TOPIC, map[string]any{
 			"type": "update",
@@ -662,10 +666,6 @@ func (b *BuilderM) Set(query string, args ...any) (int, error) {
 		if err != nil {
 			return 0, err
 		}
-	}
-	db, err := GetMemoryDatabase(b.database)
-	if err != nil {
-		return 0, err
 	}
 	if b.whereQuery == "" {
 		return 0, errors.New("you should use Where before Update")
@@ -911,7 +911,7 @@ func (b *BuilderM) GetRelated(relatedTable string, dest *[]map[string]any) error
 
 	// get the typed model
 	if b.whereQuery == "" {
-		return fmt.Errorf("you must specify a where query like 'email = ? and username like ...' for structs")
+		return fmt.Errorf("you must specify a where query like 'email = ?'")
 	}
 	b.whereQuery = strings.TrimSpace(b.whereQuery)
 	if b.selected != "" {
@@ -1112,7 +1112,7 @@ func (b *BuilderM) DeleteRelated(relatedTable string, whereRelatedTable string, 
 	return n, nil
 }
 
-func (b *BuilderM) queryM(statement string, args ...any) ([]map[string]interface{}, error) {
+func (b *BuilderM) queryM(statement string, args ...any) ([]map[string]any, error) {
 	if b == nil || b.tableName == "" {
 		return nil, ErrTableNotFound
 	}
@@ -1120,11 +1120,11 @@ func (b *BuilderM) queryM(statement string, args ...any) ([]map[string]interface
 	if err != nil {
 		return nil, err
 	}
-	adaptPlaceholdersToDialect(&statement, db.Dialect)
-
 	if db.Conn == nil {
 		return nil, errors.New("no connection")
 	}
+	adaptPlaceholdersToDialect(&statement, db.Dialect)
+	adaptTrueFalseArgs(&args)
 	var rows *sql.Rows
 	if b.ctx != nil {
 		rows, err = db.Conn.QueryContext(b.ctx, statement, args...)
@@ -1137,15 +1137,20 @@ func (b *BuilderM) queryM(statement string, args ...any) ([]map[string]interface
 		return nil, err
 	}
 	defer rows.Close()
-	columns, err := rows.Columns()
-	if err != nil {
-		return nil, err
+	var columns []string
+	if b.selected != "" && b.selected != "*" {
+		columns = strings.Split(b.selected, ",")
+	} else {
+		columns, err = rows.Columns()
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	models := make([]interface{}, len(columns))
-	modelsPtrs := make([]interface{}, len(columns))
+	models := make([]any, len(columns))
+	modelsPtrs := make([]any, len(columns))
 
-	listMap := make([]map[string]interface{}, 0)
+	listMap := make([]map[string]any, 0)
 
 	for rows.Next() {
 		for i := range models {
@@ -1157,12 +1162,25 @@ func (b *BuilderM) queryM(statement string, args ...any) ([]map[string]interface
 			return nil, err
 		}
 
-		m := map[string]interface{}{}
-		for i := range columns {
-			if v, ok := modelsPtrs[i].([]byte); ok {
-				modelsPtrs[i] = string(v)
+		m := map[string]any{}
+		if b.selected != "" && b.selected != "*" {
+			for i, key := range strings.Split(b.selected, ",") {
+				if db.Dialect == MYSQL || db.Dialect == MARIA {
+					if v, ok := modelsPtrs[i].([]byte); ok {
+						modelsPtrs[i] = string(v)
+					}
+				}
+				m[key] = modelsPtrs[i]
 			}
-			m[columns[i]] = modelsPtrs[i]
+		} else {
+			for i, key := range columns {
+				if db.Dialect == MYSQL || db.Dialect == MARIA {
+					if v, ok := modelsPtrs[i].([]byte); ok {
+						modelsPtrs[i] = string(v)
+					}
+				}
+				m[key] = modelsPtrs[i]
+			}
 		}
 		listMap = append(listMap, m)
 	}
@@ -1172,7 +1190,7 @@ func (b *BuilderM) queryM(statement string, args ...any) ([]map[string]interface
 	return listMap, nil
 }
 
-func (b *BuilderM) queryS(strct any, statement string, args ...any) error {
+func (b *BuilderM) queryS(ptrStrctSlice any, statement string, args ...any) error {
 	if b == nil || b.tableName == "" {
 		return ErrTableNotFound
 	}
@@ -1181,7 +1199,7 @@ func (b *BuilderM) queryS(strct any, statement string, args ...any) error {
 		return err
 	}
 	adaptPlaceholdersToDialect(&statement, db.Dialect)
-
+	adaptTrueFalseArgs(&args)
 	if db.Conn == nil {
 		return errors.New("no connection")
 	}
@@ -1197,14 +1215,19 @@ func (b *BuilderM) queryS(strct any, statement string, args ...any) error {
 		return err
 	}
 	defer rows.Close()
-	columns, err := rows.Columns()
-	if err != nil {
-		return err
+	var columns []string
+	if b.selected != "" && b.selected != "*" {
+		columns = strings.Split(b.selected, ",")
+	} else {
+		columns, err = rows.Columns()
+		if err != nil {
+			return err
+		}
 	}
-	models := make([]interface{}, len(columns))
-	modelsPtrs := make([]interface{}, len(columns))
+	models := make([]any, len(columns))
+	modelsPtrs := make([]any, len(columns))
 
-	var value = reflect.ValueOf(strct)
+	var value = reflect.ValueOf(ptrStrctSlice)
 	if value.Kind() == reflect.Ptr {
 		value = value.Elem()
 	} else {
@@ -1226,11 +1249,24 @@ func (b *BuilderM) queryS(strct any, statement string, args ...any) error {
 		}
 
 		m := map[string]any{}
-		for i := range columns {
-			if v, ok := modelsPtrs[i].([]byte); ok {
-				modelsPtrs[i] = string(v)
+		if b.selected != "" && b.selected != "*" {
+			for i, key := range strings.Split(b.selected, ",") {
+				if db.Dialect == MYSQL || db.Dialect == MARIA {
+					if v, ok := modelsPtrs[i].([]byte); ok {
+						modelsPtrs[i] = string(v)
+					}
+				}
+				m[key] = modelsPtrs[i]
 			}
-			m[columns[i]] = modelsPtrs[i]
+		} else {
+			for i, key := range columns {
+				if db.Dialect == MYSQL || db.Dialect == MARIA {
+					if v, ok := modelsPtrs[i].([]byte); ok {
+						modelsPtrs[i] = string(v)
+					}
+				}
+				m[key] = modelsPtrs[i]
+			}
 		}
 		ptr := reflect.New(value.Type().Elem()).Interface()
 		err = kstrct.FillFromMap(ptr, m)

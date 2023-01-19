@@ -14,6 +14,7 @@ import (
 	"github.com/kamalshkeir/kmap"
 	"github.com/kamalshkeir/kmux/ws"
 	"github.com/kamalshkeir/ksbus"
+	"github.com/kamalshkeir/kstrct"
 )
 
 var (
@@ -569,6 +570,9 @@ func Query(dbName string, statement string, args ...any) ([]map[string]any, erro
 	if err != nil {
 		return nil, err
 	}
+	if db.Conn == nil {
+		return nil, errors.New("no connection")
+	}
 	adaptPlaceholdersToDialect(&statement, db.Dialect)
 	adaptTrueFalseArgs(&args)
 	var rows *sql.Rows
@@ -601,8 +605,10 @@ func Query(dbName string, statement string, args ...any) ([]map[string]any, erro
 
 		m := map[string]any{}
 		for i := range columns {
-			if v, ok := modelsPtrs[i].([]byte); ok {
-				modelsPtrs[i] = string(v)
+			if db.Dialect == MYSQL || db.Dialect == MARIA {
+				if v, ok := modelsPtrs[i].([]byte); ok {
+					modelsPtrs[i] = string(v)
+				}
 			}
 			m[columns[i]] = modelsPtrs[i]
 		}
@@ -636,4 +642,67 @@ func getTableName[T comparable]() string {
 	} else {
 		return ""
 	}
+}
+
+func QueryS[T any](dbName string, statement string, args ...any) ([]T, error) {
+	if dbName == "" {
+		dbName = databases[0].Name
+	}
+	db, err := GetMemoryDatabase(dbName)
+	if err != nil {
+		return nil, err
+	}
+	if db.Conn == nil {
+		return nil, errors.New("no connection")
+	}
+	adaptPlaceholdersToDialect(&statement, db.Dialect)
+	adaptTrueFalseArgs(&args)
+
+	rows, err := db.Conn.Query(statement, args...)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("no data found")
+	} else if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	columns, err := rows.Columns()
+	if err != nil {
+		return nil, err
+	}
+	columns_ptr_to_values := make([]any, len(columns))
+	values := make([]any, len(columns))
+	res := make([]T, 0)
+
+	for rows.Next() {
+		for i := range values {
+			columns_ptr_to_values[i] = &values[i]
+		}
+
+		err := rows.Scan(columns_ptr_to_values...)
+		if err != nil {
+			return nil, err
+		}
+
+		row := new(T)
+
+		m := map[string]any{}
+		for i, key := range columns {
+			if db.Dialect == MYSQL || db.Dialect == MARIA {
+				if v, ok := values[i].([]byte); ok {
+					values[i] = string(v)
+				}
+			}
+			m[key] = values[i]
+		}
+		err = kstrct.FillFromMap(row, m)
+		if err != nil {
+			return nil, err
+		}
+		res = append(res, *row)
+	}
+
+	if len(res) == 0 {
+		return nil, errors.New("no data found")
+	}
+	return res, nil
 }
