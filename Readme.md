@@ -36,12 +36,15 @@
 ##### All drivers are written in Go, so you will never encounter gcc or c missing compiler
 
 ### It Has :
+- <strong>New :</strong> [Crud Api From Model](#example-korm-api) , similar to Model Viewsets from django rest framework
 
-- <strong>New :</strong> [Python Bus Client](#python-bus-client-example) `pip install ksbus`
+- <strong>New :</strong> [Built-in Authentication](#admin-urls) using `korm.Auth` , `korm.Admin` or `korm.BasicAuth` middlewares, whenever Auth and Admin middlewares are used, you get access to the `.User` model and variable `.IsAuthenticated` from any template html like this example [admin_nav.html](#example-admin-and-auth-user-model-and-isauthenticated) 
 
-- <strong>New :</strong> [GENERATED ALWAYS AS](#example-generated-tag) tag added (all dialects)
+- [Python Bus Client](#python-bus-client-example) `pip install ksbus`
 
-- <strong>New :</strong> [Concatination and Length](#example-concat-and-len-from-korm_testgo) support for `Where` and for tags: `check` and `generated` (all dialects)
+- [GENERATED ALWAYS AS](#example-generated-tag) tag added (all dialects)
+
+- [Concatination and Length](#example-concat-and-len-from-korm_testgo) support for `Where` and for tags: `check` and `generated` (all dialects)
 
 - Simple [API](#api)
 
@@ -81,7 +84,7 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@v1.4.5 // latest version
+go get -u github.com/kamalshkeir/korm@v1.4.6 // latest version
 ```
 
 # Drivers moved outside this package to not get them all in your go.mod file
@@ -101,7 +104,7 @@ go get -u github.com/kamalshkeir/kormongo@latest // Mongo ORM
 Debug = false
 // FlushCacheEvery execute korm.FlushCache() every 10 min by default, you should not worry about it, but useful that you can change it
 FlushCacheEvery = 10 * time.Minute
-// SetCacheMaxMemory set max size of each cache cacheAllS AllM RowS ...
+// SetCacheMaxMemory set max size of each cache cacheAllS AllM ...
 korm.SetCacheMaxMemory(megaByte int) // default maximum of 50 Mb , cannot be lower
 // Connection pool
 MaxOpenConns = 20
@@ -317,7 +320,6 @@ func GetMemoryDatabase(dbName string) (*DatabaseEntity, error)
 func Shutdown(databasesName ...string) error
 func FlushCache()
 func DisableCheck() // Korm Only, disable struct check on change to add or remove column
-func DisableCache()
 func ManyToMany(table1, table2 string, dbName ...string) error // add table relation m2m 
 ```
 #### Builder `Struct`:
@@ -564,6 +566,24 @@ createsuperuser
 Then you can visit `/admin`
 
 
+### Admin urls
+```go
+adminGroup := r.Group(AdminPathNameGroup)
+	adminGroup.GET("/", Admin(IndexView))
+	adminGroup.GET("/login", Auth(LoginView))
+	adminGroup.POST("/login", Auth(LoginPOSTView))
+	adminGroup.GET("/logout", LogoutView)
+	adminGroup.POST("/delete/row", Admin(DeleteRowPost))
+	adminGroup.POST("/update/row", Admin(UpdateRowPost))
+	adminGroup.POST("/create/row", Admin(CreateModelView))
+	adminGroup.POST("/drop/table", Admin(DropTablePost))
+	adminGroup.GET("/table/model:str", Admin(AllModelsGet))
+	adminGroup.POST("/table/model:str/search", Admin(AllModelsSearch))
+	adminGroup.GET("/get/model:str/id:int", Admin(SingleModelGet))
+	adminGroup.GET("/export/table:str", Admin(ExportView))
+	adminGroup.POST("/import", Admin(ImportView))
+```
+
 ### Admin middlewares
 
 ```go
@@ -577,6 +597,8 @@ import (
 	"github.com/kamalshkeir/aes"
 	"github.com/kamalshkeir/kmux"
 )
+
+
 
 var Auth = func(handler kmux.Handler) kmux.Handler {
 	const key kmux.ContextKey = "user"
@@ -651,6 +673,99 @@ var Admin = func(handler kmux.Handler) kmux.Handler {
 		handler(c)
 	}
 }
+
+
+
+var BasicAuth = func(handler kmux.Handler) kmux.Handler {
+	return kmux.BasicAuth(handler, BASIC_AUTH_USER, BASIC_AUTH_PASS)
+}
+```
+
+### Example korm api
+```go
+package main
+
+import (
+	"github.com/kamalshkeir/klog"
+	"github.com/kamalshkeir/korm"
+	"github.com/kamalshkeir/sqlitedriver"
+)
+
+func main() {
+	sqlitedriver.Use()
+	err := korm.New(korm.SQLITE, "test")
+	if klog.CheckError(err) {
+		return
+	}
+	defer korm.Shutdown("db")
+
+	// INIT DASHBOARD
+	srv := korm.WithDashboard() // or korm.WithBus , the api will work with both, but one of them required
+	klog.Printfs("mgrunning on http://localhost:9313\n")
+
+	// INIT API
+	// you can use BasicAuth middleware, Auth middleware is used by default, and Admin middleware to let only the admin access the api
+	korm.BASIC_AUTH_USER = "user"
+	korm.BASIC_AUTH_PASS = "pass"
+	api, err := korm.WithAPI("/api", korm.BasicAuth) // will be available at '/api'
+	if klog.CheckError(err) {
+		return
+	}
+	// Register a table to the api
+	err = api.RegisterTable(korm.TableRegistration{
+		TableName:       "users",
+		SelectedColumns: []string{"email", "uuid"},
+	})
+	if klog.CheckError(err) {
+		return
+	}
+	// code here
+	srv.Run("localhost:9313")
+}
+```
+
+<img src="api.jpg">
+
+### Example Admin and Auth User model and IsAuthenticated
+```html
+{{define "admin_nav"}}
+<header id="admin-header">
+  <nav>
+    <a href="/">
+      <h1>KORM</h1>
+    </a> 
+    
+    <ul>
+        <li>
+          <a {{if eq .Request.URL.Path "/" }}class="active"{{end}} href="/">Home</a>
+        </li>
+
+        <li>
+          <a {{if contains .Request.URL.Path "/admin" }}class="active"{{end}} href="/admin">Admin</a>
+        </li>
+
+        {{if .IsAuthenticated}}
+            {{if and .Logs .User.IsAdmin}}
+              <li>
+                <a {{if eq .Request.URL.Path "/logs" }}class="active"{{end}} href="/logs">Logs</a>
+              </li>
+            {{end}}
+
+            <li>
+              <a href="/admin/logout">Logout</a>
+            </li>
+            
+            {{if .User.Email}}
+              <li>
+                <span>Hello {{.User.Email}}</span>
+              </li>
+            {{end}}
+        {{end}}
+    </ul>
+  </nav>
+</header>
+{{end}}
+
 
 ```
 
@@ -1142,7 +1257,7 @@ BenchmarkGetAllColumns-4        27039632                42.22 ns/op            0
 ---
 ### Available Tags by struct field type:
 
-#String Field:
+# String Field:
 <table>
 <tr>
 <th>Without parameter&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</th>

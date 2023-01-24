@@ -131,7 +131,7 @@ var AllModelsGet = func(c *kmux.Context) {
 			"rows":           rows,
 			"columns":        t.ModelTypes,
 			"dbcolumns":      dbCols,
-			"pk":             t.Pk,
+			"pk":             idString,
 			"columnsOrdered": t.Columns,
 		})
 	} else {

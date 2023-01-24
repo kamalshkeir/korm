@@ -8,6 +8,11 @@ import (
 	"github.com/kamalshkeir/kmux"
 )
 
+var (
+	BASIC_AUTH_USER = "notset"
+	BASIC_AUTH_PASS = "testnotsetshouldbeset"
+)
+
 var Auth = func(handler kmux.Handler) kmux.Handler {
 	const key kmux.ContextKey = "user"
 	return func(c *kmux.Context) {
@@ -80,4 +85,8 @@ var Admin = func(handler kmux.Handler) kmux.Handler {
 
 		handler(c)
 	}
+}
+
+var BasicAuth = func(handler kmux.Handler) kmux.Handler {
+	return kmux.BasicAuth(handler, BASIC_AUTH_USER, BASIC_AUTH_PASS)
 }

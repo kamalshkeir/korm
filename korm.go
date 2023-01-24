@@ -32,9 +32,10 @@ var (
 	serverBus           *ksbus.Server
 	cachebus            *ksbus.Bus
 	switchBusMutex      sync.Mutex
-
-	ErrTableNotFound = errors.New("unable to find tableName")
-	ErrBigData       = kmap.ErrLargeData
+	cacheQueryS         = kmap.New[dbCache, any](false, cacheMaxMemoryMb)
+	cacheQueryM         = kmap.New[dbCache, any](false, cacheMaxMemoryMb)
+	ErrTableNotFound    = errors.New("unable to find tableName")
+	ErrBigData          = kmap.ErrLargeData
 )
 
 // NewDatabaseFromDSN the generic way to connect to all handled databases
@@ -169,6 +170,8 @@ func SetCacheMaxMemory(megaByte int) {
 	cacheMaxMemoryMb = megaByte
 	cacheAllM = kmap.New[dbCache, []map[string]any](false, cacheMaxMemoryMb)
 	cacheAllS = kmap.New[dbCache, any](false, cacheMaxMemoryMb)
+	cacheQueryM = kmap.New[dbCache, any](false, cacheMaxMemoryMb)
+	cacheQueryS = kmap.New[dbCache, any](false, cacheMaxMemoryMb)
 }
 
 // ManyToMany create m2m_table1_table2 many 2 many table
@@ -368,10 +371,10 @@ func DisableCheck() {
 	migrationAutoCheck = false
 }
 
-// DisableCache disable the cache system, if you are having problem with it, you can korm.FlushCache on command too
-func DisableCache() {
-	useCache = false
-}
+// DisableCache disable the cache system, if and only if you are having problem with it, also you can korm.FlushCache on command too
+// func DisableCache() {
+// 	useCache = false
+// }
 
 // GetConnection get connection of dbName, if not specified , it return default, first database connected
 func GetConnection(dbName ...string) *sql.DB {
@@ -566,6 +569,18 @@ func Query(dbName string, statement string, args ...any) ([]map[string]any, erro
 	if dbName == "" {
 		dbName = databases[0].Name
 	}
+	c := dbCache{
+		database:  dbName,
+		table:     "",
+		selected:  "",
+		statement: statement,
+		args:      fmt.Sprint(args...),
+	}
+	if useCache {
+		if v, ok := cacheQueryM.Get(c); ok {
+			return v.([]map[string]any), nil
+		}
+	}
 	db, err := GetMemoryDatabase(dbName)
 	if err != nil {
 		return nil, err
@@ -617,6 +632,9 @@ func Query(dbName string, statement string, args ...any) ([]map[string]any, erro
 	if len(listMap) == 0 {
 		return nil, errors.New("no data found")
 	}
+	if useCache {
+		cacheQueryM.Set(c, listMap)
+	}
 	return listMap, nil
 }
 
@@ -648,6 +666,18 @@ func QueryS[T any](dbName string, statement string, args ...any) ([]T, error) {
 	if dbName == "" {
 		dbName = databases[0].Name
 	}
+	c := dbCache{
+		database:  dbName,
+		table:     "",
+		selected:  "",
+		statement: statement,
+		args:      fmt.Sprint(args...),
+	}
+	if useCache {
+		if v, ok := cacheQueryS.Get(c); ok {
+			return v.([]T), nil
+		}
+	}
 	db, err := GetMemoryDatabase(dbName)
 	if err != nil {
 		return nil, err
@@ -664,6 +694,7 @@ func QueryS[T any](dbName string, statement string, args ...any) ([]T, error) {
 	} else if err != nil {
 		return nil, err
 	}
+
 	defer rows.Close()
 	columns, err := rows.Columns()
 	if err != nil {
@@ -680,6 +711,7 @@ func QueryS[T any](dbName string, statement string, args ...any) ([]T, error) {
 
 		err := rows.Scan(columns_ptr_to_values...)
 		if err != nil {
+			klog.Printf("yl%s\n", statement)
 			return nil, err
 		}
 
@@ -703,6 +735,9 @@ func QueryS[T any](dbName string, statement string, args ...any) ([]T, error) {
 
 	if len(res) == 0 {
 		return nil, errors.New("no data found")
+	}
+	if useCache {
+		cacheQueryS.Set(c, res)
 	}
 	return res, nil
 }

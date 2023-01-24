@@ -140,6 +140,34 @@ func BenchmarkGetAllS(b *testing.B) {
 	}
 }
 
+func BenchmarkQueryS(b *testing.B) {
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		a, err := korm.QueryS[TestTable]("", "select * from test_table where is_admin =?", true)
+		if err != nil {
+			b.Error("error BenchmarkQueryS:", err)
+		}
+		if len(a) != NumberOfModel || a[0].Email != "test-0@example.com" {
+			b.Error("Failed:", len(a), a[0].Email)
+		}
+	}
+}
+
+func BenchmarkQueryM(b *testing.B) {
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		a, err := korm.Query("", "select * from test_table where is_admin =?", true)
+		if err != nil {
+			b.Error("error BenchmarkQueryM:", err)
+		}
+		if len(a) != NumberOfModel || a[0]["email"] != "test-0@example.com" {
+			b.Error("Failed:", len(a), a[0]["email"])
+		}
+	}
+}
+
 // func BenchmarkGetAllM_GORM(b *testing.B) {
 // 	b.ReportAllocs()
 // 	b.ResetTimer()
