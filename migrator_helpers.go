@@ -10,20 +10,6 @@ import (
 	"github.com/kamalshkeir/klog"
 )
 
-type dbCache struct {
-	limit      int
-	page       int
-	database   string
-	table      string
-	selected   string
-	orderBys   string
-	whereQuery string
-	query      string
-	offset     string
-	statement  string
-	args       string
-}
-
 // linkModel link a struct model to a  db_table_name
 func linkModel[T comparable](to_table_name string, db *DatabaseEntity) {
 	if db.Name == "" {

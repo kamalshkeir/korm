@@ -7,43 +7,56 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/kamalshkeir/klog"
 	"github.com/kamalshkeir/kmux"
 )
 
-var registeredTables = []TableRegistration{}
-
-type ModelApi struct {
-	basePath     string
-	globalMiddws []func(handler kmux.Handler) kmux.Handler
-}
+var (
+	basePath         = "/api"
+	registeredTables = []string{}
+	globalMiddws     []func(handler kmux.Handler) kmux.Handler
+	tableMethods     = map[string]string{}
+)
 
 var ApiIndexHandler = func(c *kmux.Context) {
 	m := map[string]TableEntity{}
 	for _, t := range registeredTables {
-		tb, _ := GetMemoryTable(t.TableName)
-		m[t.TableName] = tb
+		tb, _ := GetMemoryTable(t)
+		m[t] = tb
+	}
+	if len(tableMethods) == 0 {
+		klog.Printf("rderror: no method are allowed for the api\n")
+		c.Text("error: no method are allowed for the api")
+		return
+	}
+	if len(registeredTables) == 0 {
+		klog.Printf("rderror: no registered tables\n")
+		c.Text("error: no registered tables")
+		return
 	}
 	c.Html("admin/api.html", map[string]any{
-		"tables": registeredTables,
-		"tbMem":  m,
+		"tables":    registeredTables,
+		"tbMem":     m,
+		"tbMethods": tableMethods,
+		"EndWithSlash": func(str string) bool {
+			q := []rune(str)
+			return q[len(q)-1] == '/'
+		},
 	})
 }
 
-func WithAPI(rootPath string, middws ...func(handler kmux.Handler) kmux.Handler) (*ModelApi, error) {
+func WithAPI(rootPath string, middws ...func(handler kmux.Handler) kmux.Handler) error {
 	if serverBus == nil {
-		return nil, fmt.Errorf("no server used, you can use korm.WithBus or korm.WithDashboard before executing ModelViewSet")
-	}
-	api := &ModelApi{
-		basePath: "/api",
+		return fmt.Errorf("no server used, you can use korm.WithBus or korm.WithDashboard before executing ModelViewSet")
 	}
 	if rootPath != "" {
-		api.basePath = rootPath
-		if !strings.HasPrefix(api.basePath, "/") {
-			api.basePath = "/" + api.basePath
+		basePath = rootPath
+		if !strings.HasPrefix(basePath, "/") {
+			basePath = "/" + basePath
 		}
-		if strings.HasSuffix(api.basePath, "/") {
-			ln := len(api.basePath)
-			api.basePath = api.basePath[:ln-1]
+		if strings.HasSuffix(basePath, "/") {
+			ln := len(basePath)
+			basePath = basePath[:ln-1]
 		}
 	}
 	app := serverBus.App
@@ -56,20 +69,23 @@ func WithAPI(rootPath string, middws ...func(handler kmux.Handler) kmux.Handler)
 	})
 	ApiIndexHandler = wrapHandlerWithMiddlewares(ApiIndexHandler, middws...)
 	if len(middws) > 0 {
-		api.globalMiddws = middws
+		globalMiddws = middws
 	}
-	app.GET(api.basePath, ApiIndexHandler)
-	return api, nil
+	app.GET(basePath, ApiIndexHandler)
+	return nil
 }
 
-type TableRegistration struct {
-	TableName       string
-	Middws          []func(handler kmux.Handler) kmux.Handler
-	SelectedColumns []string
-	Methods         []string
+type RegisterBuilder[T comparable] func(modelBuilder *BuilderS[T]) *BuilderS[T]
+
+type TableRegistration[T comparable] struct {
+	TableName     string
+	Middws        []func(handler kmux.Handler) kmux.Handler
+	Methods       []string
+	BuilderGetAll func(modelBuilder *BuilderS[T]) *BuilderS[T]
+	BuilderGetOne func(modelBuilder *BuilderS[T]) *BuilderS[T]
 }
 
-func (tr *TableRegistration) HaveMethod(method string) bool {
+func (tr *TableRegistration[T]) HaveMethod(method string) bool {
 	for _, m := range tr.Methods {
 		if strings.EqualFold(m, method) {
 			return true
@@ -78,7 +94,17 @@ func (tr *TableRegistration) HaveMethod(method string) bool {
 	return false
 }
 
-func (ma *ModelApi) RegisterTable(table TableRegistration) error {
+func RegisterTable[T comparable](table TableRegistration[T]) error {
+	var tbName string
+	if table.TableName != "" {
+		tbName = table.TableName
+	} else {
+		tbName = getTableName[T]()
+		if tbName == "" {
+			return fmt.Errorf("table %v not registered, use korm.AutoMigrate before", *new(T))
+		}
+	}
+
 	app := serverBus.App
 	var apiAllModels = func(c *kmux.Context) {
 		model := c.Param("model")
@@ -88,13 +114,10 @@ func (ma *ModelApi) RegisterTable(table TableRegistration) error {
 			})
 			return
 		}
-		q := Table(model)
-		if len(table.SelectedColumns) > 0 {
-			if table.SelectedColumns[0] != "*" && table.SelectedColumns[0] != "" {
-				q.Select(table.SelectedColumns...)
-			}
+		q := Model[T](model)
+		if table.BuilderGetAll != nil {
+			q = table.BuilderGetAll(q)
 		}
-
 		rows, err := q.All()
 		if err != nil {
 			if err.Error() != "no data found" {
@@ -127,13 +150,10 @@ func (ma *ModelApi) RegisterTable(table TableRegistration) error {
 			idString = tb.Pk
 		}
 
-		q := Table(model).Where(idString+" = ?", id)
-		if len(table.SelectedColumns) > 0 {
-			if table.SelectedColumns[0] != "*" && table.SelectedColumns[0] != "" {
-				q.Select(table.SelectedColumns...)
-			}
+		q := Model[T](model).Where(idString+" = ?", id)
+		if table.BuilderGetOne != nil {
+			q = table.BuilderGetOne(q)
 		}
-
 		rows, err := q.All()
 		if err != nil {
 			if err.Error() != "no data found" {
@@ -179,7 +199,7 @@ func (ma *ModelApi) RegisterTable(table TableRegistration) error {
 			values = append(values, v)
 		}
 		setStat = setStat[:len(setStat)-1]
-		_, err = Table(model).Where(idString+" = ?", id).Set(setStat, values...)
+		_, err = Model[T](model).Where(idString+" = ?", id).Set(setStat, values...)
 		if err != nil {
 			if id == "" {
 				c.Json(map[string]any{
@@ -257,46 +277,56 @@ func (ma *ModelApi) RegisterTable(table TableRegistration) error {
 
 	if len(table.Middws) > 0 {
 		apiAllModels = wrapHandlerWithMiddlewares(apiAllModels, table.Middws...)
-	} else if len(ma.globalMiddws) > 0 {
-		apiAllModels = wrapHandlerWithMiddlewares(apiAllModels, ma.globalMiddws...)
+	} else if len(globalMiddws) > 0 {
+		apiAllModels = wrapHandlerWithMiddlewares(apiAllModels, globalMiddws...)
 	}
 
 	if len(table.Methods) > 0 {
 		for _, meth := range table.Methods {
 			switch meth {
 			case "get", "GET":
-				app.GET(ma.basePath+"/model:str", apiAllModels)
-				app.GET(ma.basePath+"/model:str/id:int", singleModelGet)
+				app.GET(basePath+"/model:str", apiAllModels)
+				app.GET(basePath+"/model:str/id:int", singleModelGet)
+				tableMethods[tbName] = tableMethods[tbName] + ",get"
 			case "post", "POST":
-				app.POST(ma.basePath+"/model:str", modelCreate)
+				app.POST(basePath+"/model:str", modelCreate)
+				tableMethods[tbName] = tableMethods[tbName] + ",post"
 			case "put", "PUT":
-				app.PUT(ma.basePath+"/model:str/id:int", singleModelPut)
+				app.PUT(basePath+"/model:str/id:int", singleModelPut)
+				tableMethods[tbName] = tableMethods[tbName] + ",put"
 			case "patch", "PATCH":
-				app.PATCH(ma.basePath+"/model:str/id:int", singleModelPut)
+				app.PATCH(basePath+"/model:str/id:int", singleModelPut)
+				tableMethods[tbName] = tableMethods[tbName] + ",patch"
 			case "delete", "DELETE":
-				app.DELETE(ma.basePath+"/model:str/id:int", modelDelete)
+				app.DELETE(basePath+"/model:str/id:int", modelDelete)
+				tableMethods[tbName] = tableMethods[tbName] + ",delete"
 			case "*":
 				table.Methods = append(table.Methods, "get", "post", "put", "patch", "delete")
-				app.POST(ma.basePath+"/model:str", modelCreate)
-				app.GET(ma.basePath+"/model:str", apiAllModels)
-				app.GET(ma.basePath+"/model:str/id:int", singleModelGet)
-				app.PUT(ma.basePath+"/model:str/id:int", singleModelPut)
-				app.PATCH(ma.basePath+"/model:str/id:int", singleModelPut)
-				app.DELETE(ma.basePath+"/model:str/id:int", modelDelete)
-				registeredTables = append(registeredTables, table)
+				app.POST(basePath+"/model:str", modelCreate)
+				app.GET(basePath+"/model:str", apiAllModels)
+				app.GET(basePath+"/model:str/id:int", singleModelGet)
+				app.PUT(basePath+"/model:str/id:int", singleModelPut)
+				app.PATCH(basePath+"/model:str/id:int", singleModelPut)
+				app.DELETE(basePath+"/model:str/id:int", modelDelete)
+				registeredTables = append(registeredTables, tbName)
+				tableMethods[tbName] = strings.ToLower(strings.Join(table.Methods, ","))
 				return nil
 			}
 		}
+		registeredTables = append(registeredTables, tbName)
 	} else {
 		table.Methods = append(table.Methods, "get", "post", "put", "patch", "delete")
-		app.POST(ma.basePath+"/model:str", modelCreate)
-		app.GET(ma.basePath+"/model:str", apiAllModels)
-		app.GET(ma.basePath+"/model:str/id:int", singleModelGet)
-		app.PUT(ma.basePath+"/model:str/id:int", singleModelPut)
-		app.PATCH(ma.basePath+"/model:str/id:int", singleModelPut)
-		app.DELETE(ma.basePath+"/model:str/id:int", modelDelete)
+		app.POST(basePath+"/model:str", modelCreate)
+		app.GET(basePath+"/model:str", apiAllModels)
+		app.GET(basePath+"/model:str/id:int", singleModelGet)
+		app.PUT(basePath+"/model:str/id:int", singleModelPut)
+		app.PATCH(basePath+"/model:str/id:int", singleModelPut)
+		app.DELETE(basePath+"/model:str/id:int", modelDelete)
+		registeredTables = append(registeredTables, tbName)
+		tableMethods[tbName] = strings.ToLower(strings.Join(table.Methods, ","))
+		return nil
 	}
-	registeredTables = append(registeredTables, table)
+
 	return nil
 }
 

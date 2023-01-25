@@ -84,7 +84,7 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@v1.4.6 // latest version
+go get -u github.com/kamalshkeir/korm@v1.4.7 // latest version
 ```
 
 # Drivers moved outside this package to not get them all in your go.mod file
@@ -687,40 +687,52 @@ package main
 
 import (
 	"github.com/kamalshkeir/klog"
+	"github.com/kamalshkeir/kmux"
 	"github.com/kamalshkeir/korm"
 	"github.com/kamalshkeir/sqlitedriver"
 )
 
 func main() {
 	sqlitedriver.Use()
-	err := korm.New(korm.SQLITE, "test")
+	err := korm.New(korm.SQLITE, "db")
 	if klog.CheckError(err) {
 		return
 	}
-	defer korm.Shutdown("db")
+	defer korm.Shutdown()
 
-	// INIT DASHBOARD
-	srv := korm.WithDashboard() // or korm.WithBus , the api will work with both, but one of them required
+	bus := korm.WithDashboard()
+	app := bus.App
 	klog.Printfs("mgrunning on http://localhost:9313\n")
+	app.GET("/", func(c *kmux.Context) {
+		c.Text("hello")
+	})
 
-	// INIT API
-	// you can use BasicAuth middleware, Auth middleware is used by default, and Admin middleware to let only the admin access the api
 	korm.BASIC_AUTH_USER = "user"
 	korm.BASIC_AUTH_PASS = "pass"
-	api, err := korm.WithAPI("/api", korm.BasicAuth) // will be available at '/api'
+	err = korm.WithAPI("/api", korm.BasicAuth)
 	if klog.CheckError(err) {
 		return
 	}
 	// Register a table to the api
-	err = api.RegisterTable(korm.TableRegistration{
-		TableName:       "users",
-		SelectedColumns: []string{"email", "uuid"},
+	err = korm.RegisterTable(korm.TableRegistration[korm.User]{
+		Methods: []string{"*"}, // defaulted to all methods, so not needed
+
+		Middws: []func(handler kmux.Handler) kmux.Handler{korm.Admin}, // users only accessible by admin
+
+		BuilderGetAll: func(modelBuilder *korm.BuilderS[korm.User]) *korm.BuilderS[korm.User] { // for /users
+			modelBuilder.Select("id")
+			return modelBuilder
+		},
+		BuilderGetOne: func(modelBuilder *korm.BuilderS[korm.User]) *korm.BuilderS[korm.User] { // for /users/:pk
+			modelBuilder.Select("uuid","email")
+			return modelBuilder
+		},
 	})
 	if klog.CheckError(err) {
 		return
 	}
-	// code here
-	srv.Run("localhost:9313")
+
+	bus.Run(":9313")
 }
 ```
 

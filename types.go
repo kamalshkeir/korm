@@ -32,3 +32,17 @@ type DatabaseEntity struct {
 	Dialect string
 	Conn    *sql.DB
 }
+
+type dbCache struct {
+	limit      int
+	page       int
+	database   string
+	table      string
+	selected   string
+	orderBys   string
+	whereQuery string
+	query      string
+	offset     string
+	statement  string
+	args       string
+}

@@ -44,6 +44,12 @@ func adaptWhereQuery(query *string, tableName ...string) {
 			hasQuestionMark = true
 		case '=', '>', '<', '!':
 			hasComparaisonSign = true
+		case 'l':
+			if i+3 <= len(q)-1 {
+				if q[i+1] == 'i' && q[i+2] == 'k' && q[i+3] == 'e' {
+					hasComparaisonSign = true
+				}
+			}
 		}
 	}
 
