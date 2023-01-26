@@ -714,9 +714,14 @@ func main() {
 		return
 	}
 	// Register a table to the api
-	err = korm.RegisterTable(korm.TableRegistration[korm.User]{
-		Methods: []string{"*"}, // defaulted to all methods, so not needed
 
+	// err = korm.RegisterTable(korm.TableRegistration[korm.User]{} // use defaults , all methods, Auth middleware, and no filters for query 
+	// or , customize it : 
+	err = korm.RegisterTable(korm.TableRegistration[korm.User]{
+		//Methods: []string{"*"}, // default
+		Methods: []string{"get","post"}, 
+
+		//Middws: []func(handler kmux.Handler) kmux.Handler{korm.Auth}, // default
 		Middws: []func(handler kmux.Handler) kmux.Handler{korm.Admin}, // users only accessible by admin
 
 		BuilderGetAll: func(modelBuilder *korm.BuilderS[korm.User]) *korm.BuilderS[korm.User] { // for /users
