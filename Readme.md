@@ -28,12 +28,17 @@
 </div>
 
 ---
-### KORM is an elegant and blazingly fast ORM, see [Benchmarks](#benchmarks), it use go generics 1.18 and a network bus.
-
-### Easily composable, you can combine it with a Server Bus using [WithBus](#example-with-bus-between-2-korm) when you want to scale or just synchronise your data between multiple database or [WithDashboard](#example-with-dashboard-you-dont-need-kormwithbus-with-it-because-withdashboard-already-call-it-and-return-the-server-bus-for-you) to have a complete setup of server bus and Admin Dashboard.
-
-##### It can handle sql databases and Mongo using [Kormongo](https://github.com/kamalshkeir/kormongo), both have pretty much the same api, everything detailed in this readme
+### KORM is an elegant and very fast ORM [Benchmarks](#benchmarks).
+### Insipired from Django Framework, almost anything you can do with Django, you can do it with korm in a concurrent and much easier way, why ? :
+- Django become very hard to work with when you need concurrency and async, you will need django channels and a server like daphne or uvicorn, Go have the perfect implementation for me.
+- Django can handle at most 300 request per second, Go handle 40,000 request per second (benchmarks done on my machine)
+- Korm API is way easier and less verbose than Django
+- Deploying an executable binary file using Korm , with automatic TLS Let's encrypt, a built-in Admin Dashboard, Interactive Shell, Eventbus to communicate between multiple Korm applications is pretty neat
+- As if that were not enough, Korm with his caching system using goroutines and channels to clean the cache whenever you create, update , delete or drop  any row or table, give you the most performant ORM that you can easily benchmark yourself
+#### Composable, you can combine it with a Server Bus using [WithBus](#example-with-bus-between-2-korm) when you want to scale or just synchronise your data between multiple Korm or [WithDashboard](#example-with-dashboard-you-dont-need-kormwithbus-with-it-because-withdashboard-already-call-it-and-return-the-server-bus-for-you) to have a complete setup of server bus and Admin Dashboard.
 ##### All drivers are written in Go, so you will never encounter gcc or c missing compiler
+##### It can handle sql databases and Mongo using [Kormongo](https://github.com/kamalshkeir/kormongo), both have pretty much the same api, everything detailed in this readme
+
 
 ### It Has :
 - <strong>New :</strong> [Crud Api From Model](#example-korm-api) , similar to Model Viewsets from django rest framework
