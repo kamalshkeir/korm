@@ -44,20 +44,13 @@
 ### It Has :
 - <strong>New :</strong> [Crud Api From Model](#example-korm-api) , similar to Model Viewsets from django rest framework
 
-- <strong>New :</strong> [Built-in Authentication](#admin-urls) using `korm.Auth` , `korm.Admin` or `korm.BasicAuth` middlewares, whenever Auth and Admin middlewares are used, you get access to the `.User` model and variable `.IsAuthenticated` from any template html like this example [admin_nav.html](#example-admin-and-auth-user-model-and-isauthenticated) 
-
-- [Python Bus Client](#python-bus-client-example) `pip install ksbus`
-
-- [GENERATED ALWAYS AS](#example-generated-tag) tag added (all dialects)
-
-- [Concatination and Length](#example-concat-and-len-from-korm_testgo) support for `Where` and for tags: `check` and `generated` (all dialects)
-
 - Simple [API](#api)
 
-- CRUD [Admin dashboard](#example-with-dashboard-you-dont-need-kormwithbus-with-it-because-withdashboard-already-call-it-and-return-the-server-bus-for-you) with ready offline and installable PWA (using /static/sw.js and /static/manifest.webmanifest). All statics mentionned in `sw.js` will be cached and served by the service worker, you can inspect the Network Tab in the browser to check it
+- [Admin dashboard](#example-with-dashboard-you-dont-need-kormwithbus-with-it-because-withdashboard-already-call-it-and-return-the-server-bus-for-you) with ready offline and installable PWA (using /static/sw.js and /static/manifest.webmanifest). All statics mentionned in `sw.js` will be cached and served by the service worker, you can inspect the Network Tab in the browser to check it
+
+[Built-in Authentication](#admin-urls) using `korm.Auth` , `korm.Admin` or `korm.BasicAuth` middlewares, whenever Auth and Admin middlewares are used, you get access to the `.User` model and variable `.IsAuthenticated` from any template html like this example [admin_nav.html](#example-admin-and-auth-user-model-and-isauthenticated) 
 
 - [Interactive Shell](#interactive-shell), to CRUD in your databases `go run main.go shell` or `go run main.go mongoshell` for mongo
-
 
 - Network Bus allowing you to send and recv data in realtime using pubsub websockets between your ORMs, so you can decide how you data will be distributed between different databases, see [Example](#example-with-bus-between-2-korm) 
 
@@ -71,11 +64,17 @@
 
 - [many to many](#manytomany-relationships-example) relationships
 
+- [GENERATED ALWAYS AS](#example-generated-tag) tag added (all dialects)
+
+- [Concatination and Length](#example-concat-and-len-from-korm_testgo) support for `Where` and for tags: `check` and `generated` (all dialects)
+
 - Support for foreign keys, indexes , checks,... [See all](#automigrate)
 
 - [PPROF](#pprof) Go std library profiling tool
 
 - [Kenv](#example-not-required-load-config-from-env-directly-to-struct-using-kenv) load env vars to struct
+
+- [Python Bus Client](#python-bus-client-example) `pip install ksbus`
 
 #### Supported databases:
 - Sqlite
