@@ -48,7 +48,7 @@
 
 - [Admin dashboard](#example-with-dashboard-you-dont-need-kormwithbus-with-it-because-withdashboard-already-call-it-and-return-the-server-bus-for-you) with ready offline and installable PWA (using /static/sw.js and /static/manifest.webmanifest). All statics mentionned in `sw.js` will be cached and served by the service worker, you can inspect the Network Tab in the browser to check it
 
-[Built-in Authentication](#admin-urls) using `korm.Auth` , `korm.Admin` or `korm.BasicAuth` middlewares, whenever Auth and Admin middlewares are used, you get access to the `.User` model and variable `.IsAuthenticated` from any template html like this example [admin_nav.html](#example-admin-and-auth-user-model-and-isauthenticated) 
+[Built-in Authentication](#auth-middleware-example) using `korm.Auth` , `korm.Admin` or `korm.BasicAuth` middlewares, whenever Auth and Admin middlewares are used, you get access to the `.User` model and variable `.IsAuthenticated` from any template html like this example [admin_nav.html](#example-admin-and-auth-user-model-and-isauthenticated) 
 
 - [Interactive Shell](#interactive-shell), to CRUD in your databases `go run main.go shell` or `go run main.go mongoshell` for mongo
 
@@ -89,7 +89,7 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@v1.4.7 // latest version
+go get -u github.com/kamalshkeir/korm@v1.4.8 // latest version
 ```
 
 # Drivers moved outside this package to not get them all in your go.mod file
@@ -359,8 +359,6 @@ func (b *BuilderS[T]) Drop() (int, error)
 func (b *BuilderS[T]) Select(columns ...string) *BuilderS[T]
 // Where can be like : Where("id > ?",1) or Where("id",1) = Where("id = ?",1)
 func (b *BuilderS[T]) Where(query string, args ...any) *BuilderS[T]
-// Query can be used like: Query("select * from table") or Query("select * from table where col like '?'","%something%")
-func (b *BuilderS[T]) Query(query string, args ...any) *BuilderS[T]
 // Limit set limit
 func (b *BuilderS[T]) Limit(limit int) *BuilderS[T]
 // Context allow to query or execute using ctx
@@ -418,8 +416,6 @@ func (b *BuilderM) Database(dbName string) *BuilderM
 func (b *BuilderM) Select(columns ...string) *BuilderM
 // Where can be like: Where("id > ?",1) or Where("id",1) = Where("id = ?",1)
 func (b *BuilderM) Where(query string, args ...any) *BuilderM
-// Query can be used like: Query("select * from table") or Query("select * from table where col like '?'","%something%")
-func (b *BuilderM) Query(query string, args ...any) *BuilderM
 // Limit set limit
 func (b *BuilderM) Limit(limit int) *BuilderM
 // Page return paginated elements using Limit for specific page
@@ -571,22 +567,73 @@ createsuperuser
 Then you can visit `/admin`
 
 
-### Admin urls
+### Auth middleware example
 ```go
-adminGroup := r.Group(AdminPathNameGroup)
-	adminGroup.GET("/", Admin(IndexView))
-	adminGroup.GET("/login", Auth(LoginView))
-	adminGroup.POST("/login", Auth(LoginPOSTView))
-	adminGroup.GET("/logout", LogoutView)
-	adminGroup.POST("/delete/row", Admin(DeleteRowPost))
-	adminGroup.POST("/update/row", Admin(UpdateRowPost))
-	adminGroup.POST("/create/row", Admin(CreateModelView))
-	adminGroup.POST("/drop/table", Admin(DropTablePost))
-	adminGroup.GET("/table/model:str", Admin(AllModelsGet))
-	adminGroup.POST("/table/model:str/search", Admin(AllModelsSearch))
-	adminGroup.GET("/get/model:str/id:int", Admin(SingleModelGet))
-	adminGroup.GET("/export/table:str", Admin(ExportView))
-	adminGroup.POST("/import", Admin(ImportView))
+func main() {
+	sqlitedriver.Use()
+	err := korm.New(korm.SQLITE, "db")
+	if klog.CheckError(err) {
+		return
+	}
+	defer korm.Shutdown()
+
+	srv := korm.WithDashboard()
+	klog.Printfs("mgrunning on http://localhost:9313\n")
+	app := srv.App
+
+	app.GET("/", korm.Auth(func(c *kmux.Context) { // work with korm.Admin also
+		// c.IsAuthenticated also return bool
+		if v, ok := c.User(); ok {
+			c.Json(map[string]any{
+				"msg": "Authenticated",
+				"v":   v.(korm.User).Email,
+			})
+		} else {
+			c.Json(map[string]any{
+				"error": "not auth",
+			})
+		}
+	}))
+
+	srv.Run("localhost:9313")
+}
+```
+
+### Example Admin Auth User and IsAuthenticated
+```html
+{{define "admin_nav"}}
+<header id="admin-header">
+  <nav>
+    <a href="/">
+      <h1>KORM</h1>
+    </a> 
+    
+    <ul>
+        <li>
+          <a {{if eq .Request.URL.Path "/" }}class="active"{{end}} href="/">Home</a>
+        </li>
+
+        <li>
+          <a {{if contains .Request.URL.Path "/admin" }}class="active"{{end}} href="/admin">Admin</a>
+        </li>
+
+        {{if .IsAuthenticated}}
+            <li>
+              <a href="/admin/logout">Logout</a>
+            </li>
+            
+            {{if .User.Email}}
+              <li>
+                <span>Hello {{.User.Email}}</span>
+              </li>
+            {{end}}
+        {{end}}
+    </ul>
+  </nav>
+</header>
+{{end}}
+
+
 ```
 
 ### Admin middlewares
@@ -748,48 +795,7 @@ func main() {
 
 <img src="api.jpg">
 
-### Example Admin and Auth User model and IsAuthenticated
-```html
-{{define "admin_nav"}}
-<header id="admin-header">
-  <nav>
-    <a href="/">
-      <h1>KORM</h1>
-    </a> 
-    
-    <ul>
-        <li>
-          <a {{if eq .Request.URL.Path "/" }}class="active"{{end}} href="/">Home</a>
-        </li>
 
-        <li>
-          <a {{if contains .Request.URL.Path "/admin" }}class="active"{{end}} href="/admin">Admin</a>
-        </li>
-
-        {{if .IsAuthenticated}}
-            {{if and .Logs .User.IsAdmin}}
-              <li>
-                <a {{if eq .Request.URL.Path "/logs" }}class="active"{{end}} href="/logs">Logs</a>
-              </li>
-            {{end}}
-
-            <li>
-              <a href="/admin/logout">Logout</a>
-            </li>
-            
-            {{if .User.Email}}
-              <li>
-                <span>Hello {{.User.Email}}</span>
-              </li>
-            {{end}}
-        {{end}}
-    </ul>
-  </nav>
-</header>
-{{end}}
-
-
-```
 
 ### Example With Bus between 2 KORM
 KORM 1:
@@ -1217,6 +1223,8 @@ BenchmarkPagination10_GORM-4                7714            153304 ns/op        
 BenchmarkPagination10-4                  1285722               934.5 ns/op           400 B/op          7 allocs/op
 BenchmarkPagination100_GORM-4               1364            738934 ns/op          165423 B/op       4704 allocs/op
 BenchmarkPagination100-4                 1278724               956.5 ns/op           400 B/op          7 allocs/op
+BenchmarkQueryS-4                        5781499               207.7 ns/op             4 B/op          1 allocs/op
+BenchmarkQueryM-4                        4643155               227.2 ns/op             4 B/op          1 allocs/op
 BenchmarkGetAllTables-4                 47465865                25.48 ns/op            0 B/op          0 allocs/op
 BenchmarkGetAllColumns-4                23657019                42.82 ns/op            0 B/op          0 allocs/op
 ////////////////////////////////////////////  query 5000 rows  //////////////////////////////////////////////

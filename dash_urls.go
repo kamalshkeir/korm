@@ -11,7 +11,7 @@ import (
 )
 
 func init() {
-	kmux.BeforeRenderHtml(func(reqCtx context.Context, data *map[string]any) {
+	kmux.BeforeRenderHtml("korm-user", func(reqCtx context.Context, data *map[string]any) {
 		const key kmux.ContextKey = "user"
 		user, ok := reqCtx.Value(key).(User)
 		if ok {

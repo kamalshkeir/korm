@@ -21,7 +21,7 @@ var (
 	// defaultDB keep tracking of the first database connected
 	defaultDB           = ""
 	useCache            = true
-	cacheMaxMemoryMb    = 50
+	cacheMaxMemoryMb    = 100
 	databases           = []DatabaseEntity{}
 	mutexModelTablename sync.RWMutex
 	mModelTablename     = map[any]string{}
@@ -167,11 +167,10 @@ func SetCacheMaxMemory(megaByte int) {
 	if megaByte < 50 {
 		megaByte = 50
 	}
-	cacheMaxMemoryMb = megaByte
-	cacheAllM = kmap.New[dbCache, []map[string]any](false, cacheMaxMemoryMb)
-	cacheAllS = kmap.New[dbCache, any](false, cacheMaxMemoryMb)
-	cacheQueryM = kmap.New[dbCache, any](false, cacheMaxMemoryMb)
-	cacheQueryS = kmap.New[dbCache, any](false, cacheMaxMemoryMb)
+	cacheAllM = kmap.New[dbCache, []map[string]any](false, megaByte)
+	cacheAllS = kmap.New[dbCache, any](false, megaByte)
+	cacheQueryM = kmap.New[dbCache, any](false, megaByte)
+	cacheQueryS = kmap.New[dbCache, any](false, megaByte)
 }
 
 // ManyToMany create m2m_table1_table2 many 2 many table
@@ -371,7 +370,7 @@ func DisableCheck() {
 	migrationAutoCheck = false
 }
 
-// DisableCache disable the cache system, if and only if you are having problem with it, also you can korm.FlushCache on command too
+// // DisableCache disable the cache system, if and only if you are having problem with it, also you can korm.FlushCache on command too
 // func DisableCache() {
 // 	useCache = false
 // }
@@ -571,8 +570,6 @@ func Query(dbName string, statement string, args ...any) ([]map[string]any, erro
 	}
 	c := dbCache{
 		database:  dbName,
-		table:     "",
-		selected:  "",
 		statement: statement,
 		args:      fmt.Sprint(args...),
 	}
@@ -633,7 +630,7 @@ func Query(dbName string, statement string, args ...any) ([]map[string]any, erro
 		return nil, errors.New("no data found")
 	}
 	if useCache {
-		cacheQueryM.Set(c, listMap)
+		_ = cacheQueryM.Set(c, listMap)
 	}
 	return listMap, nil
 }
@@ -668,8 +665,6 @@ func QueryS[T any](dbName string, statement string, args ...any) ([]T, error) {
 	}
 	c := dbCache{
 		database:  dbName,
-		table:     "",
-		selected:  "",
 		statement: statement,
 		args:      fmt.Sprint(args...),
 	}
@@ -737,7 +732,7 @@ func QueryS[T any](dbName string, statement string, args ...any) ([]T, error) {
 		return nil, errors.New("no data found")
 	}
 	if useCache {
-		cacheQueryS.Set(c, res)
+		_ = cacheQueryS.Set(c, res)
 	}
 	return res, nil
 }

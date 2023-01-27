@@ -8,10 +8,10 @@ github.com/kamalshkeir/klog v1.0.0 h1:xZbYuYlDsEG5gfHPGNVms7wQmUFJCV0Uo2pwwaJBbw
 github.com/kamalshkeir/klog v1.0.0/go.mod h1:Plp8wNXIbDTSgJmVOF/GiUftKihGqL6jvRAXPclbmV8=
 github.com/kamalshkeir/kmap v1.1.0 h1:GTKeTiWtQHgGaGpdWDhY585ujH9q0RfCa35XoawXTSc=
 github.com/kamalshkeir/kmap v1.1.0/go.mod h1:79FSu6AMNitrvpdc5/IiUCDAdaEi+RfPeEWJU6tjRB0=
-github.com/kamalshkeir/kmux v1.6.7 h1:wvGVhAGn23JqeZYXkA960l/luKDeYPMbHHqP9yO+c1w=
-github.com/kamalshkeir/kmux v1.6.7/go.mod h1:IfSWZi4dOvTx5PpfNSYFFweUE4uh52n3n7yF6Qus2pE=
-github.com/kamalshkeir/ksbus v0.8.8 h1:H+Io5rc80u9DmzW/SNpVx8V7ttnOFTR0Gh4Y5u1Cka4=
-github.com/kamalshkeir/ksbus v0.8.8/go.mod h1:0tGJXhSvipmB3Ddh7zTdcLYhilUmdrh/3y7vGacdl/Y=
+github.com/kamalshkeir/kmux v1.6.9 h1:AyBKFbgcuLMkvUSFCT6S/DbGEHiG8tIDUqDPlGszUbo=
+github.com/kamalshkeir/kmux v1.6.9/go.mod h1:IfSWZi4dOvTx5PpfNSYFFweUE4uh52n3n7yF6Qus2pE=
+github.com/kamalshkeir/ksbus v0.8.10 h1:w8cowbGrTX/lnPTAcyX8gCkq4cCiWKGSPE4p4aMFots=
+github.com/kamalshkeir/ksbus v0.8.10/go.mod h1:ZnuHhfoS7BH/s/gs6MfFCNeOtaq0pTIV4P5NMDNqF8w=
 github.com/kamalshkeir/kstrct v1.4.8 h1:o8sC8C68t0OE6AcJoCiEd60z16JzX+MfEdWCpqxNtU4=
 github.com/kamalshkeir/kstrct v1.4.8/go.mod h1:WdZ0uujSnBI6JNvxWe+Iu2x9E0O9FLVKGBfqYkvVXPY=
 golang.org/x/crypto v0.5.0 h1:U/0M97KRkSFvyD/3FSmdP5W5swImpNgle/EHFhOsQPE=

@@ -30,7 +30,6 @@ type BuilderM struct {
 	selected   string
 	orderBys   string
 	whereQuery string
-	query      string
 	offset     string
 	statement  string
 	database   string
@@ -77,6 +76,7 @@ func (b *BuilderM) Where(query string, args ...any) *BuilderM {
 		db, err := GetMemoryDatabase(b.database)
 		if err == nil {
 			query = adaptConcatAndLen(query, db.Dialect)
+			b.database = db.Name
 		}
 	}
 	adaptWhereQuery(&query, b.tableName)
@@ -84,18 +84,6 @@ func (b *BuilderM) Where(query string, args ...any) *BuilderM {
 	b.whereQuery = query
 	b.args = append(b.args, args...)
 	b.order = append(b.order, "where")
-	return b
-}
-
-// Query can be used like: Query("select * from table") or Query("select * from table where col like '?'","%something%")
-func (b *BuilderM) Query(query string, args ...any) *BuilderM {
-	if b == nil || b.tableName == "" {
-		return nil
-	}
-	b.query = query
-	adaptTrueFalseArgs(&args)
-	b.args = append(b.args, args...)
-	b.order = append(b.order, "query")
 	return b
 }
 
@@ -189,7 +177,6 @@ func (b *BuilderM) All() ([]map[string]any, error) {
 		statement:  b.statement,
 		orderBys:   b.orderBys,
 		whereQuery: b.whereQuery,
-		query:      b.query,
 		offset:     b.offset,
 		limit:      b.limit,
 		page:       b.page,
@@ -209,11 +196,6 @@ func (b *BuilderM) All() ([]map[string]any, error) {
 
 	if b.whereQuery != "" {
 		b.statement += " WHERE " + b.whereQuery
-	}
-	if b.query != "" {
-		b.limit = 0
-		b.orderBys = ""
-		b.statement = b.query
 	}
 
 	if b.orderBys != "" {
@@ -238,7 +220,7 @@ func (b *BuilderM) All() ([]map[string]any, error) {
 		return nil, err
 	}
 	if useCache {
-		cacheAllM.Set(c, models)
+		_ = cacheAllM.Set(c, models)
 	}
 	return models, nil
 }
@@ -255,7 +237,6 @@ func (b *BuilderM) One() (map[string]any, error) {
 		statement:  b.statement,
 		orderBys:   b.orderBys,
 		whereQuery: b.whereQuery,
-		query:      b.query,
 		offset:     b.offset,
 		limit:      b.limit,
 		page:       b.page,
@@ -302,7 +283,7 @@ func (b *BuilderM) One() (map[string]any, error) {
 		return nil, errors.New("no data")
 	}
 	if useCache {
-		cachesOneM.Set(c, models[0])
+		_ = cachesOneM.Set(c, models[0])
 	}
 
 	return models[0], nil

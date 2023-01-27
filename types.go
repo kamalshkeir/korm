@@ -41,7 +41,6 @@ type dbCache struct {
 	selected   string
 	orderBys   string
 	whereQuery string
-	query      string
 	offset     string
 	statement  string
 	args       string

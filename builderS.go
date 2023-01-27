@@ -28,7 +28,6 @@ type BuilderS[T comparable] struct {
 	selected   string
 	orderBys   string
 	whereQuery string
-	query      string
 	offset     string
 	statement  string
 	database   string
@@ -954,6 +953,7 @@ func (b *BuilderS[T]) Where(query string, args ...any) *BuilderS[T] {
 		db, err := GetMemoryDatabase(b.database)
 		if err == nil {
 			query = adaptConcatAndLen(query, db.Dialect)
+			b.database = db.Name
 		}
 	}
 	adaptWhereQuery(&query, b.tableName)
@@ -961,18 +961,6 @@ func (b *BuilderS[T]) Where(query string, args ...any) *BuilderS[T] {
 	b.whereQuery = query
 	b.args = append(b.args, args...)
 	b.order = append(b.order, "where")
-	return b
-}
-
-// Query can be used like: Query("select * from table") or Query("select * from table where col like '?'","%something%")
-func (b *BuilderS[T]) Query(query string, args ...any) *BuilderS[T] {
-	if b == nil || b.tableName == "" {
-		return nil
-	}
-	b.query = query
-	adaptTrueFalseArgs(&args)
-	b.args = append(b.args, args...)
-	b.order = append(b.order, "query")
 	return b
 }
 
@@ -1066,7 +1054,6 @@ func (b *BuilderS[T]) All() ([]T, error) {
 		statement:  b.statement,
 		orderBys:   b.orderBys,
 		whereQuery: b.whereQuery,
-		query:      b.query,
 		offset:     b.offset,
 		limit:      b.limit,
 		page:       b.page,
@@ -1085,11 +1072,6 @@ func (b *BuilderS[T]) All() ([]T, error) {
 
 	if b.whereQuery != "" {
 		b.statement += " WHERE " + b.whereQuery
-	}
-	if b.query != "" {
-		b.limit = 0
-		b.orderBys = ""
-		b.statement = b.query
 	}
 
 	if b.orderBys != "" {
@@ -1115,7 +1097,7 @@ func (b *BuilderS[T]) All() ([]T, error) {
 		return nil, err
 	}
 	if useCache {
-		cacheAllS.Set(c, models)
+		_ = cacheAllS.Set(c, models)
 	}
 	return models, nil
 }
@@ -1132,7 +1114,6 @@ func (b *BuilderS[T]) One() (T, error) {
 		statement:  b.statement,
 		orderBys:   b.orderBys,
 		whereQuery: b.whereQuery,
-		query:      b.query,
 		offset:     b.offset,
 		limit:      b.limit,
 		page:       b.page,
@@ -1157,12 +1138,6 @@ func (b *BuilderS[T]) One() (T, error) {
 		b.statement += " WHERE " + b.whereQuery
 	}
 
-	if b.query != "" {
-		b.limit = 0
-		b.orderBys = ""
-		b.statement = b.query
-	}
-
 	if b.orderBys != "" {
 		b.statement += " " + b.orderBys
 	}
@@ -1184,7 +1159,7 @@ func (b *BuilderS[T]) One() (T, error) {
 		return *new(T), err
 	}
 	if useCache {
-		cacheOneS.Set(c, model)
+		_ = cacheOneS.Set(c, model)
 	}
 	return model, nil
 }

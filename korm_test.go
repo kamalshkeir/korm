@@ -434,7 +434,7 @@ func TestWithCtxM(t *testing.T) {
 }
 
 func TestQueryS(t *testing.T) {
-	u, err := Model[TestUser]().Query("select * from users").All()
+	u, err := QueryS[TestUser]("", "select * from users")
 	if err != nil {
 		t.Error(err)
 	}
@@ -444,7 +444,7 @@ func TestQueryS(t *testing.T) {
 }
 
 func TestQueryM(t *testing.T) {
-	u, err := Table("users").Query("select * from users").All()
+	u, err := Query("", "select * from users")
 	if err != nil {
 		t.Error(err)
 	}
