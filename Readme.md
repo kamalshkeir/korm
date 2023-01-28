@@ -28,7 +28,7 @@
 </div>
 
 ---
-### Introducing KORM - the elegant, lightning-fast ORM for all your concurrent and async needs, see [benchmarks](#benchmarks). Inspired by the highly popular Django Framework, KORM offers similar functionality with the added bonus of performance
+### Introducing KORM - the elegant, lightning-fast ORM for all your concurrent and async needs, see [benchmarks](#benchmarks-vs-gorm). Inspired by the highly popular Django Framework, KORM offers similar functionality with the added bonus of performance
 ### Why settle for less when you can have the best ?
 - Django become very hard to work with when you need concurrency and async, you will need django channels and a server like daphne or uvicorn, Go have the perfect implementation for me.
 - Django can handle at most 300 request per second, Go handle 40,000 request per second (benchmarks done on my machine)
