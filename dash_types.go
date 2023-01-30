@@ -21,13 +21,13 @@ var (
 	// FlushCacheEvery execute korm.FlushCache() every 10 min by default, you should not worry about it, but useful that you can change it
 	FlushCacheEvery = 10 * time.Minute
 	// MaxOpenConns set max open connections for db pool
-	MaxOpenConns = 20
+	MaxOpenConns = 50
 	// MaxIdleConns set max idle connections for db pool
-	MaxIdleConns = 20
+	MaxIdleConns = 30
 	// MaxLifetime set max lifetime for a connection in the db pool
 	MaxLifetime = 30 * time.Minute
 	// MaxIdleTime set max idletime for a connection in the db pool
-	MaxIdleTime = 15 * time.Minute
+	MaxIdleTime = 30 * time.Minute
 )
 
 type User struct {

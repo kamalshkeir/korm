@@ -136,12 +136,12 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 						_, err = conn.Exec(statement)
 						if err != nil {
 							temp := to_table_name + "_temp"
-							_, err := autoMigrate[T](db, temp, true)
+							_, err := autoMigrate(new(T), db, temp, true)
 							if klog.CheckError(err) {
 								return
 							}
-							cls := strings.Join(fields, ",")
-							_, err = conn.Exec("INSERT INTO " + temp + " SELECT " + cls + " FROM " + to_table_name)
+							colls := strings.Join(fields, ",")
+							_, err = conn.Exec("INSERT INTO " + temp + " SELECT " + colls + " FROM " + to_table_name)
 							if klog.CheckError(err) {
 								return
 							}
@@ -189,7 +189,7 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 						_, err = conn.Exec(statement)
 						if err != nil {
 							temp := to_table_name + "_temp"
-							_, err := autoMigrate[T](db, temp, true)
+							_, err := autoMigrate(new(T), db, temp, true)
 							if klog.CheckError(err) {
 								return
 							}
@@ -247,7 +247,7 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 						query += sst
 
 						temp := to_table_name + "_temp"
-						tempQuery, err := autoMigrate[T](db, temp, false)
+						tempQuery, err := autoMigrate(new(T), db, temp, false)
 						if klog.CheckError(err) {
 							return
 						}
@@ -290,7 +290,7 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 							klog.Printf("%s\n", trigs)
 						}
 						temp := to_table_name + "_temp"
-						tempQuery, err := autoMigrate[T](db, temp, false)
+						tempQuery, err := autoMigrate(new(T), db, temp, false)
 						if klog.CheckError(err) {
 							return
 						}

@@ -28,14 +28,18 @@
 </div>
 
 ---
-### Introducing KORM - the elegant, lightning-fast ORM for all your concurrent and async needs, see [benchmarks](#benchmarks-vs-gorm). Inspired by the highly popular Django Framework, KORM offers similar functionality with the added bonus of performance
-### Why settle for less when you can have the best ?
+### Introducing Korm - the elegant, lightning-fast ORM/Framework for all your needs, see [benchmarks](#benchmarks-vs-gorm). Inspired by the highly popular Django Framework, Korm offers similar functionality with the added bonus of performance
+
+### It is also composable, allowing for integration with a network websocket PubSub using [WithBus](#example-with-bus-between-2-korm) when you want to synchronise your data between multiple Korm or [WithDashboard](#example-with-dashboard-you-dont-need-kormwithbus-with-it-because-withdashboard-already-call-it-and-return-the-server-bus-for-you) to have a complete setup of server bus and Admin Dashboard.
+
+#### Why settle for less when you can have the best ?
 - Django become very hard to work with when you need concurrency and async, you will need django channels and a server like daphne or uvicorn, Go have the perfect implementation for me.
 - Django can handle at most 300 request per second, Go handle 40,000 request per second (benchmarks done on my machine)
 - The API is also more user-friendly and less verbose than Django's
 - Deploying an executable binary file using Korm , with automatic TLS Let's encrypt, a built-in Admin Dashboard, Interactive Shell, Eventbus to communicate between multiple Korm applications is pretty neat
 - Additionally, its caching system uses goroutines and channels to efficiently to clean the cache when rows or tables are created, updated, deleted, or dropped.
-#### It is also composable, allowing for integration with a server bus using [WithBus](#example-with-bus-between-2-korm) when you want to scale or just synchronise your data between multiple Korm or [WithDashboard](#example-with-dashboard-you-dont-need-kormwithbus-with-it-because-withdashboard-already-call-it-and-return-the-server-bus-for-you) to have a complete setup of server bus and Admin Dashboard.
+
+
 #####  All drivers are written in Go, eliminating the need for GCC or C compilers
 ##### Korm also supports both SQL databases and mongo through [Kormongo](https://github.com/kamalshkeir/kormongo), and has a consistent API for both
 
@@ -48,15 +52,15 @@
 
 - [Admin dashboard](#example-with-dashboard-you-dont-need-kormwithbus-with-it-because-withdashboard-already-call-it-and-return-the-server-bus-for-you) with ready offline and installable PWA (using /static/sw.js and /static/manifest.webmanifest). All statics mentionned in `sw.js` will be cached and served by the service worker, you can inspect the Network Tab in the browser to check it
 
-[Built-in Authentication](#auth-middleware-example) using `korm.Auth` , `korm.Admin` or `korm.BasicAuth` middlewares, whenever Auth and Admin middlewares are used, you get access to the `.User` model and variable `.IsAuthenticated` from any template html like this example [admin_nav.html](#example-admin-and-auth-user-model-and-isauthenticated) 
+- Network Bus allowing you to send and recv data in realtime using pubsub websockets between your ORMs, so you can decide how you data will be distributed between different databases, see [Example](#example-with-bus-between-2-korm) 
+
+- [Built-in Authentication](#auth-middleware-example) using `korm.Auth` , `korm.Admin` or `korm.BasicAuth` middlewares, whenever Auth and Admin middlewares are used, you get access to the `.User` model and variable `.IsAuthenticated` from any template html like this example [admin_nav.html](#example-admin-and-auth-user-model-and-isauthenticated) 
 
 - [Interactive Shell](#interactive-shell), to CRUD in your databases `go run main.go shell` or `go run main.go mongoshell` for mongo
 
-- Network Bus allowing you to send and recv data in realtime using pubsub websockets between your ORMs, so you can decide how you data will be distributed between different databases, see [Example](#example-with-bus-between-2-korm) 
+- [AutoMigrate](#automigrate) directly from struct, for mongo it will only link the struct to the tableName, allowing usage of BuilderS. For all sql, whenever you add or remove a field from a migrated struct, you will get a prompt proposing to add the column for the table in the database or remove a column, you can also only generate the query without execute, and then you can use the shell to migrate the generated file, to disable the check for sql, you can use `korm.DisableCheck()`
 
 - Compatible with official database/sql, and the Mongo official driver, so you can do your queries yourself using sql.DB or mongo.Client  `korm.GetConnection(dbName)` or `kormongo.GetConnection(dbName)`, and overall a painless integration of your existing codebases using database/sql
-
-- [AutoMigrate](#automigrate) directly from struct, for mongo it will only link the struct to the tableName, allowing usage of BuilderS. For all sql, whenever you add or remove a field from a migrated struct, you will get a prompt proposing to add the column for the table in the database or remove a column, you can also only generate the query without execute, and then you can use the shell to migrate the generated file, to disable the check for sql, you can use `korm.DisableCheck()`
 
 - [Router/Mux](https://github.com/kamalshkeir/kmux) accessible from the serverBus after calling `korm.WithBus()` or `korm.WithDashboard()`
 
@@ -89,7 +93,7 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@v1.4.8 // latest version
+go get -u github.com/kamalshkeir/korm@v1.4.9 // latest version
 ```
 
 # Drivers moved outside this package to not get them all in your go.mod file

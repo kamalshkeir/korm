@@ -39,10 +39,10 @@ func checkUpdatedAtTrigger(dialect, tableName, col string) map[string][]string {
 	return triggers
 }
 
-func autoMigrate[T comparable](db *DatabaseEntity, tableName string, execute bool) (string, error) {
+func autoMigrate[T comparable](model *T, db *DatabaseEntity, tableName string, execute bool) (string, error) {
 	toReturnstats := []string{}
 	dialect := db.Dialect
-	s := reflect.ValueOf(new(T)).Elem()
+	s := reflect.ValueOf(model).Elem()
 	typeOfT := s.Type()
 	mFieldName_Type := map[string]string{}
 	mFieldName_Tags := map[string][]string{}
@@ -54,7 +54,12 @@ func autoMigrate[T comparable](db *DatabaseEntity, tableName string, execute boo
 		fname := typeOfT.Field(i).Name
 		fname = kstrct.ToSnakeCase(fname)
 		ftype := f.Type()
-		mFieldName_Type[fname] = ftype.String()
+		if ftype.Kind() == reflect.Ptr {
+			mFieldName_Type[fname] = ftype.Elem().String()
+		} else {
+			mFieldName_Type[fname] = ftype.String()
+		}
+
 		if ftag, ok := typeOfT.Field(i).Tag.Lookup("korm"); ok {
 			tags := strings.Split(ftag, ";")
 			for i, tag := range tags {
@@ -166,7 +171,7 @@ func autoMigrate[T comparable](db *DatabaseEntity, tableName string, execute boo
 		klog.Printf("ylstatement:%s\n", statement)
 	}
 
-	c, cancel := context.WithTimeout(context.TODO(), 3*time.Second)
+	c, cancel := context.WithTimeout(context.TODO(), 5*time.Second)
 	defer cancel()
 	if execute {
 		ress, err := db.Conn.ExecContext(c, statement)
@@ -318,10 +323,11 @@ func AutoMigrate[T comparable](tableName string, dbName ...string) error {
 			return nil
 		} else {
 			// not db and not local
-			_, err := autoMigrate[T](db, tableName, true)
+			_, err := autoMigrate(new(T), db, tableName, true)
 			if klog.CheckError(err) {
 				return err
 			}
+			klog.Printfs("gr%s migrated\n", tableName)
 			return nil
 		}
 	} else {
@@ -337,7 +343,7 @@ func AutoMigrate[T comparable](tableName string, dbName ...string) error {
 		linkModel[T](tableName, db)
 		return nil
 	} else {
-		_, err := autoMigrate[T](db, tableName, true)
+		_, err := autoMigrate(new(T), db, tableName, true)
 		if klog.CheckError(err) {
 			return err
 		}

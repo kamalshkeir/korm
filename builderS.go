@@ -37,17 +37,24 @@ type BuilderS[T comparable] struct {
 }
 
 // Model is a starter for Buider
-func Model[T comparable](tableName ...string) *BuilderS[T] {
+func Model[T comparable](model ...T) *BuilderS[T] {
 	tName := getTableName[T]()
 	if tName == "" {
-		if len(tableName) > 0 {
-			mutexModelTablename.Lock()
-			mModelTablename[*new(T)] = tableName[0]
-			mutexModelTablename.Unlock()
-			tName = tableName[0]
-		} else {
-			return nil
-		}
+		return nil
+	}
+	return &BuilderS[T]{
+		tableName: tName,
+		database:  databases[0].Name,
+	}
+}
+
+func ModelTable[T comparable](tableName string, model ...T) *BuilderS[T] {
+	tName := getTableName[T]()
+	if tName != tableName {
+		mutexModelTablename.Lock()
+		mModelTablename[*new(T)] = tableName
+		mutexModelTablename.Unlock()
+		tName = tableName
 	}
 	return &BuilderS[T]{
 		tableName: tName,
@@ -56,7 +63,7 @@ func Model[T comparable](tableName ...string) *BuilderS[T] {
 }
 
 // Database allow to choose database to execute query on
-func (b *BuilderS[T]) Database(dbName string) *BuilderS[T] {
+func (b *BuilderS[T]) Database(dbName string, model ...T) *BuilderS[T] {
 	if b == nil || b.tableName == "" {
 		return nil
 	}

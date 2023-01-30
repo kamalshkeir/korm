@@ -360,7 +360,7 @@ func Transaction(dbName ...string) (*sql.Tx, error) {
 
 // FlushCache send msg to the cache system to Flush all the cache, safe to use in concurrent mode, and safe to use in general, it's done every 30 minutes(korm.FlushCacheEvery) and on update , create, delete , drop
 func FlushCache() {
-	go cachebus.Publish(CACHE_TOPIC, map[string]any{
+	cachebus.Publish(CACHE_TOPIC, map[string]any{
 		"type": "clean",
 	})
 }
@@ -370,25 +370,28 @@ func DisableCheck() {
 	migrationAutoCheck = false
 }
 
-// // DisableCache disable the cache system, if and only if you are having problem with it, also you can korm.FlushCache on command too
-// func DisableCache() {
-// 	useCache = false
-// }
+// DisableCache disable the cache system, if and only if you are having problem with it, also you can korm.FlushCache on command too
+func DisableCache() {
+	useCache = false
+}
 
 // GetConnection get connection of dbName, if not specified , it return default, first database connected
 func GetConnection(dbName ...string) *sql.DB {
 	var name string
+	var db *DatabaseEntity
 	if len(dbName) > 0 {
-		name = dbName[0]
+		var err error
+		db, err = GetMemoryDatabase(dbName[0])
+		if klog.CheckError(err) {
+			return nil
+		}
 	} else {
 		name = databases[0].Name
+		db = &databases[0]
 	}
-	db, err := GetMemoryDatabase(name)
-	if klog.CheckError(err) {
-		return nil
-	}
+
 	if db.Conn == nil {
-		klog.Printf("rdmemory database %s not found", name)
+		klog.Printf("rdmemory database %s have no connection\n", name)
 	}
 	return db.Conn
 }

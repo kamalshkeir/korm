@@ -211,9 +211,9 @@ func getStructInfos[T comparable](strctt *T, ignoreZeroValues ...bool) (fields [
 		fname := typeOfT.Field(i).Name
 		fname = kstrct.ToSnakeCase(fname)
 		fvalue := f.Interface()
-		ftype := f.Type().Name()
+		ftype := f.Type()
 
-		if len(ignoreZeroValues) > 0 && ignoreZeroValues[0] && strings.Contains(ftype, "Time") {
+		if len(ignoreZeroValues) > 0 && ignoreZeroValues[0] && strings.Contains(ftype.Name(), "Time") {
 			if v, ok := fvalue.(time.Time); ok {
 				if v.IsZero() {
 					continue
@@ -221,7 +221,11 @@ func getStructInfos[T comparable](strctt *T, ignoreZeroValues ...bool) (fields [
 			}
 		}
 		fields = append(fields, fname)
-		fTypes[fname] = ftype
+		if f.Type().Kind() == reflect.Ptr {
+			fTypes[fname] = f.Type().Elem().String()
+		} else {
+			fTypes[fname] = f.Type().String()
+		}
 		fValues[fname] = fvalue
 		if ftag, ok := typeOfT.Field(i).Tag.Lookup("korm"); ok {
 			tags := strings.Split(ftag, ";")

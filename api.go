@@ -75,8 +75,6 @@ func WithAPI(rootPath string, middws ...func(handler kmux.Handler) kmux.Handler)
 	return nil
 }
 
-type RegisterBuilder[T comparable] func(modelBuilder *BuilderS[T]) *BuilderS[T]
-
 type TableRegistration[T comparable] struct {
 	TableName     string
 	Middws        []func(handler kmux.Handler) kmux.Handler
@@ -114,7 +112,7 @@ func RegisterTable[T comparable](table TableRegistration[T]) error {
 			})
 			return
 		}
-		q := Model[T](model)
+		q := ModelTable[T](model)
 		if table.BuilderGetAll != nil {
 			q = table.BuilderGetAll(q)
 		}
@@ -150,7 +148,7 @@ func RegisterTable[T comparable](table TableRegistration[T]) error {
 			idString = tb.Pk
 		}
 
-		q := Model[T](model).Where(idString+" = ?", id)
+		q := ModelTable[T](model).Where(idString+" = ?", id)
 		if table.BuilderGetOne != nil {
 			q = table.BuilderGetOne(q)
 		}
@@ -199,7 +197,7 @@ func RegisterTable[T comparable](table TableRegistration[T]) error {
 			values = append(values, v)
 		}
 		setStat = setStat[:len(setStat)-1]
-		_, err = Model[T](model).Where(idString+" = ?", id).Set(setStat, values...)
+		_, err = ModelTable[T](model).Where(idString+" = ?", id).Set(setStat, values...)
 		if err != nil {
 			if id == "" {
 				c.Json(map[string]any{
