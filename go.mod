@@ -8,7 +8,7 @@ require (
 	github.com/kamalshkeir/klog v1.0.0
 	github.com/kamalshkeir/kmap v1.1.0
 	github.com/kamalshkeir/kmux v1.6.9
-	github.com/kamalshkeir/ksbus v0.8.10
+	github.com/kamalshkeir/ksbus v0.9.3
 	github.com/kamalshkeir/kstrct v1.4.9
 )
 
