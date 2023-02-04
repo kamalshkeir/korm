@@ -93,7 +93,7 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@v1.5.1 // latest version
+go get -u github.com/kamalshkeir/korm@v1.5.2 // latest version
 ```
 
 # Drivers moved outside this package to not get them all in your go.mod file
@@ -1004,7 +1004,7 @@ from ksbus import Bus
 
 
 # onOpen callback that let you know when connection is ready, it take the bus as param
-def onOpen(bus):
+def OnOpen(bus):
     print("connected")
     # bus.autorestart=True
     # Publish publish to topic
@@ -1013,8 +1013,8 @@ def onOpen(bus):
     })
     # Subscribe, it also return the subscription
     bus.Subscribe("python", pythonTopicHandler)
-    # SendTo publish to named topic
-    bus.SendTo("top:srv", {
+    # SendToNamed publish to named topic
+    bus.SendToNamed("top:srv", {
         "data": "hello again from python"
     })
     # bus.Unsubscribe("python")
@@ -1028,7 +1028,7 @@ def pythonTopicHandler(data, subs):
     #subs.Unsubscribe()
 
 if __name__ == "__main__":
-    Bus("localhost:9313", onOpen=onOpen) # blocking
+    Bus("localhost:9313", onOpen=OnOpen) # blocking
     print("prorgram exited")
 ```
 

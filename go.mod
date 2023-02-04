@@ -1,6 +1,6 @@
 module github.com/kamalshkeir/korm
 
-go 1.20
+go 1.19
 
 require (
 	github.com/kamalshkeir/aes v1.0.0
@@ -8,7 +8,7 @@ require (
 	github.com/kamalshkeir/klog v1.0.0
 	github.com/kamalshkeir/kmap v1.1.1
 	github.com/kamalshkeir/kmux v1.6.9
-	github.com/kamalshkeir/ksbus v0.9.5
+	github.com/kamalshkeir/ksbus v0.9.7
 	github.com/kamalshkeir/kstrct v1.4.9
 )
 
