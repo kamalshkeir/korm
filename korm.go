@@ -152,14 +152,17 @@ func New(dbType Dialect, dbName string, dbDSN ...string) error {
 				})
 			})
 		}
-		runned := InitShell()
-		if runned {
-			os.Exit(0)
-		}
 		onceDone = true
 	}
 
 	return nil
+}
+
+func WithShell() {
+	runned := InitShell()
+	if runned {
+		os.Exit(0)
+	}
 }
 
 // SetCacheMaxMemory set max size of each cache cacheAllS AllM, minimum of 50 ...

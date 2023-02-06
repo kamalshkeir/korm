@@ -291,6 +291,9 @@ func (b *BuilderM) One() (map[string]any, error) {
 
 // Insert add row to a table using input map, and return PK of the inserted row
 func (b *BuilderM) Insert(rowData map[string]any) (int, error) {
+	if len(rowData) == 0 {
+		return 0, fmt.Errorf("cannot insert empty map, rowData:%v", rowData)
+	}
 	if b == nil || b.tableName == "" {
 		return 0, ErrTableNotFound
 	}
@@ -342,7 +345,7 @@ func (b *BuilderM) Insert(rowData map[string]any) (int, error) {
 		if vvv, ok := tbmem.ModelTypes[k]; ok && strings.HasSuffix(vvv, "Time") {
 			switch tyV := v.(type) {
 			case time.Time:
-				v = tyV.Format("2006-01-02 15:04:05")
+				v = tyV.Unix()
 			case string:
 				v = strings.ReplaceAll(tyV, "T", " ")
 			}
@@ -359,11 +362,11 @@ func (b *BuilderM) Insert(rowData map[string]any) (int, error) {
 	stat.WriteString(placeholders)
 	stat.WriteString(")")
 	statement := stat.String()
-	if b.debug {
-		klog.Printf("statement : %s, values : %v\n", statement, values)
-	}
 	var id int
 	if db.Dialect != POSTGRES {
+		if b.debug {
+			klog.Printf("statement : %s, values : %s\n", statement, values)
+		}
 		var res sql.Result
 		if b.ctx != nil {
 			res, err = db.Conn.ExecContext(b.ctx, statement, values...)
@@ -380,13 +383,17 @@ func (b *BuilderM) Insert(rowData map[string]any) (int, error) {
 			id = int(rows)
 		}
 	} else {
+		if b.debug {
+			klog.Printf("statement : %s, values : %s\n", statement+" RETURNING "+pk, values)
+		}
 		if b.ctx != nil {
-			err = db.Conn.QueryRowContext(b.ctx, statement+"RETURNING "+pk, values...).Scan(&id)
+			err = db.Conn.QueryRowContext(b.ctx, statement+" RETURNING "+pk, values...).Scan(&id)
 		} else {
-			err = db.Conn.QueryRow(statement+"RETURNING "+pk, values...).Scan(&id)
+			err = db.Conn.QueryRow(statement+" RETURNING "+pk, values...).Scan(&id)
 		}
 		if err != nil {
 			id = -1
+			return id, err
 		}
 	}
 	return id, nil
@@ -445,7 +452,7 @@ func (b *BuilderM) InsertR(rowData map[string]any) (map[string]any, error) {
 		if vvv, ok := tbmem.ModelTypes[k]; ok && strings.HasSuffix(vvv, "Time") {
 			switch tyV := v.(type) {
 			case time.Time:
-				v = tyV.Format("2006-01-02 15:04:05")
+				v = tyV.Unix()
 			case string:
 				v = strings.ReplaceAll(tyV, "T", " ")
 			}
@@ -658,7 +665,7 @@ func (b *BuilderM) Set(query string, args ...any) (int, error) {
 	args = append(args, b.args...)
 	if b.debug {
 		klog.Printf("ylstatement:%s\n", b.statement)
-		klog.Printf("ylargs:%v\n", b.args)
+		klog.Printf("ylargs:%v\n", args)
 	}
 
 	var res sql.Result

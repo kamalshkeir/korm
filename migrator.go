@@ -903,24 +903,22 @@ func handleMigrationTime(mi *migrationInput) {
 			case "now":
 				switch mi.dialect {
 				case SQLITE, "":
-					defaultt = "TEXT NOT NULL DEFAULT (datetime('now','localtime'))"
+					defaultt = "BIGINT NOT NULL DEFAULT (strftime('%s', 'now'))"
 				case POSTGRES:
-					defaultt = "TIMESTAMPTZ  NOT NULL DEFAULT (now())"
-				case MYSQL:
-					defaultt = "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"
-				case MARIA:
-					defaultt = "TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP"
+					defaultt = "BIGINT NOT NULL DEFAULT extract(epoch from now())"
+				case MYSQL, MARIA:
+					defaultt = "BIGINT NOT NULL DEFAULT (UNIX_TIMESTAMP())"
 				default:
 					klog.Printf("not handled Time for %s %s \n", mi.fName, mi.fType)
 				}
 			case "update":
 				switch mi.dialect {
 				case SQLITE, "":
-					defaultt = "TEXT NOT NULL DEFAULT (datetime('now','localtime'))"
+					defaultt = "BIGINT NOT NULL DEFAULT (strftime('%s', 'now'))"
 				case POSTGRES:
-					defaultt = "TIMESTAMP NOT NULL DEFAULT (now())"
+					defaultt = "BIGINT NOT NULL DEFAULT extract(epoch from now())"
 				case MYSQL, MARIA:
-					defaultt = "TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
+					defaultt = "BIGINT NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE (UNIX_TIMESTAMP())"
 				default:
 					klog.Printf("not handled Time for %s %s \n", mi.fName, mi.fType)
 				}
@@ -997,11 +995,7 @@ func handleMigrationTime(mi *migrationInput) {
 	if defaultt != "" {
 		(*mi.res)[mi.fName] = defaultt
 	} else {
-		if mi.dialect == "" || mi.dialect == SQLITE {
-			(*mi.res)[mi.fName] = "TEXT"
-		} else {
-			(*mi.res)[mi.fName] = "TIMESTAMP"
-		}
+		(*mi.res)[mi.fName] = "BIGINT"
 
 		if notnull != "" {
 			(*mi.res)[mi.fName] += notnull

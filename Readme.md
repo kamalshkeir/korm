@@ -93,7 +93,7 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@v1.5.2 // latest version
+go get -u github.com/kamalshkeir/korm@v1.5.3 // latest version
 ```
 
 # Drivers moved outside this package to not get them all in your go.mod file
@@ -317,6 +317,7 @@ func Exec(dbName, query string, args ...any) error
 func Transaction(dbName ...string) (*sql.Tx, error)
 func WithBus(bus *ksbus.Server) *ksbus.Server // Usage: WithBus(ksbus.NewServer()) or share an existing one
 func WithDashboard(staticAndTemplatesEmbeded ...embed.FS) *ksbus.Server
+func WithShell()
 func BeforeServersData(fn func(data any, conn *ws.Conn))
 func BeforeDataWS(fn func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) bool)
 func GetConnection(dbName ...string) *sql.DB
@@ -534,6 +535,7 @@ func main() {
 
 
 	serverBus := korm.WithDashboard() 
+	korm.WithShell()
 	// you can overwrite Admin and Auth middleware used for dashboard (dash_middlewares.go) 
 	//korm.Auth = func(handler kmux.Handler) kmux.Handler {}
 	//korm.Admin = func(handler kmux.Handler) kmux.Handler {}
@@ -580,8 +582,9 @@ func main() {
 		return
 	}
 	defer korm.Shutdown()
-
+	
 	srv := korm.WithDashboard()
+	korm.WithShell()
 	klog.Printfs("mgrunning on http://localhost:9313\n")
 	app := srv.App
 
@@ -757,6 +760,7 @@ func main() {
 	defer korm.Shutdown()
 
 	bus := korm.WithDashboard()
+	korm.WithShell() // to enable shell
 	app := bus.App
 	klog.Printfs("mgrunning on http://localhost:9313\n")
 	app.GET("/", func(c *kmux.Context) {
@@ -821,7 +825,7 @@ func main() {
 	err := korm.New(korm.SQLITE,"db1")
 	if klog.CheckError(err) {return}
 
-	
+	korm.WithShell()
 	serverBus := korm.WithBus(ksbus.NewServer())
 	// handler authentication	
 	korm.BeforeDataWS(func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) bool {
@@ -866,7 +870,7 @@ func main() {
 	err := korm.New(korm.SQLITE,"db2")
 	if klog.CheckError(err) {return}
 
-	
+	korm.WithShell() // if dashboard used, this line should be after it
 	serverBus := korm.WithBus(ksbus.NewServer())
 
 	korm.BeforeServersData(func(data any, conn *ws.Conn) {
@@ -953,7 +957,7 @@ func main() {
 	}
 
 	serverBus := korm.WithDashboard()
-
+	korm.WithShell()
 	mux := serverBus.App
 	// add global middlewares
 	mux.Use((midws ...func(http.Handler) http.Handler))

@@ -116,7 +116,7 @@ func (b *BuilderS[T]) Insert(model *T) (int, error) {
 			if vvv, ok := mTypes[name]; ok && strings.HasSuffix(vvv, "Time") {
 				switch tyV := v.(type) {
 				case time.Time:
-					v = tyV.Format("2006-01-02 15:04:05")
+					v = tyV.Unix()
 				case string:
 					v = strings.ReplaceAll(tyV, "T", " ")
 				}
@@ -149,7 +149,6 @@ func (b *BuilderS[T]) Insert(model *T) (int, error) {
 			placeholdersSlice = append(placeholdersSlice, "?")
 		}
 	}
-
 	cum := 0
 	for _, ign := range ignored {
 		ii := ign - cum
@@ -169,11 +168,12 @@ func (b *BuilderS[T]) Insert(model *T) (int, error) {
 	stat.WriteString(")")
 	b.statement = stat.String()
 	adaptPlaceholdersToDialect(&b.statement, db.Dialect)
-	if b.debug {
-		klog.Printf("statement : %s, values : %s\n", b.statement, values)
-	}
+
 	if db.Dialect != POSTGRES {
 		var res sql.Result
+		if b.debug {
+			klog.Printf("statement : %s, values : %s\n", b.statement, values)
+		}
 		if b.ctx != nil {
 			res, err = db.Conn.ExecContext(b.ctx, b.statement, values...)
 		} else {
@@ -189,10 +189,13 @@ func (b *BuilderS[T]) Insert(model *T) (int, error) {
 		return int(rows), nil
 	} else {
 		var id int
+		if b.debug {
+			klog.Printf("statement : %s, values : %s\n", b.statement+" RETURNING "+pk, values)
+		}
 		if b.ctx != nil {
-			err = db.Conn.QueryRowContext(b.ctx, b.statement+"RETURNING "+pk, values...).Scan(&id)
+			err = db.Conn.QueryRowContext(b.ctx, b.statement+" RETURNING "+pk, values...).Scan(&id)
 		} else {
-			err = db.Conn.QueryRow(b.statement+"RETURNING "+pk, values...).Scan(&id)
+			err = db.Conn.QueryRow(b.statement+" RETURNING "+pk, values...).Scan(&id)
 		}
 		if err != nil {
 			return id, err
@@ -788,7 +791,7 @@ func (b *BuilderS[T]) JoinRelated(relatedTable string, dest any) error {
 	return nil
 }
 
-// Set used to update, Set("email,is_admin","example@mail.com",true) or Set("email = ? AND is_admin = ?","example@mail.com",true)
+// Set used to update, Set("email,is_admin","example@mail.com",true) or Set("email = ? , is_admin = ?","example@mail.com",true)
 func (b *BuilderS[T]) Set(query string, args ...any) (int, error) {
 	if b == nil || b.tableName == "" {
 		return 0, ErrTableNotFound
@@ -831,8 +834,8 @@ func (b *BuilderS[T]) Set(query string, args ...any) (int, error) {
 	adaptPlaceholdersToDialect(&b.statement, db.Dialect)
 	args = append(args, b.args...)
 	if b.debug {
-		klog.Printf("statement:%s_n", b.statement)
-		klog.Printf("args:%v\n", b.args)
+		klog.Printf("statement:%s\n", b.statement)
+		klog.Printf("args:%v\n", args)
 	}
 
 	var res sql.Result

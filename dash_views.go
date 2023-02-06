@@ -288,16 +288,15 @@ var CreateModelView = func(c *kmux.Context) {
 		case "password":
 			hash, _ := argon.Hash(val[0])
 			m[key] = hash
-		case "":
 		default:
 			if key != "" && val[0] != "" && val[0] != "null" {
 				m[key] = val[0]
 			}
 		}
 	}
-
 	_, err := Table(model).Insert(m)
-	if klog.CheckError(err) {
+	if err != nil {
+		klog.Printf("rdCreateModelView error: %v\n", err)
 		c.Status(http.StatusBadRequest).Json(map[string]any{
 			"error": err.Error(),
 		})

@@ -3,6 +3,7 @@ package korm
 import (
 	"strconv"
 	"strings"
+	"time"
 )
 
 func adaptPlaceholdersToDialect(query *string, dialect string) {
@@ -25,6 +26,10 @@ func adaptTrueFalseArgs(args *[]any) {
 			(*args)[i] = 1
 		} else if (*args)[i] == false {
 			(*args)[i] = 0
+		} else if v, ok := (*args)[i].(time.Time); ok {
+			(*args)[i] = v.Unix()
+		} else if v, ok := (*args)[i].(*time.Time); ok {
+			(*args)[i] = v.Unix()
 		}
 	}
 }

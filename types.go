@@ -1,6 +1,8 @@
 package korm
 
-import "database/sql"
+import (
+	"database/sql"
+)
 
 const (
 	MIGRATION_FOLDER         = "migrations"
