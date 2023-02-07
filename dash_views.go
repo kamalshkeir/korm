@@ -295,6 +295,7 @@ var CreateModelView = func(c *kmux.Context) {
 				})
 				return
 			}
+			m[key] = val[0]
 		default:
 			if key != "" && val[0] != "" && val[0] != "null" {
 				m[key] = val[0]
