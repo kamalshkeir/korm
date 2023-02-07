@@ -477,11 +477,7 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 							uindexes[d] = d
 						}
 					} else {
-						if strings.Contains(db.Dialect, SQLITE) {
-							s = "TEXT"
-						} else {
-							s = "TIMESTAMP"
-						}
+						s = "BIGINT"
 					}
 					s = strings.ToLower(s)
 					if strings.Contains(s, "default") {

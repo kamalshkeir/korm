@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/mail"
 	"os"
 	"strings"
 	"sync"
@@ -156,6 +157,11 @@ func New(dbType Dialect, dbName string, dbDSN ...string) error {
 	}
 
 	return nil
+}
+
+func IsValidEmail(email string) bool {
+	_, err := mail.ParseAddress(email)
+	return err == nil
 }
 
 func WithShell() {

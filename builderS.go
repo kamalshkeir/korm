@@ -243,7 +243,7 @@ func (b *BuilderS[T]) InsertR(model *T) (T, error) {
 			if vvv, ok := mTypes[name]; ok && strings.HasSuffix(vvv, "Time") {
 				switch tyV := v.(type) {
 				case time.Time:
-					v = tyV.Format("2006-01-02 15:04:05")
+					v = tyV.Unix()
 				case string:
 					v = strings.ReplaceAll(tyV, "T", " ")
 				}
@@ -317,9 +317,9 @@ func (b *BuilderS[T]) InsertR(model *T) (T, error) {
 		id = int(rows)
 	} else {
 		if b.ctx != nil {
-			err = db.Conn.QueryRowContext(b.ctx, b.statement+"RETURNING "+pk, values...).Scan(&id)
+			err = db.Conn.QueryRowContext(b.ctx, b.statement+" RETURNING "+pk, values...).Scan(&id)
 		} else {
-			err = db.Conn.QueryRow(b.statement+"RETURNING "+pk, values...).Scan(&id)
+			err = db.Conn.QueryRow(b.statement+" RETURNING "+pk, values...).Scan(&id)
 		}
 		if err != nil {
 			return *new(T), err
@@ -376,7 +376,7 @@ func (b *BuilderS[T]) BulkInsert(models ...*T) ([]int, error) {
 				if fType, ok := mTypes[name]; ok && strings.HasSuffix(fType, "Time") {
 					switch tyV := v.(type) {
 					case time.Time:
-						v = tyV.Format("2006-01-02 15:04:05")
+						v = tyV.Unix()
 					case string:
 						v = strings.ReplaceAll(tyV, "T", " ")
 					}
@@ -452,9 +452,9 @@ func (b *BuilderS[T]) BulkInsert(models ...*T) ([]int, error) {
 		} else {
 			var idInserted int
 			if b.ctx != nil {
-				err = db.Conn.QueryRowContext(b.ctx, statem+"RETURNING "+pk, values...).Scan(&idInserted)
+				err = db.Conn.QueryRowContext(b.ctx, statem+" RETURNING "+pk, values...).Scan(&idInserted)
 			} else {
-				err = db.Conn.QueryRow(statem+"RETURNING "+pk, values...).Scan(&idInserted)
+				err = db.Conn.QueryRow(statem+" RETURNING "+pk, values...).Scan(&idInserted)
 			}
 			if err != nil {
 				return ids, err

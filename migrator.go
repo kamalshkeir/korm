@@ -16,7 +16,7 @@ var migrationAutoCheck = true
 
 func checkUpdatedAtTrigger(dialect, tableName, col string) map[string][]string {
 	triggers := map[string][]string{}
-	t := "datetime('now','localtime')"
+	t := "strftime('%s', 'now')"
 	if dialect == "sqlite" {
 		st := "CREATE TRIGGER IF NOT EXISTS "
 		st += tableName + "_update_trig AFTER UPDATE ON " + tableName
@@ -26,7 +26,7 @@ func checkUpdatedAtTrigger(dialect, tableName, col string) map[string][]string {
 		triggers[col] = []string{st}
 	} else if dialect == "postgres" {
 		st := "CREATE OR REPLACE FUNCTION updated_at_trig() RETURNS trigger AS $$"
-		st += " BEGIN NEW." + col + " = now();RETURN NEW;"
+		st += " BEGIN NEW." + col + " = extract(epoch from now());RETURN NEW;"
 		st += "END;$$ LANGUAGE plpgsql;"
 		triggers[col] = []string{st}
 		trigCreate := "CREATE OR REPLACE TRIGGER " + tableName + "_update_trig"
@@ -918,7 +918,7 @@ func handleMigrationTime(mi *migrationInput) {
 				case POSTGRES:
 					defaultt = "BIGINT NOT NULL DEFAULT extract(epoch from now())"
 				case MYSQL, MARIA:
-					defaultt = "BIGINT NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE (UNIX_TIMESTAMP())"
+					defaultt = "BIGINT NOT NULL DEFAULT (UNIX_TIMESTAMP()) ON UPDATE (UNIX_TIMESTAMP())"
 				default:
 					klog.Printf("not handled Time for %s %s \n", mi.fName, mi.fType)
 				}

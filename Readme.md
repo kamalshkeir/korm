@@ -56,7 +56,7 @@
 
 - [Built-in Authentication](#auth-middleware-example) using `korm.Auth` , `korm.Admin` or `korm.BasicAuth` middlewares, whenever Auth and Admin middlewares are used, you get access to the `.User` model and variable `.IsAuthenticated` from any template html like this example [admin_nav.html](#example-admin-and-auth-user-model-and-isauthenticated) 
 
-- [Interactive Shell](#interactive-shell), to CRUD in your databases `go run main.go shell` or `go run main.go mongoshell` for mongo
+- [Interactive Shell](#interactive-shell), to CRUD in your databases, call `korm.WithBus()` after `korm.WithDashboard()`, or after `korm.New` if dashboard not used then `go run main.go shell` or `go run main.go mongoshell` for mongo
 
 - [AutoMigrate](#automigrate) directly from struct, for mongo it will only link the struct to the tableName, allowing usage of BuilderS. For all sql, whenever you add or remove a field from a migrated struct, you will get a prompt proposing to add the column for the table in the database or remove a column, you can also only generate the query without execute, and then you can use the shell to migrate the generated file, to disable the check for sql, you can use `korm.DisableCheck()`
 
@@ -93,7 +93,7 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@v1.5.3 // latest version
+go get -u github.com/kamalshkeir/korm@v1.5.4 // latest version
 ```
 
 # Drivers moved outside this package to not get them all in your go.mod file
@@ -1102,8 +1102,8 @@ _, err = korm.Table("classes").Where("name = ?", "Math").DeleteRelated("students
 
 ### Interactive shell
 ```shell
-AVAILABLE COMMANDS:
-[databases, use, tables, columns, migrate, createsuperuser, createuser, getall, get, drop, delete, clear/cls, q/quit/exit, help/commands]
+Commands :  
+[databases, use, tables, columns, migrate, createsuperuser, createuser, query, getall, get, drop, delete, clear/cls, q/quit/exit, help/commands]
   'databases':
 	  list all connected databases
 
@@ -1115,30 +1115,46 @@ AVAILABLE COMMANDS:
 
   'columns':
 	  list all columns of a table
+	  (accept but not required extra param like : 'columns' or 'columns users')
 
   'migrate':
 	  migrate or execute sql file
 
-  'createsuperuser': #only with korm.WithDashboard()
+  'createsuperuser': (only with dashboard)
 	  create a admin user
   
-  'createuser':  #only with korm.WithDashboard()
+  'createuser': (only with dashboard)
 	  create a regular user
 
-  'getall':
+  'query': 
+	  query data from database 
+	  (accept but not required extra param like : 'query' or 'query select * from users where ...')
+
+
+  'getall': 
 	  get all rows given a table name
+	  (accept but not required extra param like : 'getall' or 'getall users')
 
   'get':
-	  get single row wher field equal_to
+	  get single row 
+	  (accept but not required extra param like : 'get' or 'get users email like "%anything%"')
 
   'delete':
 	  delete rows where field equal_to
+	  (accept but not required extra param like : 'delete' or 'delete users email="email@example.com"')
 
   'drop':
 	  drop a table given table name
+	  (accept but not required extra param like : 'drop' or 'drop users')
 
-  'clear/cls':
-	  clear console
+  'clear / cls':
+	  clear shell console
+
+  'q / quit / exit / q!':
+	  exit shell
+
+  'help':
+	  show this help message
 ```
 
 
@@ -1420,8 +1436,8 @@ Available 'on_delete' and 'on_update' options: cascade,(donothing,noaction),(set
 ```
 *  	index, +index, index+ (CREATE INDEX ON COLUMN)
 *  	index-, -index(CREATE INDEX DESC ON COLUMN)  
-*   now (NOT NULL and defaulted to current timestamp)
-*   update (NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)
+*   now (NOT NULL and defaulted to current unix timestamp)
+*   update (NOT NULL DEFAULT UNIX_TIMESTAMP ON UPDATE UNIX_TIMESTAMP)
 ```
 </td>
 <td>

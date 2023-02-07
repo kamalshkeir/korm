@@ -288,6 +288,13 @@ var CreateModelView = func(c *kmux.Context) {
 		case "password":
 			hash, _ := argon.Hash(val[0])
 			m[key] = hash
+		case "email":
+			if !IsValidEmail(val[0]) {
+				c.Json(map[string]any{
+					"error": "email not valid",
+				})
+				return
+			}
 		default:
 			if key != "" && val[0] != "" && val[0] != "null" {
 				m[key] = val[0]
@@ -548,14 +555,18 @@ var ImportView = func(c *kmux.Context) {
 	list_map := []map[string]any{}
 	json.Unmarshal(dataBytes, &list_map)
 	// create models in database
+	var retErr []error
 	for _, m := range list_map {
 		_, err = Table(table).Insert(m)
 		if err != nil {
-			c.Status(http.StatusBadRequest).Json(map[string]any{
-				"error": err.Error(),
-			})
-			return
+			retErr = append(retErr, err)
 		}
+	}
+	if len(retErr) > 0 {
+		c.Json(map[string]any{
+			"success": "some data could not be added, " + errors.Join(retErr...).Error(),
+		})
+		return
 	}
 
 	c.Json(map[string]any{

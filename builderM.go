@@ -491,9 +491,9 @@ func (b *BuilderM) InsertR(rowData map[string]any) (map[string]any, error) {
 		}
 	} else {
 		if b.ctx != nil {
-			err = db.Conn.QueryRowContext(b.ctx, statement+"RETURNING "+pk, values...).Scan(&id)
+			err = db.Conn.QueryRowContext(b.ctx, statement+" RETURNING "+pk, values...).Scan(&id)
 		} else {
-			err = db.Conn.QueryRow(statement+"RETURNING "+pk, values...).Scan(&id)
+			err = db.Conn.QueryRow(statement+" RETURNING "+pk, values...).Scan(&id)
 		}
 		if err != nil {
 			return nil, err
@@ -564,7 +564,7 @@ func (b *BuilderM) BulkInsert(rowsData ...map[string]any) ([]int, error) {
 			if vvv, ok := tbmem.ModelTypes[k]; ok && strings.HasSuffix(vvv, "Time") {
 				switch tyV := v.(type) {
 				case time.Time:
-					v = tyV.Format("2006-01-02 15:04:05")
+					v = tyV.Unix()
 				case string:
 					v = strings.ReplaceAll(tyV, "T", " ")
 				}
@@ -606,9 +606,9 @@ func (b *BuilderM) BulkInsert(rowsData ...map[string]any) ([]int, error) {
 		} else {
 			var idInserted int
 			if b.ctx != nil {
-				err = db.Conn.QueryRowContext(b.ctx, statement+"RETURNING "+pk, values...).Scan(&idInserted)
+				err = db.Conn.QueryRowContext(b.ctx, statement+" RETURNING "+pk, values...).Scan(&idInserted)
 			} else {
-				err = db.Conn.QueryRow(statement+"RETURNING "+pk, values...).Scan(&idInserted)
+				err = db.Conn.QueryRow(statement+" RETURNING "+pk, values...).Scan(&idInserted)
 			}
 			if err != nil {
 				return ids, err
