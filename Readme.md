@@ -33,17 +33,11 @@
 ### It is also composable, allowing for integration with a network websocket PubSub using [WithBus](#example-with-bus-between-2-korm) when you want to synchronise your data between multiple Korm or [WithDashboard](#example-with-dashboard-you-dont-need-kormwithbus-with-it-because-withdashboard-already-call-it-and-return-the-server-bus-for-you) to have a complete setup of server bus and Admin Dashboard.
 
 #### Why settle for less when you can have the best ?
-- Django become very hard to work with when you need concurrency and async, you will need django channels and a server like daphne or uvicorn, Go have the perfect implementation for me.
+- Django become very hard to work with when you need concurrency and async, you will need django channels and a server like daphne or uvicorn, Go have the perfect implementation
 - Django can handle at most 300 request per second, Go handle 40,000 request per second (benchmarks done on my machine)
 - The API is also more user-friendly and less verbose than Django's
 - Deploying an executable binary file using Korm , with automatic TLS Let's encrypt, a built-in Admin Dashboard, Interactive Shell, Eventbus to communicate between multiple Korm applications is pretty neat
-- Additionally, its caching system uses goroutines and channels to efficiently to clean the cache when rows or tables are created, updated, deleted, or dropped.
-
-
-#####  All drivers are written in Go, eliminating the need for GCC or C compilers
-##### Korm also supports both SQL databases and mongo through [Kormongo](https://github.com/kamalshkeir/kormongo), and has a consistent API for both
-
-
+- Additionally, its caching system uses goroutines and channels to efficiently to clean the cache when rows or tables are created, updated, deleted, or dropped
 
 ### It Has :
 - <strong>New :</strong> [Crud Api From Model](#example-korm-api) , similar to Model Viewsets from django rest framework
@@ -79,6 +73,9 @@
 - [Kenv](#example-not-required-load-config-from-env-directly-to-struct-using-kenv) load env vars to struct
 
 - [Python Bus Client](#python-bus-client-example) `pip install ksbus`
+
+####  All drivers are written in Go, eliminating the need for GCC or C compilers
+##### Korm also supports both SQL databases and mongo through [Kormongo](https://github.com/kamalshkeir/kormongo), and has a consistent API for both
 
 #### Supported databases:
 - Sqlite
