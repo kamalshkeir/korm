@@ -10,11 +10,27 @@
 	<img src="https://img.shields.io/github/stars/kamalshkeir/korm?style=social" width="auto" height="20px">
 	<img src="https://img.shields.io/github/forks/kamalshkeir/korm?style=social" width="auto" height="20px">
 </div>
+
+
+<div align="center">
+	<a href="https://www.youtube.com/watch?v=KMnnwly3Mpc" style="display:flex;justify-content:center;align-items:center;gap:10px;">
+	<img src="https://user-images.githubusercontent.com/54605903/217871012-9c5dc1da-25bd-47d5-ac9e-c3acee7178d5.svg" width="auto" height="50px">
+	<span><strong> Simple Example video </strong></span>
+	</a>
+</div>
+
+
+
+<svg height="50px" width="50px">
+	<g>
+		<path style="fill:#F61C0D;" d="M365.257,67.393H95.744C42.866,67.393,0,110.259,0,163.137v134.728
+			c0,52.878,42.866,95.744,95.744,95.744h269.513c52.878,0,95.744-42.866,95.744-95.744V163.137
+			C461.001,110.259,418.135,67.393,365.257,67.393z M300.506,237.056l-126.06,60.123c-3.359,1.602-7.239-0.847-7.239-4.568V168.607
+			c0-3.774,3.982-6.22,7.348-4.514l126.06,63.881C304.363,229.873,304.298,235.248,300.506,237.056z"/>
+	</g>
+</svg>
+
 <br>
-
-
-
-
 <div align="center">
 	<a href="https://kamalshkeir.dev" target="_blank">
 		<img src="https://img.shields.io/badge/my_portfolio-000?style=for-the-badge&logo=ko-fi&logoColor=white" width="auto" height="32px">
@@ -90,7 +106,7 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@v1.5.5 // latest version
+go get -u github.com/kamalshkeir/korm@v1.5.6 // latest version
 ```
 
 # Drivers moved outside this package to not get them all in your go.mod file

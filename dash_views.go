@@ -284,7 +284,11 @@ var CreateModelView = func(c *kmux.Context) {
 		case "table":
 			continue
 		case "uuid":
-			m[key] = GenerateUUID()
+			if v := m[key]; v == "" {
+				m[key] = GenerateUUID()
+			} else {
+				m[key] = val[0]
+			}
 		case "password":
 			hash, _ := argon.Hash(val[0])
 			m[key] = hash
@@ -381,7 +385,7 @@ var UpdateRowPost = func(c *kmux.Context) {
 		return
 	}
 
-	ignored := []string{idString, "uuid", "file", "image", "photo", "img", "fichier", "row_id", "table"}
+	ignored := []string{idString, "file", "image", "photo", "img", "fichier", "row_id", "table"}
 	toUpdate := map[string]any{}
 	for key, val := range data {
 		if !SliceContains(ignored, key) {
