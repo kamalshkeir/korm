@@ -6,7 +6,6 @@ import (
 )
 
 var (
-	Pprof              = false
 	PaginationPer      = 10
 	EmbededDashboard   = false
 	MediaDir           = "media"

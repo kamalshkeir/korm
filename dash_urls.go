@@ -4,8 +4,6 @@ import (
 	"context"
 	"embed"
 	"net/http"
-	"net/http/pprof"
-	"strings"
 
 	"github.com/kamalshkeir/kmux"
 )
@@ -53,16 +51,4 @@ func initAdminUrlPatterns(r *kmux.Router, StaticAndTemplatesEmbeded ...embed.FS)
 	adminGroup.GET("/get/model:str/id:int", Admin(SingleModelGet))
 	adminGroup.GET("/export/table:str", Admin(ExportView))
 	adminGroup.POST("/import", Admin(ImportView))
-	if Pprof {
-		r.GET("/debug/*", func(c *kmux.Context) {
-			if strings.Contains(c.Request.URL.Path, "profile") {
-				pprof.Profile(c.ResponseWriter, c.Request)
-				return
-			} else if strings.Contains(c.Request.URL.Path, "trace") {
-				pprof.Trace(c.ResponseWriter, c.Request)
-				return
-			}
-			pprof.Index(c.ResponseWriter, c.Request)
-		})
-	}
 }

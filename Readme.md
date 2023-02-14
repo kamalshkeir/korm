@@ -56,19 +56,22 @@
 - Additionally, its caching system uses goroutines and channels to efficiently to clean the cache when rows or tables are created, updated, deleted, or dropped
 
 ### It Has :
-- <strong>New :</strong> [Crud Api From Model](#example-korm-api) , similar to Model Viewsets from django rest framework
 
-- Simple [API](#api)
+- New: [PPROF](#pprof) Go profiling tool and [Metrics Prometheus](#metrics-prometheus)
+
+- New: [Logs Middleware](#logs-middleware)
 
 - [Admin dashboard](#example-with-dashboard-you-dont-need-kormwithbus-with-it-because-withdashboard-already-call-it-and-return-the-server-bus-for-you) with ready offline and installable PWA (using /static/sw.js and /static/manifest.webmanifest). All statics mentionned in `sw.js` will be cached and served by the service worker, you can inspect the Network Tab in the browser to check it
 
-- Network Bus allowing you to send and recv data in realtime using pubsub websockets between your ORMs, so you can decide how you data will be distributed between different databases, see [Example](#example-with-bus-between-2-korm) 
+- Shared Network Bus allowing you to send and recv data in realtime using pubsub websockets between your ORMs, so you can decide how you data will be distributed between different databases, see [Example](#example-with-bus-between-2-korm) 
 
 - [Built-in Authentication](#auth-middleware-example) using `korm.Auth` , `korm.Admin` or `korm.BasicAuth` middlewares, whenever Auth and Admin middlewares are used, you get access to the `.User` model and variable `.IsAuthenticated` from any template html like this example [admin_nav.html](#example-admin-and-auth-user-model-and-isauthenticated) 
 
 - [Interactive Shell](#interactive-shell), to CRUD in your databases, call `korm.WithBus()` after `korm.WithDashboard()`, or after `korm.New` if dashboard not used then `go run main.go shell` or `go run main.go mongoshell` for mongo
 
 - [AutoMigrate](#automigrate) directly from struct, for mongo it will only link the struct to the tableName, allowing usage of BuilderS. For all sql, whenever you add or remove a field from a migrated struct, you will get a prompt proposing to add the column for the table in the database or remove a column, you can also only generate the query without execute, and then you can use the shell to migrate the generated file, to disable the check for sql, you can use `korm.DisableCheck()`
+
+- [Crud Api From Model](#example-korm-api) , similar to Model Viewsets from django rest framework
 
 - Compatible with official database/sql, and the Mongo official driver, so you can do your queries yourself using sql.DB or mongo.Client  `korm.GetConnection(dbName)` or `kormongo.GetConnection(dbName)`, and overall a painless integration of your existing codebases using database/sql
 
@@ -83,8 +86,6 @@
 - [Concatination and Length](#example-concat-and-len-from-korm_testgo) support for `Where` and for tags: `check` and `generated` (all dialects)
 
 - Support for foreign keys, indexes , checks,... [See all](#automigrate)
-
-- [PPROF](#pprof) Go std library profiling tool
 
 - [Kenv](#example-not-required-load-config-from-env-directly-to-struct-using-kenv) load env vars to struct
 
@@ -106,7 +107,7 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@v1.5.8 // latest version
+go get -u github.com/kamalshkeir/korm@v1.5.9 // latest version
 ```
 
 # Drivers moved outside this package to not get them all in your go.mod file
@@ -515,7 +516,6 @@ korm.Table("tableName").Where("id",1).Set("email","new@example.com") // Mongo
 
 ### Dashboard defaults you can set
 ```go
-korm.Pprof              = false
 korm.PaginationPer      = 10
 korm.EmbededDashboard   = false
 korm.MediaDir           = "media"
@@ -961,7 +961,6 @@ func TestConcatANDLen(t *testing.T) {
 ## Router/Mux 
 Learn more about [Kmux](https://github.com/kamalshkeir/kmux)
 ```go
-
 func main() {
 	sqlitedriver.Use()
 	err := korm.New(korm.SQLITE, "db")
@@ -974,7 +973,7 @@ func main() {
 	mux := serverBus.App
 	// add global middlewares
 	mux.Use((midws ...func(http.Handler) http.Handler))
-	mux.Use(kmux.Gzip(),kmux.Recover())
+	mux.Use(kmux.Recover()) //kmux.Gzip() used by default by serverBus
 	...
 }
 
@@ -983,13 +982,44 @@ func main() {
 ### Pprof
 ```go
 
-korm.Pprof=true (before WithDashboard)
+srv := korm.WithDashboard()
+// or srv := korm.WithBus()
+srv.WithPprof(path ...string) // path is 'debug' by default
 
 will enable:
 	- /debug/pprof
-	- /debug/pprof/profile
-	- /debug/pprof/heap
-	- /debug/pprof/trace
+	- /debug/profile
+	- /debug/heap
+	- /debug/trace
+```
+To execute profile cpu: `go tool pprof -http=":8000" pprofbin http://localhost:9313/debug/profile?seconds=18`
+To execute profile memory: `go tool pprof -http=":8000" pprofbin http://localhost:9313/debug/heap?seconds=18`
+To execute generate trace: go to endpoint `http://localhost:9313/debug/trace?seconds=18` from browser , this will download the trace of 18 seconds
+Then to see the trace : `go tool trace path/to/trace`
+
+### Metrics Prometheus
+```go
+srv := korm.WithDashboard()
+// or srv := korm.WithBus()
+//srv.WithMetrics(httpHandler http.Handler, path ...string) path default to 'metrics'
+srv.WithMetrics(promhttp.Handler())
+
+will enable:
+	- /metrics
+```
+
+### Logs middleware
+```go
+srv := korm.WithDashboard()
+// or srv := korm.WithBus()
+//srv.WithMetrics(httpHandler http.Handler, path ...string) path default to 'metrics'
+srv.App.Use(kmux.Logs()) // it take an optional callback executed on each request if you want to add log to a file or send
+srv.App.Use(kmux.Logs(func(method, path, remote string, status int, took time.Duration) {
+	// save somewhere
+}))
+
+will enable:
+	- /metrics
 ```
 
 # Hooks

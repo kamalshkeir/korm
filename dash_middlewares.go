@@ -10,7 +10,7 @@ import (
 
 var (
 	BASIC_AUTH_USER = "notset"
-	BASIC_AUTH_PASS = "testnotsetshouldbeset"
+	BASIC_AUTH_PASS = "testnotsetbutwaititshouldbeset"
 )
 
 var Auth = func(handler kmux.Handler) kmux.Handler {

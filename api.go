@@ -1,7 +1,6 @@
 package korm
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -60,13 +59,6 @@ func WithAPI(rootPath string, middws ...func(handler kmux.Handler) kmux.Handler)
 		}
 	}
 	app := serverBus.App
-	app.NewFuncMap("json", func(data any) string {
-		d, err := json.MarshalIndent(data, "", "\t")
-		if err != nil {
-			d = []byte("cannot marshal data")
-		}
-		return string(d)
-	})
 	ApiIndexHandler = wrapHandlerWithMiddlewares(ApiIndexHandler, middws...)
 	if len(middws) > 0 {
 		globalMiddws = middws

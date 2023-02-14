@@ -173,13 +173,14 @@ func WithShell() {
 
 // SetCacheMaxMemory set max size of each cache cacheAllS AllM, minimum of 50 ...
 func SetCacheMaxMemory(megaByte int) {
-	if megaByte < 50 {
-		megaByte = 50
+	if megaByte < 100 {
+		megaByte = 100
 	}
-	cacheAllM = kmap.New[dbCache, []map[string]any](false, megaByte)
-	cacheAllS = kmap.New[dbCache, any](false, megaByte)
-	cacheQueryM = kmap.New[dbCache, any](false, megaByte)
-	cacheQueryS = kmap.New[dbCache, any](false, megaByte)
+	cacheMaxMemoryMb = megaByte
+	cacheAllM = kmap.New[dbCache, []map[string]any](false, cacheMaxMemoryMb)
+	cacheAllS = kmap.New[dbCache, any](false, cacheMaxMemoryMb)
+	cacheQueryM = kmap.New[dbCache, any](false, cacheMaxMemoryMb)
+	cacheQueryS = kmap.New[dbCache, any](false, cacheMaxMemoryMb)
 }
 
 // ManyToMany create m2m_table1_table2 many 2 many table
@@ -268,18 +269,15 @@ func NewFromConnection(dbType, dbName string, conn *sql.DB) error {
 	if defaultDB == "" {
 		defaultDB = dbName
 	}
+
 	err := conn.Ping()
-	if klog.CheckError(err) {
+	if err != nil {
+		klog.Printf("rdcouldn't ping database %s : %v\n", dbName, err)
 		return err
 	}
 	dbFound := false
 	for _, dbb := range databases {
-		if dbb.Conn == conn && dbb.Name == dbName {
-			if dbb.Dialect == MARIA {
-				dbb.Dialect = MYSQL
-			} else if strings.HasPrefix(dbb.Dialect, "cockroach") {
-				dbb.Dialect = POSTGRES
-			}
+		if dbb.Name == dbName {
 			dbFound = true
 		}
 	}
@@ -288,6 +286,7 @@ func NewFromConnection(dbType, dbName string, conn *sql.DB) error {
 	conn.SetMaxIdleConns(MaxIdleConns)
 	conn.SetConnMaxLifetime(MaxLifetime)
 	conn.SetConnMaxIdleTime(MaxIdleTime)
+
 	if !dbFound {
 		databases = append(databases, DatabaseEntity{
 			Name:    dbName,
@@ -299,16 +298,16 @@ func NewFromConnection(dbType, dbName string, conn *sql.DB) error {
 	if !onceDone {
 		if useCache {
 			cachebus = ksbus.New()
-			cachebus.Subscribe(CACHE_TOPIC, func(data map[string]any, _ ksbus.Channel) { handleCache(data) })
+			cachebus.Subscribe(CACHE_TOPIC, func(data map[string]any, _ ksbus.Channel) {
+				handleCache(data)
+			})
 			go RunEvery(FlushCacheEvery, func() {
+				switchBusMutex.Lock()
+				defer switchBusMutex.Unlock()
 				cachebus.Publish(CACHE_TOPIC, map[string]any{
 					"type": "clean",
 				})
 			})
-		}
-		runned := InitShell()
-		if runned {
-			os.Exit(0)
 		}
 		onceDone = true
 	}
@@ -350,6 +349,28 @@ func WithDashboard(staticAndTemplatesEmbeded ...embed.FS) *ksbus.Server {
 `
 	klog.Printfs("yl%s\n", razor)
 	return serverBus
+}
+
+// WithMetrics enable path /metrics (default), it take http.Handler like promhttp.Handler()
+func WithMetrics(httpHandler http.Handler) *ksbus.Server {
+	if serverBus == nil {
+		serverBus = WithBus(ksbus.NewServer())
+	}
+	serverBus.WithMetrics(httpHandler)
+	return serverBus
+}
+
+// WithPprof enable std library pprof at /debug/pprof, prefix default to 'debug'
+func WithPprof(path ...string) *ksbus.Server {
+	if serverBus == nil {
+		serverBus = WithBus(ksbus.NewServer())
+	}
+	serverBus.WithPprof(path...)
+	return serverBus
+}
+
+func DisableGzip() {
+	ksbus.GzipEnabled = false
 }
 
 // BeforeServersData handle connections and data received from another server
