@@ -1152,12 +1152,12 @@ _, err = korm.Table("classes").Where("name = ?", "Math").DeleteRelated("students
 ### Swagger documentation
 
 <img src="docs.png">
-<div style="display:flex;justify-content:center;align-items:center;gap:20px">
-<a href="#swagger-documentation">New: Swagger Documentation and tutorial
-</a><a href="https://www.youtube.com/watch?v=RupARTkPzf4">
+<div style="display:flex;justify-content:center;align-items:center;gap:20px;margin:20px 0">
+<a href="https://www.youtube.com/watch?v=RupARTkPzf4">
 	<img src="https://user-images.githubusercontent.com/54605903/217871012-9c5dc1da-25bd-47d5-ac9e-c3acee7178d5.svg" width="auto" height="50px">
 </a>
 </div>
+
 
 ```go
 korm.DocsUrl = "docs" // default endpoint '/docs' 
