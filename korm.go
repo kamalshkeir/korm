@@ -5,14 +5,17 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/mail"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
 	"github.com/kamalshkeir/klog"
 	"github.com/kamalshkeir/kmap"
+	"github.com/kamalshkeir/kmux"
 	"github.com/kamalshkeir/kmux/ws"
 	"github.com/kamalshkeir/ksbus"
 	"github.com/kamalshkeir/kstrct"
@@ -349,6 +352,51 @@ func WithDashboard(staticAndTemplatesEmbeded ...embed.FS) *ksbus.Server {
 `
 	klog.Printfs("yl%s\n", razor)
 	return serverBus
+}
+
+func WithDocs(handlerMiddlewares ...func(handler kmux.Handler) kmux.Handler) *ksbus.Server {
+	if serverBus == nil {
+		serverBus = WithBus(ksbus.NewServer())
+	}
+	dirPath := "./" + StaticDir + "/docs"
+	webPath := "docs"
+	dirPath = filepath.ToSlash(dirPath)
+	if webPath[0] != '/' {
+		webPath = "/" + webPath
+	}
+	if webPath[len(webPath)-1] == '/' {
+		webPath = webPath[:len(webPath)-1]
+	}
+	handler := func(c *kmux.Context) {
+		http.StripPrefix(webPath, http.FileServer(http.Dir(dirPath))).ServeHTTP(c.ResponseWriter, c.Request)
+	}
+	if len(handlerMiddlewares) > 0 {
+		for _, mid := range handlerMiddlewares {
+			handler = mid(handler)
+		}
+	}
+	serverBus.App.GET(webPath+"*", handler)
+	return serverBus
+}
+
+func DownloadFile(filepath string, url string) error {
+	// Get the data
+	resp, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	// Create the file
+	out, err := os.Create(filepath)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	// Write the body to file
+	_, err = io.Copy(out, resp.Body)
+	return err
 }
 
 // WithMetrics enable path /metrics (default), it take http.Handler like promhttp.Handler()
