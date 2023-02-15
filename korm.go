@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/mail"
 	"os"
@@ -354,17 +355,19 @@ func WithDashboard(staticAndTemplatesEmbeded ...embed.FS) *ksbus.Server {
 	return serverBus
 }
 
-
-
-func WithDocs(generate bool,handlerMiddlewares ...func(handler kmux.Handler) kmux.Handler) *ksbus.Server {
+func WithDocs(generate bool, dirPath string, handlerMiddlewares ...func(handler kmux.Handler) kmux.Handler) *ksbus.Server {
 	if serverBus == nil {
 		serverBus = WithBus(ksbus.NewServer())
 	}
 	if generate {
 		checkAndGenerateDocs()
 	}
-	dirPath := "./" + StaticDir + "/docs"
-	webPath := DocsPath
+	if dirPath == "" {
+		dirPath = "./" + StaticDir + "/docs"
+	} else if dirPath[0] != '.' {
+		dirPath = "./" + dirPath
+	}
+	webPath := DocsUrl
 	dirPath = filepath.ToSlash(dirPath)
 	if webPath[0] != '/' {
 		webPath = "/" + webPath
@@ -374,6 +377,42 @@ func WithDocs(generate bool,handlerMiddlewares ...func(handler kmux.Handler) kmu
 	}
 	handler := func(c *kmux.Context) {
 		http.StripPrefix(webPath, http.FileServer(http.Dir(dirPath))).ServeHTTP(c.ResponseWriter, c.Request)
+	}
+	if len(handlerMiddlewares) > 0 {
+		for _, mid := range handlerMiddlewares {
+			handler = mid(handler)
+		}
+	}
+	serverBus.App.GET(webPath+"*", handler)
+	return serverBus
+}
+
+func WithEmbededDocs(embeded embed.FS, dirPath string, handlerMiddlewares ...func(handler kmux.Handler) kmux.Handler) *ksbus.Server {
+	if serverBus == nil {
+		serverBus = WithBus(ksbus.NewServer())
+	}
+	if dirPath == "" {
+		dirPath = "./" + StaticDir + "/docs"
+	} else if dirPath[0] != '.' {
+		dirPath = "./" + dirPath
+	}
+	webPath := DocsUrl
+
+	dirPath = filepath.ToSlash(dirPath)
+	if webPath[0] != '/' {
+		webPath = "/" + webPath
+	}
+	if webPath[len(webPath)-1] == '/' {
+		webPath = webPath[:len(webPath)-1]
+	}
+	toembed_dir, err := fs.Sub(embeded, dirPath)
+	if err != nil {
+		klog.Printf("rdServeEmbededDir error= %v\n", err)
+		return serverBus
+	}
+	toembed_root := http.FileServer(http.FS(toembed_dir))
+	handler := func(c *kmux.Context) {
+		http.StripPrefix(webPath, toembed_root).ServeHTTP(c.ResponseWriter, c.Request)
 	}
 	if len(handlerMiddlewares) > 0 {
 		for _, mid := range handlerMiddlewares {
