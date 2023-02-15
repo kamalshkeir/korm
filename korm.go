@@ -417,10 +417,6 @@ func WithPprof(path ...string) *ksbus.Server {
 	return serverBus
 }
 
-func DisableGzip() {
-	ksbus.GzipEnabled = false
-}
-
 // BeforeServersData handle connections and data received from another server
 func BeforeServersData(fn func(data any, conn *ws.Conn)) {
 	ksbus.BeforeServersData = fn

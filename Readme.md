@@ -107,7 +107,7 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@v1.6.1 // latest version
+go get -u github.com/kamalshkeir/korm@v1.6.2 // latest version
 ```
 
 # Drivers moved outside this package to not get them all in your go.mod file
@@ -973,7 +973,7 @@ func main() {
 	mux := serverBus.App
 	// add global middlewares
 	mux.Use((midws ...func(http.Handler) http.Handler))
-	mux.Use(kmux.Recover()) //kmux.Gzip() used by default by serverBus
+	mux.Use(kmux.Recover()) 
 	...
 }
 
