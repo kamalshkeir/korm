@@ -359,16 +359,15 @@ func WithDocs(generate bool, dirPath string, handlerMiddlewares ...func(handler 
 	if serverBus == nil {
 		serverBus = WithBus(ksbus.NewServer())
 	}
-	if generate {
-		checkAndGenerateDocs()
-	}
 	if dirPath == "" {
-		dirPath = "./" + StaticDir + "/docs"
-	} else if dirPath[0] != '.' {
-		dirPath = "./" + dirPath
+		dirPath = StaticDir + "/docs"
+	}
+	dirPath = filepath.ToSlash(dirPath)
+	if generate {
+		checkAndGenerateDocs(dirPath)
 	}
 	webPath := DocsUrl
-	dirPath = filepath.ToSlash(dirPath)
+
 	if webPath[0] != '/' {
 		webPath = "/" + webPath
 	}
@@ -392,9 +391,7 @@ func WithEmbededDocs(embeded embed.FS, dirPath string, handlerMiddlewares ...fun
 		serverBus = WithBus(ksbus.NewServer())
 	}
 	if dirPath == "" {
-		dirPath = "./" + StaticDir + "/docs"
-	} else if dirPath[0] != '.' {
-		dirPath = "./" + dirPath
+		dirPath = StaticDir + "/docs"
 	}
 	webPath := DocsUrl
 

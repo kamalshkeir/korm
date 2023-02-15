@@ -199,20 +199,24 @@ func GetMemoryDatabase(dbName string) (*DatabaseEntity, error) {
 }
 
 var swagFound bool
-func checkAndGenerateDocs() {
+
+func checkAndGenerateDocs(dirPath string) {
 	if !swagFound {
-		if _, err := exec.LookPath("swag");err != nil {
-			klog.Printfs("installing github.com/swaggo/swag/cmd/swag@latest\n")
-			cmd := exec.Command("go" ,"install", "github.com/swaggo/swag/cmd/swag@latest")
+		if _, err := exec.LookPath("swag"); err != nil {
+			cmd := exec.Command("go", "install", "github.com/swaggo/swag/cmd/swag@latest")
 			err := cmd.Run()
-			if klog.CheckError(err) {return}
+			if klog.CheckError(err) {
+				klog.Printfs("rdinstalling github.com/swaggo/swag/cmd/swag@latest : %v\n", err)
+				return
+			}
 		}
 	}
-	swagFound=true
-	klog.Printfs("executing : swag init -o ./assets/static/docs --outputTypes json\n")
-	cmd := exec.Command("swag", "init", "-o", "./assets/static/docs", "--outputTypes" ,"json")
+	swagFound = true
+
+	cmd := exec.Command("swag", "init", "-o", dirPath, "--outputTypes", "json")
 	err := cmd.Run()
 	if err != nil {
+		klog.Printfs("executing : swag init -o %s --outputTypes json\n", dirPath)
 		klog.Printfs("rdcould not generate swagger.json")
 	}
 }
