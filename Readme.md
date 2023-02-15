@@ -107,7 +107,7 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@v1.6.2 // latest version
+go get -u github.com/kamalshkeir/korm@v1.6.3 // latest version
 ```
 
 # Drivers moved outside this package to not get them all in your go.mod file
@@ -517,6 +517,7 @@ korm.Table("tableName").Where("id",1).Set("email","new@example.com") // Mongo
 ### Dashboard defaults you can set
 ```go
 korm.PaginationPer      = 10
+korm.DocsPath           = "docs"
 korm.EmbededDashboard   = false
 korm.MediaDir           = "media"
 korm.AssetsDir          = "assets"

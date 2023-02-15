@@ -10,6 +10,7 @@ var (
 	EmbededDashboard   = false
 	MediaDir           = "media"
 	AssetsDir          = "assets"
+	DocsPath = "docs"
 	StaticDir          = path.Join(AssetsDir, "/", "static")
 	TemplatesDir       = path.Join(AssetsDir, "/", "templates")
 	RepoUser           = "kamalshkeir"

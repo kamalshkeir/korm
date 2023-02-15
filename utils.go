@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os/exec"
 	"reflect"
 	"strings"
 	"testing"
@@ -194,6 +195,25 @@ func GetMemoryDatabase(dbName string) (*DatabaseEntity, error) {
 			}
 		}
 		return nil, errors.New(dbName + "database not found")
+	}
+}
+
+var swagFound bool
+func checkAndGenerateDocs() {
+	if !swagFound {
+		if _, err := exec.LookPath("swag");err != nil {
+			klog.Printfs("installing github.com/swaggo/swag/cmd/swag@latest\n")
+			cmd := exec.Command("go" ,"install", "github.com/swaggo/swag/cmd/swag@latest")
+			err := cmd.Run()
+			if klog.CheckError(err) {return}
+		}
+	}
+	swagFound=true
+	klog.Printfs("executing : swag init -o ./assets/static/docs --outputTypes json\n")
+	cmd := exec.Command("swag", "init", "-o", "./assets/static/docs", "--outputTypes" ,"json")
+	err := cmd.Run()
+	if err != nil {
+		klog.Printfs("rdcould not generate swagger.json")
 	}
 }
 

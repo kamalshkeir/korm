@@ -354,12 +354,17 @@ func WithDashboard(staticAndTemplatesEmbeded ...embed.FS) *ksbus.Server {
 	return serverBus
 }
 
-func WithDocs(handlerMiddlewares ...func(handler kmux.Handler) kmux.Handler) *ksbus.Server {
+
+
+func WithDocs(generate bool,handlerMiddlewares ...func(handler kmux.Handler) kmux.Handler) *ksbus.Server {
 	if serverBus == nil {
 		serverBus = WithBus(ksbus.NewServer())
 	}
+	if generate {
+		checkAndGenerateDocs()
+	}
 	dirPath := "./" + StaticDir + "/docs"
-	webPath := "docs"
+	webPath := DocsPath
 	dirPath = filepath.ToSlash(dirPath)
 	if webPath[0] != '/' {
 		webPath = "/" + webPath

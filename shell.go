@@ -204,6 +204,9 @@ func InitShell() bool {
 				fmt.Printf(red, "command not handled, use 'help' or 'commands' to list available commands ")
 			}
 		}
+	case "gendocs","gendoc":
+		checkAndGenerateDocs()
+		return true
 	default:
 		return false
 	}
