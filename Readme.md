@@ -15,7 +15,7 @@
 <div align="center">
 	<a href="https://www.youtube.com/watch?v=KMnnwly3Mpc" style="display:flex;justify-content:center;align-items:center;gap:10px;">
 	<img src="https://user-images.githubusercontent.com/54605903/217871012-9c5dc1da-25bd-47d5-ac9e-c3acee7178d5.svg" width="auto" height="50px">
-	<span><strong> Simple Example video </strong></span>
+	<span><strong> Simple Example video with bus </strong></span>
 	</a>
 </div>
 
@@ -56,6 +56,11 @@
 - Additionally, its caching system uses goroutines and channels to efficiently to clean the cache when rows or tables are created, updated, deleted, or dropped
 
 ### It Has :
+
+- <a href="#swagger-documentation">New: Swagger Documentation and tutorial
+</a><a href="https://www.youtube.com/watch?v=RupARTkPzf4">
+	<img src="https://user-images.githubusercontent.com/54605903/217871012-9c5dc1da-25bd-47d5-ac9e-c3acee7178d5.svg" width="auto" height="50px">
+</a>
 
 - New: [PPROF](#pprof) Go profiling tool and [Metrics Prometheus](#metrics-prometheus)
 
@@ -1141,6 +1146,27 @@ _, err = korm.Table("students").AddRelated("classes", "name = ?", "French")
 _, err = korm.Model[Class]().Where("name = ?", "Math").DeleteRelated("students", "name = ?", "hisName")
 _, err = korm.Table("classes").Where("name = ?", "Math").DeleteRelated("students", "name = ?", "hisName")
 
+```
+
+
+### Swagger documentation
+
+<img src="docs.png">
+<div style="display:flex;justify-content:center;align-items:center;gap:20px">
+<a href="#swagger-documentation">New: Swagger Documentation and tutorial
+</a><a href="https://www.youtube.com/watch?v=RupARTkPzf4">
+	<img src="https://user-images.githubusercontent.com/54605903/217871012-9c5dc1da-25bd-47d5-ac9e-c3acee7178d5.svg" width="auto" height="50px">
+</a>
+</div>
+
+```go
+korm.DocsUrl = "docs" // default endpoint '/docs' 
+korm.BASIC_AUTH_USER = "test"
+korm.BASIC_AUTH_PASS = "pass"
+korm.WithDocs(generate, dirPath, korm.BasicAuth)
+korm.WithDocs(true, "", korm.BasicAuth) // dirPath default to 'assets/static/docs'
+korm.WithEmbededDocs(embeded embed.FS, dirPath, korm.BasicAuth)
+// dirPath default to 'assets/static/docs' if empty
 ```
 
 
