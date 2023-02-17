@@ -163,9 +163,6 @@ func RegisterTable[T comparable](table TableRegistration[T], gendocs ...bool) er
 			})
 			return
 		}
-		if _, ok := body["id"]; ok {
-			delete(body, "id")
-		}
 		idString := "id"
 		tb, err := GetMemoryTable(model)
 		if err == nil {
@@ -207,9 +204,9 @@ func RegisterTable[T comparable](table TableRegistration[T], gendocs ...bool) er
 			})
 			return
 		}
-		msg := model + " inserted "
+		msg := strings.TrimSuffix(model, "s") + " inserted "
 		if insertedId > 0 {
-			msg += "with insertedId = " + strconv.Itoa(insertedId)
+			msg += "with id = " + strconv.Itoa(insertedId)
 		}
 		c.JsonIndent(map[string]any{
 			"success": msg,
