@@ -5,10 +5,8 @@ import (
 	"embed"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"net/http"
-	"net/mail"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,7 +15,6 @@ import (
 	"github.com/kamalshkeir/klog"
 	"github.com/kamalshkeir/kmap"
 	"github.com/kamalshkeir/kmux"
-	"github.com/kamalshkeir/kmux/ws"
 	"github.com/kamalshkeir/ksbus"
 	"github.com/kamalshkeir/kstrct"
 )
@@ -163,28 +160,11 @@ func New(dbType Dialect, dbName string, dbDSN ...string) error {
 	return nil
 }
 
-func IsValidEmail(email string) bool {
-	_, err := mail.ParseAddress(email)
-	return err == nil
-}
-
 func WithShell() {
 	runned := InitShell()
 	if runned {
 		os.Exit(0)
 	}
-}
-
-// SetCacheMaxMemory set max size of each cache cacheAllS AllM, minimum of 50 ...
-func SetCacheMaxMemory(megaByte int) {
-	if megaByte < 100 {
-		megaByte = 100
-	}
-	cacheMaxMemoryMb = megaByte
-	cacheAllM = kmap.New[dbCache, []map[string]any](false, cacheMaxMemoryMb)
-	cacheAllS = kmap.New[dbCache, any](false, cacheMaxMemoryMb)
-	cacheQueryM = kmap.New[dbCache, any](false, cacheMaxMemoryMb)
-	cacheQueryS = kmap.New[dbCache, any](false, cacheMaxMemoryMb)
 }
 
 // ManyToMany create m2m_table1_table2 many 2 many table
@@ -374,7 +354,7 @@ func WithDocs(generate bool, outJsonSwagger string, handlerMiddlewares ...func(h
 		webPath = webPath[:len(webPath)-1]
 	}
 	handler := func(c *kmux.Context) {
-		http.StripPrefix(webPath, http.FileServer(http.Dir(outJsonSwagger))).ServeHTTP(c.ResponseWriter, c.Request)
+		http.StripPrefix(webPath, http.FileServer(http.Dir(kmux.DocsOutJson))).ServeHTTP(c.ResponseWriter, c.Request)
 	}
 	if len(handlerMiddlewares) > 0 {
 		for _, mid := range handlerMiddlewares {
@@ -385,25 +365,25 @@ func WithDocs(generate bool, outJsonSwagger string, handlerMiddlewares ...func(h
 	return serverBus
 }
 
-func WithEmbededDocs(embeded embed.FS, dirPath string, handlerMiddlewares ...func(handler kmux.Handler) kmux.Handler) *ksbus.Server {
+func WithEmbededDocs(embeded embed.FS, embededDirPath string, handlerMiddlewares ...func(handler kmux.Handler) kmux.Handler) *ksbus.Server {
 	if serverBus == nil {
 		serverBus = WithBus(ksbus.NewServer())
 	}
-	if dirPath != "" {
-		kmux.DocsOutJson = dirPath
+	if embededDirPath != "" {
+		kmux.DocsOutJson = embededDirPath
 	} else {
 		kmux.DocsOutJson = StaticDir + "/docs"
 	}
 	webPath := DocsUrl
 
-	dirPath = filepath.ToSlash(dirPath)
+	kmux.DocsOutJson = filepath.ToSlash(kmux.DocsOutJson)
 	if webPath[0] != '/' {
 		webPath = "/" + webPath
 	}
 	if webPath[len(webPath)-1] == '/' {
 		webPath = webPath[:len(webPath)-1]
 	}
-	toembed_dir, err := fs.Sub(embeded, dirPath)
+	toembed_dir, err := fs.Sub(embeded, kmux.DocsOutJson)
 	if err != nil {
 		klog.Printf("rdServeEmbededDir error= %v\n", err)
 		return serverBus
@@ -419,26 +399,6 @@ func WithEmbededDocs(embeded embed.FS, dirPath string, handlerMiddlewares ...fun
 	}
 	serverBus.App.GET(webPath+"*", handler)
 	return serverBus
-}
-
-func DownloadFile(filepath string, url string) error {
-	// Get the data
-	resp, err := http.Get(url)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	// Create the file
-	out, err := os.Create(filepath)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-
-	// Write the body to file
-	_, err = io.Copy(out, resp.Body)
-	return err
 }
 
 // WithMetrics enable path /metrics (default), it take http.Handler like promhttp.Handler()
@@ -457,16 +417,6 @@ func WithPprof(path ...string) *ksbus.Server {
 	}
 	serverBus.WithPprof(path...)
 	return serverBus
-}
-
-// BeforeServersData handle connections and data received from another server
-func BeforeServersData(fn func(data any, conn *ws.Conn)) {
-	ksbus.BeforeServersData = fn
-}
-
-// BeforeDataWS handle connections and data received before upgrading websockets, useful to handle authentication
-func BeforeDataWS(fn func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) bool) {
-	ksbus.BeforeDataWS = fn
 }
 
 // Transaction create new database/sql transaction and return it, it can be rollback ...

@@ -6,6 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"net/mail"
+	"os"
 	"os/exec"
 	"reflect"
 	"strings"
@@ -13,6 +16,7 @@ import (
 	"time"
 
 	"github.com/kamalshkeir/klog"
+	"github.com/kamalshkeir/kmap"
 	"github.com/kamalshkeir/kstrct"
 )
 
@@ -200,6 +204,26 @@ func GetMemoryDatabase(dbName string) (*DatabaseEntity, error) {
 
 var swagFound bool
 
+func DownloadFile(filepath string, url string) error {
+	// Get the data
+	resp, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	// Create the file
+	out, err := os.Create(filepath)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	// Write the body to file
+	_, err = io.Copy(out, resp.Body)
+	return err
+}
+
 func checkAndGenerateDocs(dirPath string) {
 	if !swagFound {
 		if _, err := exec.LookPath("swag"); err != nil {
@@ -291,4 +315,21 @@ func foreignkeyStat(fName, toTable, onDelete, onUpdate string) string {
 		fkey += " ON UPDATE SET DEFAULT"
 	}
 	return fkey
+}
+
+func IsValidEmail(email string) bool {
+	_, err := mail.ParseAddress(email)
+	return err == nil
+}
+
+// SetCacheMaxMemory set max size of each cache cacheAllS AllM, minimum of 50 ...
+func SetCacheMaxMemory(megaByte int) {
+	if megaByte < 100 {
+		megaByte = 100
+	}
+	cacheMaxMemoryMb = megaByte
+	cacheAllM = kmap.New[dbCache, []map[string]any](false, cacheMaxMemoryMb)
+	cacheAllS = kmap.New[dbCache, any](false, cacheMaxMemoryMb)
+	cacheQueryM = kmap.New[dbCache, any](false, cacheMaxMemoryMb)
+	cacheQueryS = kmap.New[dbCache, any](false, cacheMaxMemoryMb)
 }

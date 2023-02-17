@@ -1,5 +1,12 @@
 package korm
 
+import (
+	"net/http"
+
+	"github.com/kamalshkeir/kmux/ws"
+	"github.com/kamalshkeir/ksbus"
+)
+
 var (
 	onInsert DbHook
 	onSet    DbHook
@@ -23,4 +30,14 @@ func OnDelete(fn func(database, table string, query string, args ...any) error) 
 
 func OnDrop(fn func(database, table string) error) {
 	onDrop = fn
+}
+
+// BeforeServersData handle connections and data received from another server
+func BeforeServersData(fn func(data any, conn *ws.Conn)) {
+	ksbus.BeforeServersData = fn
+}
+
+// BeforeDataWS handle connections and data received before upgrading websockets, useful to handle authentication
+func BeforeDataWS(fn func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) bool) {
+	ksbus.BeforeDataWS = fn
 }
