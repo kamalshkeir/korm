@@ -47,3 +47,11 @@ type dbCache struct {
 	statement  string
 	args       string
 }
+
+type DocsSuccess struct {
+	Success string `json:"success" example:"success message"`
+}
+
+type DocsError struct {
+	Error string `json:"error" example:"error message"`
+}

@@ -8,6 +8,7 @@ import (
 var (
 	PaginationPer      = 10
 	EmbededDashboard   = false
+	docsUsed           = false
 	MediaDir           = "media"
 	AssetsDir          = "assets"
 	DocsUrl            = "/docs"

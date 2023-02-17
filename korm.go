@@ -344,6 +344,7 @@ func WithDocs(generate bool, outJsonSwagger string, handlerMiddlewares ...func(h
 	} else {
 		kmux.DocsOutJson = StaticDir + "/docs"
 	}
+	docsUsed = true
 	serverBus.App.WithDocs(generate, handlerMiddlewares...)
 	webPath := DocsUrl
 

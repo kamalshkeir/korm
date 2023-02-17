@@ -84,7 +84,7 @@ func (tr *TableRegistration[T]) HaveMethod(method string) bool {
 	return false
 }
 
-func RegisterTable[T comparable](table TableRegistration[T]) error {
+func RegisterTable[T comparable](table TableRegistration[T], gendocs ...bool) error {
 	var tbName string
 	if table.TableName != "" {
 		tbName = table.TableName
@@ -97,14 +97,7 @@ func RegisterTable[T comparable](table TableRegistration[T]) error {
 
 	app := serverBus.App
 	var apiAllModels = func(c *kmux.Context) {
-		model := c.Param("model")
-		if model == "" {
-			c.Json(map[string]any{
-				"error": "No model given in params",
-			})
-			return
-		}
-		q := ModelTable[T](model)
+		q := ModelTable[T](tbName)
 		if table.BuilderGetAll != nil {
 			q = table.BuilderGetAll(q)
 		}
@@ -120,13 +113,7 @@ func RegisterTable[T comparable](table TableRegistration[T]) error {
 		c.JsonIndent(rows)
 	}
 	var singleModelGet = func(c *kmux.Context) {
-		model := c.Param("model")
-		if model == "" {
-			c.Json(map[string]any{
-				"error": "No model given in path",
-			})
-			return
-		}
+		model := tbName
 		id := c.Param("id")
 		if id == "" {
 			c.Json(map[string]any{
@@ -151,18 +138,17 @@ func RegisterTable[T comparable](table TableRegistration[T]) error {
 					"error": err.Error(),
 				})
 				return
+			} else {
+				c.Status(http.StatusBadRequest).Json(map[string]any{
+					"error": "not found",
+				})
+				return
 			}
 		}
 		c.JsonIndent(rows)
 	}
 	var singleModelPut = func(c *kmux.Context) {
-		model := c.Param("model")
-		if model == "" {
-			c.Json(map[string]any{
-				"error": "No model given in path",
-			})
-			return
-		}
+		model := tbName
 		id := c.Param("id")
 		if id == "" {
 			c.Json(map[string]any{
@@ -203,13 +189,7 @@ func RegisterTable[T comparable](table TableRegistration[T]) error {
 		})
 	}
 	var modelCreate = func(c *kmux.Context) {
-		model := c.Param("model")
-		if model == "" {
-			c.Json(map[string]any{
-				"error": "No model given in path",
-			})
-			return
-		}
+		model := tbName
 		body := c.BodyJson()
 		if len(body) == 0 {
 			c.Json(map[string]any{
@@ -233,13 +213,7 @@ func RegisterTable[T comparable](table TableRegistration[T]) error {
 		})
 	}
 	var modelDelete = func(c *kmux.Context) {
-		model := c.Param("model")
-		if model == "" {
-			c.Json(map[string]any{
-				"error": "No model given in path",
-			})
-			return
-		}
+		model := tbName
 		id := c.Param("id")
 		if id == "" {
 			c.Json(map[string]any{
@@ -270,35 +244,64 @@ func RegisterTable[T comparable](table TableRegistration[T]) error {
 	} else if len(globalMiddws) > 0 {
 		apiAllModels = wrapHandlerWithMiddlewares(apiAllModels, globalMiddws...)
 	}
-
+	var modType string
+	if docsUsed {
+		modType = fmt.Sprintf("%T", *new(T))
+		if modType == "" {
+			return fmt.Errorf("could not find type of %T %v %s", *new(T), *new(T), modType)
+		}
+	}
 	if len(table.Methods) > 0 {
 		for _, meth := range table.Methods {
 			switch meth {
 			case "get", "GET":
-				app.GET(basePath+"/model:str", apiAllModels)
-				app.GET(basePath+"/model:str/id:int", singleModelGet)
+				getallRoute := app.GET(basePath+"/"+tbName, apiAllModels)
+				getsingleRoute := app.GET(basePath+"/"+tbName+"/:id", singleModelGet)
+				if docsUsed && len(gendocs) == 1 && gendocs[0] {
+					getallRoute.Out("200 {array} "+modType+" 'all rows'", "400 {object} korm.DocsError 'error message'").Tags(tbName).Summary("Get all rows from " + tbName)
+					getsingleRoute.In("id path int required 'Pk column'").Out("200 {object} "+modType+" 'user model'", "400 {object} korm.DocsError 'error message'").Tags(tbName).Summary("Get single row from " + tbName)
+				}
 				tableMethods[tbName] = tableMethods[tbName] + ",get"
 			case "post", "POST":
-				app.POST(basePath+"/model:str", modelCreate)
+				postRoute := app.POST(basePath+"/"+tbName, modelCreate)
+				if docsUsed && len(gendocs) == 1 && gendocs[0] {
+					postRoute.In("thebody body " + modType + " required 'create model'").Out("200 {object} korm.DocsSuccess 'success message'").Tags(tbName).Summary("Create new row in " + tbName)
+				}
 				tableMethods[tbName] = tableMethods[tbName] + ",post"
 			case "put", "PUT":
-				app.PUT(basePath+"/model:str/id:int", singleModelPut)
+				putRoute := app.PUT(basePath+"/"+tbName+"/:id", singleModelPut)
+				if docsUsed && len(gendocs) == 1 && gendocs[0] {
+					putRoute.In("id path int required 'Pk column'", "thebody body "+modType+" required 'model to update'").Out("200 {object} korm.DocsSuccess 'success message'", "400 {object} korm.DocsError 'error message'").Tags(tbName).Summary("Update a row from " + tbName)
+				}
 				tableMethods[tbName] = tableMethods[tbName] + ",put"
 			case "patch", "PATCH":
-				app.PATCH(basePath+"/model:str/id:int", singleModelPut)
+				patchRoute := app.PATCH(basePath+"/"+tbName+"/:id", singleModelPut)
+				if docsUsed && len(gendocs) == 1 && gendocs[0] {
+					patchRoute.In("id path int required 'Pk column'", "thebody body "+modType+" required 'model to update'").Out("200 {object} korm.DocsSuccess 'success message'", "400 {object} korm.DocsError 'error message'").Tags(tbName).Summary("Update a row from " + tbName)
+				}
 				tableMethods[tbName] = tableMethods[tbName] + ",patch"
 			case "delete", "DELETE":
-				app.DELETE(basePath+"/model:str/id:int", modelDelete)
+				deleteRoute := app.DELETE(basePath+"/"+tbName+"/:id", modelDelete)
+				if docsUsed && len(gendocs) == 1 && gendocs[0] {
+					deleteRoute.In("id path int required 'Pk column'").Out("200 {object} korm.DocsSuccess 'success message'", "400 {object} korm.DocsError 'error message'").Tags(tbName).Summary("Delete a row from " + tbName)
+				}
 				tableMethods[tbName] = tableMethods[tbName] + ",delete"
 			case "*":
 				table.Methods = append(table.Methods, "get", "post", "put", "patch", "delete")
-				app.POST(basePath+"/model:str", modelCreate)
-				app.GET(basePath+"/model:str", apiAllModels)
-				app.GET(basePath+"/model:str/id:int", singleModelGet)
-				app.PUT(basePath+"/model:str/id:int", singleModelPut)
-				app.PATCH(basePath+"/model:str/id:int", singleModelPut)
-				app.DELETE(basePath+"/model:str/id:int", modelDelete)
-				registeredTables = append(registeredTables, tbName)
+				postRoute := app.POST(basePath+"/"+tbName, modelCreate)
+				getallRoute := app.GET(basePath+"/"+tbName, apiAllModels)
+				getsingleRoute := app.GET(basePath+"/"+tbName+"/:id", singleModelGet)
+				putRoute := app.PUT(basePath+"/"+tbName+"/:id", singleModelPut)
+				patchRoute := app.PATCH(basePath+"/"+tbName+"/:id", singleModelPut)
+				deleteRoute := app.DELETE(basePath+"/"+tbName+"/:id", modelDelete)
+				if docsUsed && len(gendocs) == 1 && gendocs[0] {
+					postRoute.In("thebody body " + modType + " required 'create model'").Out("200 {object} korm.DocsSuccess 'success message'").Tags(tbName).Summary("Create new row in " + tbName)
+					getallRoute.Out("200 {array} "+modType+" 'all rows'", "400 {object} korm.DocsError 'error message'").Tags(tbName).Summary("Get all rows from " + tbName)
+					getsingleRoute.In("id path int required 'Pk column'").Out("200 {object} "+modType+" 'user model'", "400 {object} korm.DocsError 'error message'").Tags(tbName).Summary("Get single row from " + tbName)
+					putRoute.In("id path int required 'Pk column'", "thebody body "+modType+" required 'model to update'").Out("200 {object} korm.DocsSuccess 'success message'", "400 {object} korm.DocsError 'error message'").Tags(tbName).Summary("Update a row from " + tbName)
+					patchRoute.In("id path int required 'Pk column'", "thebody body "+modType+" required 'model to update'").Out("200 {object} korm.DocsSuccess 'success message'", "400 {object} korm.DocsError 'error message'").Tags(tbName).Summary("Update a row from " + tbName)
+					deleteRoute.In("id path int required 'Pk column'").Out("200 {object} korm.DocsSuccess 'success message'", "400 {object} korm.DocsError 'error message'").Tags(tbName).Summary("Delete a row from " + tbName)
+				}
 				tableMethods[tbName] = strings.ToLower(strings.Join(table.Methods, ","))
 				return nil
 			}
@@ -306,12 +309,20 @@ func RegisterTable[T comparable](table TableRegistration[T]) error {
 		registeredTables = append(registeredTables, tbName)
 	} else {
 		table.Methods = append(table.Methods, "get", "post", "put", "patch", "delete")
-		app.POST(basePath+"/model:str", modelCreate)
-		app.GET(basePath+"/model:str", apiAllModels)
-		app.GET(basePath+"/model:str/id:int", singleModelGet)
-		app.PUT(basePath+"/model:str/id:int", singleModelPut)
-		app.PATCH(basePath+"/model:str/id:int", singleModelPut)
-		app.DELETE(basePath+"/model:str/id:int", modelDelete)
+		postRoute := app.POST(basePath+"/"+tbName, modelCreate)
+		getallRoute := app.GET(basePath+"/"+tbName, apiAllModels)
+		getsingleRoute := app.GET(basePath+"/"+tbName+"/:id", singleModelGet)
+		putRoute := app.PUT(basePath+"/"+tbName+"/:id", singleModelPut)
+		patchRoute := app.PATCH(basePath+"/"+tbName+"/:id", singleModelPut)
+		deleteRoute := app.DELETE(basePath+"/"+tbName+"/:id", modelDelete)
+		if docsUsed && len(gendocs) == 1 && gendocs[0] {
+			postRoute.In("thebody body " + modType + " required 'create model'").Out("200 {object} korm.DocsSuccess 'success message'").Tags(tbName).Summary("Create new row in " + tbName)
+			getallRoute.Out("200 {array} "+modType+" 'all rows'", "400 {object} korm.DocsError 'error message'").Tags(tbName).Summary("Get all rows from " + tbName)
+			getsingleRoute.In("id path int required 'Pk column'").Out("200 {object} "+modType+" 'user model'", "400 {object} korm.DocsError 'error message'").Tags(tbName).Summary("Get single row from " + tbName)
+			putRoute.In("id path int required 'Pk column'", "thebody body "+modType+" required 'model to update'").Out("200 {object} korm.DocsSuccess 'success message'", "400 {object} korm.DocsError 'error message'").Tags(tbName).Summary("Update a row from " + tbName)
+			patchRoute.In("id path int required 'Pk column'", "thebody body "+modType+" required 'model to update'").Out("200 {object} korm.DocsSuccess 'success message'", "400 {object} korm.DocsError 'error message'").Tags(tbName).Summary("Update a row from " + tbName)
+			deleteRoute.In("id path int required 'Pk column'").Out("200 {object} korm.DocsSuccess 'success message'", "400 {object} korm.DocsError 'error message'").Tags(tbName).Summary("Delete a row from " + tbName)
+		}
 		registeredTables = append(registeredTables, tbName)
 		tableMethods[tbName] = strings.ToLower(strings.Join(table.Methods, ","))
 		return nil

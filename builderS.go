@@ -1188,7 +1188,6 @@ func (b *BuilderS[T]) queryS(query string, args ...any) ([]T, error) {
 	adaptPlaceholdersToDialect(&query, db.Dialect)
 	adaptTrueFalseArgs(&args)
 	res := make([]T, 0)
-
 	var rows *sql.Rows
 	if b.ctx != nil {
 		rows, err = db.Conn.QueryContext(b.ctx, query, args...)
