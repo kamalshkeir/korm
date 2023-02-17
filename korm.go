@@ -355,17 +355,16 @@ func WithDashboard(staticAndTemplatesEmbeded ...embed.FS) *ksbus.Server {
 	return serverBus
 }
 
-func WithDocs(generate bool, dirPath string, handlerMiddlewares ...func(handler kmux.Handler) kmux.Handler) *ksbus.Server {
+func WithDocs(generate bool, outJsonSwagger string, handlerMiddlewares ...func(handler kmux.Handler) kmux.Handler) *ksbus.Server {
 	if serverBus == nil {
 		serverBus = WithBus(ksbus.NewServer())
 	}
-	if dirPath == "" {
-		dirPath = StaticDir + "/docs"
+	if outJsonSwagger != "" {
+		kmux.DocsOutJson = outJsonSwagger
+	} else {
+		kmux.DocsOutJson = StaticDir + "/docs"
 	}
-	dirPath = filepath.ToSlash(dirPath)
-	if generate {
-		checkAndGenerateDocs(dirPath)
-	}
+	serverBus.App.WithDocs(generate, handlerMiddlewares...)
 	webPath := DocsUrl
 
 	if webPath[0] != '/' {
@@ -375,7 +374,7 @@ func WithDocs(generate bool, dirPath string, handlerMiddlewares ...func(handler 
 		webPath = webPath[:len(webPath)-1]
 	}
 	handler := func(c *kmux.Context) {
-		http.StripPrefix(webPath, http.FileServer(http.Dir(dirPath))).ServeHTTP(c.ResponseWriter, c.Request)
+		http.StripPrefix(webPath, http.FileServer(http.Dir(outJsonSwagger))).ServeHTTP(c.ResponseWriter, c.Request)
 	}
 	if len(handlerMiddlewares) > 0 {
 		for _, mid := range handlerMiddlewares {
@@ -390,8 +389,10 @@ func WithEmbededDocs(embeded embed.FS, dirPath string, handlerMiddlewares ...fun
 	if serverBus == nil {
 		serverBus = WithBus(ksbus.NewServer())
 	}
-	if dirPath == "" {
-		dirPath = StaticDir + "/docs"
+	if dirPath != "" {
+		kmux.DocsOutJson = dirPath
+	} else {
+		kmux.DocsOutJson = StaticDir + "/docs"
 	}
 	webPath := DocsUrl
 

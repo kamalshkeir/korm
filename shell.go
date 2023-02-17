@@ -11,6 +11,7 @@ import (
 	"github.com/kamalshkeir/argon"
 	"github.com/kamalshkeir/kinput"
 	"github.com/kamalshkeir/klog"
+	"github.com/kamalshkeir/kmux"
 )
 
 const (
@@ -206,9 +207,15 @@ func InitShell() bool {
 		}
 	case "gendocs", "gendoc":
 		if len(args) > 1 && args[1] != "" {
-			checkAndGenerateDocs(args[1])
+			kmux.DocsOutJson = args[1]
+			_ = kmux.CheckAndInstallSwagger()
+			kmux.GenerateGoDocsComments()
+			kmux.GenerateJsonDocs()
 		} else {
-			checkAndGenerateDocs("./" + StaticDir + "/docs")
+			kmux.DocsOutJson = "./" + StaticDir + "/docs"
+			_ = kmux.CheckAndInstallSwagger()
+			kmux.GenerateGoDocsComments()
+			kmux.GenerateJsonDocs()
 		}
 		return true
 	default:
