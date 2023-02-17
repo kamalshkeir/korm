@@ -163,6 +163,9 @@ func RegisterTable[T comparable](table TableRegistration[T], gendocs ...bool) er
 			})
 			return
 		}
+		if _, ok := body["id"]; ok {
+			delete(body, "id")
+		}
 		idString := "id"
 		tb, err := GetMemoryTable(model)
 		if err == nil {
@@ -250,6 +253,9 @@ func RegisterTable[T comparable](table TableRegistration[T], gendocs ...bool) er
 		if modType == "" {
 			return fmt.Errorf("could not find type of %T %v %s", *new(T), *new(T), modType)
 		}
+		if strings.Contains(modType, "korm") && strings.Contains(modType, "User") {
+			modType = "kmuxdocs.DocsUser"
+		}
 	}
 	if len(table.Methods) > 0 {
 		for _, meth := range table.Methods {
@@ -258,32 +264,32 @@ func RegisterTable[T comparable](table TableRegistration[T], gendocs ...bool) er
 				getallRoute := app.GET(basePath+"/"+tbName, apiAllModels)
 				getsingleRoute := app.GET(basePath+"/"+tbName+"/:id", singleModelGet)
 				if docsUsed && len(gendocs) == 1 && gendocs[0] {
-					getallRoute.Out("200 {array} "+modType+" 'all rows'", "400 {object} korm.DocsError 'error message'").Tags(tbName).Summary("Get all rows from " + tbName)
-					getsingleRoute.In("id path int required 'Pk column'").Out("200 {object} "+modType+" 'user model'", "400 {object} korm.DocsError 'error message'").Tags(tbName).Summary("Get single row from " + tbName)
+					getallRoute.Out("200 {array} "+modType+" 'all rows'", "400 {object} kmuxdocs.DocsError 'error message'").Tags(tbName).Summary("Get all rows from " + tbName)
+					getsingleRoute.In("id path int required 'Pk column'").Out("200 {object} "+modType+" 'user model'", "400 {object} kmuxdocs.DocsError 'error message'").Tags(tbName).Summary("Get single row from " + tbName)
 				}
 				tableMethods[tbName] = tableMethods[tbName] + ",get"
 			case "post", "POST":
 				postRoute := app.POST(basePath+"/"+tbName, modelCreate)
 				if docsUsed && len(gendocs) == 1 && gendocs[0] {
-					postRoute.In("thebody body " + modType + " required 'create model'").Out("200 {object} korm.DocsSuccess 'success message'").Tags(tbName).Summary("Create new row in " + tbName)
+					postRoute.In("thebody body " + modType + " required 'create model'").Out("200 {object} kmuxdocs.DocsSuccess 'success message'").Tags(tbName).Summary("Create new row in " + tbName)
 				}
 				tableMethods[tbName] = tableMethods[tbName] + ",post"
 			case "put", "PUT":
 				putRoute := app.PUT(basePath+"/"+tbName+"/:id", singleModelPut)
 				if docsUsed && len(gendocs) == 1 && gendocs[0] {
-					putRoute.In("id path int required 'Pk column'", "thebody body "+modType+" required 'model to update'").Out("200 {object} korm.DocsSuccess 'success message'", "400 {object} korm.DocsError 'error message'").Tags(tbName).Summary("Update a row from " + tbName)
+					putRoute.In("id path int required 'Pk column'", "thebody body "+modType+" required 'model to update'").Out("200 {object} kmuxdocs.DocsSuccess 'success message'", "400 {object} kmuxdocs.DocsError 'error message'").Tags(tbName).Summary("Update a row from " + tbName)
 				}
 				tableMethods[tbName] = tableMethods[tbName] + ",put"
 			case "patch", "PATCH":
 				patchRoute := app.PATCH(basePath+"/"+tbName+"/:id", singleModelPut)
 				if docsUsed && len(gendocs) == 1 && gendocs[0] {
-					patchRoute.In("id path int required 'Pk column'", "thebody body "+modType+" required 'model to update'").Out("200 {object} korm.DocsSuccess 'success message'", "400 {object} korm.DocsError 'error message'").Tags(tbName).Summary("Update a row from " + tbName)
+					patchRoute.In("id path int required 'Pk column'", "thebody body "+modType+" required 'model to update'").Out("200 {object} kmuxdocs.DocsSuccess 'success message'", "400 {object} kmuxdocs.DocsError 'error message'").Tags(tbName).Summary("Update a row from " + tbName)
 				}
 				tableMethods[tbName] = tableMethods[tbName] + ",patch"
 			case "delete", "DELETE":
 				deleteRoute := app.DELETE(basePath+"/"+tbName+"/:id", modelDelete)
 				if docsUsed && len(gendocs) == 1 && gendocs[0] {
-					deleteRoute.In("id path int required 'Pk column'").Out("200 {object} korm.DocsSuccess 'success message'", "400 {object} korm.DocsError 'error message'").Tags(tbName).Summary("Delete a row from " + tbName)
+					deleteRoute.In("id path int required 'Pk column'").Out("200 {object} kmuxdocs.DocsSuccess 'success message'", "400 {object} kmuxdocs.DocsError 'error message'").Tags(tbName).Summary("Delete a row from " + tbName)
 				}
 				tableMethods[tbName] = tableMethods[tbName] + ",delete"
 			case "*":
@@ -295,12 +301,12 @@ func RegisterTable[T comparable](table TableRegistration[T], gendocs ...bool) er
 				patchRoute := app.PATCH(basePath+"/"+tbName+"/:id", singleModelPut)
 				deleteRoute := app.DELETE(basePath+"/"+tbName+"/:id", modelDelete)
 				if docsUsed && len(gendocs) == 1 && gendocs[0] {
-					postRoute.In("thebody body " + modType + " required 'create model'").Out("200 {object} korm.DocsSuccess 'success message'").Tags(tbName).Summary("Create new row in " + tbName)
-					getallRoute.Out("200 {array} "+modType+" 'all rows'", "400 {object} korm.DocsError 'error message'").Tags(tbName).Summary("Get all rows from " + tbName)
-					getsingleRoute.In("id path int required 'Pk column'").Out("200 {object} "+modType+" 'user model'", "400 {object} korm.DocsError 'error message'").Tags(tbName).Summary("Get single row from " + tbName)
-					putRoute.In("id path int required 'Pk column'", "thebody body "+modType+" required 'model to update'").Out("200 {object} korm.DocsSuccess 'success message'", "400 {object} korm.DocsError 'error message'").Tags(tbName).Summary("Update a row from " + tbName)
-					patchRoute.In("id path int required 'Pk column'", "thebody body "+modType+" required 'model to update'").Out("200 {object} korm.DocsSuccess 'success message'", "400 {object} korm.DocsError 'error message'").Tags(tbName).Summary("Update a row from " + tbName)
-					deleteRoute.In("id path int required 'Pk column'").Out("200 {object} korm.DocsSuccess 'success message'", "400 {object} korm.DocsError 'error message'").Tags(tbName).Summary("Delete a row from " + tbName)
+					postRoute.In("thebody body " + modType + " required 'create model'").Out("200 {object} kmuxdocs.DocsSuccess 'success message'").Tags(tbName).Summary("Create new row in " + tbName)
+					getallRoute.Out("200 {array} "+modType+" 'all rows'", "400 {object} kmuxdocs.DocsError 'error message'").Tags(tbName).Summary("Get all rows from " + tbName)
+					getsingleRoute.In("id path int required 'Pk column'").Out("200 {object} "+modType+" 'user model'", "400 {object} kmuxdocs.DocsError 'error message'").Tags(tbName).Summary("Get single row from " + tbName)
+					putRoute.In("id path int required 'Pk column'", "thebody body "+modType+" required 'model to update'").Out("200 {object} kmuxdocs.DocsSuccess 'success message'", "400 {object} kmuxdocs.DocsError 'error message'").Tags(tbName).Summary("Update a row from " + tbName)
+					patchRoute.In("id path int required 'Pk column'", "thebody body "+modType+" required 'model to update'").Out("200 {object} kmuxdocs.DocsSuccess 'success message'", "400 {object} kmuxdocs.DocsError 'error message'").Tags(tbName).Summary("Update a row from " + tbName)
+					deleteRoute.In("id path int required 'Pk column'").Out("200 {object} kmuxdocs.DocsSuccess 'success message'", "400 {object} kmuxdocs.DocsError 'error message'").Tags(tbName).Summary("Delete a row from " + tbName)
 				}
 				tableMethods[tbName] = strings.ToLower(strings.Join(table.Methods, ","))
 				return nil
@@ -316,12 +322,12 @@ func RegisterTable[T comparable](table TableRegistration[T], gendocs ...bool) er
 		patchRoute := app.PATCH(basePath+"/"+tbName+"/:id", singleModelPut)
 		deleteRoute := app.DELETE(basePath+"/"+tbName+"/:id", modelDelete)
 		if docsUsed && len(gendocs) == 1 && gendocs[0] {
-			postRoute.In("thebody body " + modType + " required 'create model'").Out("200 {object} korm.DocsSuccess 'success message'").Tags(tbName).Summary("Create new row in " + tbName)
-			getallRoute.Out("200 {array} "+modType+" 'all rows'", "400 {object} korm.DocsError 'error message'").Tags(tbName).Summary("Get all rows from " + tbName)
-			getsingleRoute.In("id path int required 'Pk column'").Out("200 {object} "+modType+" 'user model'", "400 {object} korm.DocsError 'error message'").Tags(tbName).Summary("Get single row from " + tbName)
-			putRoute.In("id path int required 'Pk column'", "thebody body "+modType+" required 'model to update'").Out("200 {object} korm.DocsSuccess 'success message'", "400 {object} korm.DocsError 'error message'").Tags(tbName).Summary("Update a row from " + tbName)
-			patchRoute.In("id path int required 'Pk column'", "thebody body "+modType+" required 'model to update'").Out("200 {object} korm.DocsSuccess 'success message'", "400 {object} korm.DocsError 'error message'").Tags(tbName).Summary("Update a row from " + tbName)
-			deleteRoute.In("id path int required 'Pk column'").Out("200 {object} korm.DocsSuccess 'success message'", "400 {object} korm.DocsError 'error message'").Tags(tbName).Summary("Delete a row from " + tbName)
+			postRoute.In("thebody body " + modType + " required 'create model'").Out("200 {object} kmuxdocs.DocsSuccess 'success message'").Tags(tbName).Summary("Create new row in " + tbName)
+			getallRoute.Out("200 {array} "+modType+" 'all rows'", "400 {object} kmuxdocs.DocsError 'error message'").Tags(tbName).Summary("Get all rows from " + tbName)
+			getsingleRoute.In("id path int required 'Pk column'").Out("200 {object} "+modType+" 'user model'", "400 {object} kmuxdocs.DocsError 'error message'").Tags(tbName).Summary("Get single row from " + tbName)
+			putRoute.In("id path int required 'Pk column'", "thebody body "+modType+" required 'model to update'").Out("200 {object} kmuxdocs.DocsSuccess 'success message'", "400 {object} kmuxdocs.DocsError 'error message'").Tags(tbName).Summary("Update a row from " + tbName)
+			patchRoute.In("id path int required 'Pk column'", "thebody body "+modType+" required 'model to update'").Out("200 {object} kmuxdocs.DocsSuccess 'success message'", "400 {object} kmuxdocs.DocsError 'error message'").Tags(tbName).Summary("Update a row from " + tbName)
+			deleteRoute.In("id path int required 'Pk column'").Out("200 {object} kmuxdocs.DocsSuccess 'success message'", "400 {object} kmuxdocs.DocsError 'error message'").Tags(tbName).Summary("Delete a row from " + tbName)
 		}
 		registeredTables = append(registeredTables, tbName)
 		tableMethods[tbName] = strings.ToLower(strings.Join(table.Methods, ","))
