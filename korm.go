@@ -84,30 +84,31 @@ func New(dbType Dialect, dbName string, dbDSN ...string) error {
 			dsn += "?" + options
 		}
 	case SQLITE:
+		dbType = "sqlite3"
 		if dsn == "" {
-			dsn = "db.sqlite"
+			dsn = "db.sqlite3"
 		}
 		if !strings.Contains(dbName, SQLITE) {
-			dsn = dbName + ".sqlite"
+			dsn = dbName + ".sqlite3"
 		} else {
 			dsn = dbName
 		}
 		if options != "" {
 			dsn += "?" + options
 		} else {
-			dsn += "?_pragma=foreign_keys(1)"
+			dsn += "?_foreign_keys=true"
 		}
 	default:
-		dbType = SQLITE
-		klog.Printf("%s not handled, choices are: postgres,mysql,sqlite,maria,cockroach\n", dbType)
-		dsn = dbName + ".sqlite"
+		dbType = "sqlite3"
+		klog.Printf("%s not handled, choices are: postgres,mysql,sqlite3,maria,cockroach\n", dbType)
+		dsn = dbName + ".sqlite3"
 		if dsn == "" {
-			dsn = "db.sqlite"
+			dsn = "db.sqlite3"
 		}
 		if options != "" {
 			dsn += "?" + options
 		} else {
-			dsn += "?_pragma=foreign_keys(1)"
+			dsn += "?_foreign_keys=true"
 		}
 	}
 
@@ -207,7 +208,7 @@ func ManyToMany(table1, table2 string, dbName ...string) error {
 	case MYSQL, MARIA:
 		autoinc = "INTEGER NOT NULL PRIMARY KEY AUTO_INCREMENT"
 	default:
-		klog.Printf("dialect can be sqlite, postgres, cockroach or mysql,maria only, not %s\n", dben.Dialect)
+		klog.Printf("dialect can be sqlite3, postgres, cockroach or mysql,maria only, not %s\n", dben.Dialect)
 	}
 
 	fkeys = append(fkeys, foreignkeyStat(table1+"_id", table1, "cascade", "cascade"))
@@ -531,7 +532,7 @@ func GetAllTables(dbName ...string) []string {
 			tables = append(tables, table)
 		}
 	default:
-		klog.Printf("rddatabase type not supported, should be sqlite, postgres, cockroach, maria or mysql")
+		klog.Printf("rddatabase type not supported, should be sqlite3, postgres, cockroach, maria or mysql")
 		return nil
 	}
 	if useCache && len(tables) > 0 {

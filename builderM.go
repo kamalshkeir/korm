@@ -333,7 +333,7 @@ func (b *BuilderM) Insert(rowData map[string]any) (int, error) {
 		case MYSQL, MARIA:
 			placeholdersSlice = append(placeholdersSlice, "?")
 		default:
-			return 0, errors.New("database is neither sqlite, postgres or mysql")
+			return 0, errors.New("database is neither sqlite3, postgres or mysql")
 		}
 		keys = append(keys, k)
 		if v == true {
@@ -440,7 +440,7 @@ func (b *BuilderM) InsertR(rowData map[string]any) (map[string]any, error) {
 		case MYSQL, MARIA:
 			placeholdersSlice = append(placeholdersSlice, "?")
 		default:
-			return nil, errors.New("database is neither sqlite, postgres or mysql")
+			return nil, errors.New("database is neither sqlite3, postgres or mysql")
 		}
 		keys = append(keys, k)
 		if v == true {
@@ -553,7 +553,7 @@ func (b *BuilderM) BulkInsert(rowsData ...map[string]any) ([]int, error) {
 			case MYSQL, MARIA:
 				placeholdersSlice = append(placeholdersSlice, "?")
 			default:
-				return nil, errors.New("database is neither sqlite, postgres or mysql")
+				return nil, errors.New("database is neither sqlite3, postgres or mysql")
 			}
 			keys = append(keys, k)
 			if v == true {

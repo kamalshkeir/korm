@@ -7,7 +7,7 @@ import (
 const (
 	MIGRATION_FOLDER         = "migrations"
 	CACHE_TOPIC              = "internal-db-cache"
-	SQLITE           Dialect = "sqlite"
+	SQLITE           Dialect = "sqlite3"
 	POSTGRES         Dialect = "postgres"
 	MYSQL            Dialect = "mysql"
 	MARIA            Dialect = "maria"

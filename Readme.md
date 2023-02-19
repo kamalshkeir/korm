@@ -96,7 +96,7 @@
 
 - [Python Bus Client](#python-bus-client-example) `pip install ksbus`
 
-####  All drivers are written in Go, eliminating the need for GCC or C compilers
+####  All drivers concurrent safe read and write
 ##### Korm also supports both SQL databases and mongo through [Kormongo](https://github.com/kamalshkeir/kormongo), and has a consistent API for both
 
 #### Supported databases:
@@ -112,7 +112,7 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@v1.7.1 // latest version
+go get -u github.com/kamalshkeir/korm@v1.7.2 // latest version
 ```
 
 # Drivers moved outside this package to not get them all in your go.mod file

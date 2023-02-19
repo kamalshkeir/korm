@@ -323,8 +323,8 @@ func getRow(tbName, where string) {
 
 func migratefromfile(path string) error {
 	if !SliceContains([]string{POSTGRES, SQLITE, MYSQL, MARIA}, databases[0].Dialect) {
-		fmt.Printf(red, "database is neither postgres, sqlite or mysql ")
-		return errors.New("database is neither postgres, sqlite or mysql ")
+		fmt.Printf(red, "database is neither postgres, sqlite3 or mysql ")
+		return errors.New("database is neither postgres, sqlite3 or mysql ")
 	}
 	if path == "" {
 		fmt.Printf(red, "path cannot be empty ")

@@ -22,7 +22,7 @@ func TestMain(m *testing.M) {
 	// run tests
 	exitCode := m.Run()
 	// Cleanup for sqlite , remove file db
-	err = os.Remove(DB_TEST_NAME + ".sqlite")
+	err = os.Remove(DB_TEST_NAME + ".sqlite3")
 	if err != nil {
 		log.Fatal(err)
 	}

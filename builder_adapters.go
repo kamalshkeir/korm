@@ -157,7 +157,7 @@ func adaptConcatAndLen(str string, dialect Dialect) string {
 	if start == -1 || (dialect != SQLITE && dialect != "") {
 		return str
 	}
-	// only for sqlite
+	// only for sqlite3
 	parenthesis1 := strings.Index(str[start:], "(")
 	parenthesis2 := strings.Index(str[start:], ")")
 	inside := str[start+parenthesis1+1 : start+parenthesis2]

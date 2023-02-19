@@ -17,14 +17,14 @@ var migrationAutoCheck = true
 func checkUpdatedAtTrigger(dialect, tableName, col string) map[string][]string {
 	triggers := map[string][]string{}
 	t := "strftime('%s', 'now')"
-	if dialect == "sqlite" {
+	if dialect == SQLITE || dialect == "sqlite" {
 		st := "CREATE TRIGGER IF NOT EXISTS "
 		st += tableName + "_update_trig AFTER UPDATE ON " + tableName
 		st += " BEGIN update " + tableName + " SET " + col + " = " + t
 		st += " WHERE " + col + " = " + "NEW." + col + ";"
 		st += "End;"
 		triggers[col] = []string{st}
-	} else if dialect == "postgres" {
+	} else if dialect == POSTGRES {
 		st := "CREATE OR REPLACE FUNCTION updated_at_trig() RETURNS trigger AS $$"
 		st += " BEGIN NEW." + col + " = extract(epoch from now());RETURN NEW;"
 		st += "END;$$ LANGUAGE plpgsql;"
@@ -384,7 +384,7 @@ func handleMigrationInt(mi *migrationInput) {
 				case MYSQL, MARIA:
 					autoinc = "INTEGER NOT NULL PRIMARY KEY AUTO_INCREMENT"
 				default:
-					klog.Printf("dialect can be sqlite, postgres or mysql only, not %s\n", mi.dialect)
+					klog.Printf("dialect can be sqlite3, postgres or mysql only, not %s\n", mi.dialect)
 				}
 			case "notnull":
 				notnull = " NOT NULL"
