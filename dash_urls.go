@@ -2,7 +2,6 @@ package korm
 
 import (
 	"context"
-	"embed"
 	"net/http"
 
 	"github.com/kamalshkeir/kmux"
@@ -22,14 +21,9 @@ func init() {
 	})
 }
 
-func initAdminUrlPatterns(r *kmux.Router, StaticAndTemplatesEmbeded ...embed.FS) {
-	if EmbededDashboard && len(StaticAndTemplatesEmbeded) > 0 {
-		r.EmbededStatics(StaticDir, StaticAndTemplatesEmbeded[0], "static")
-	} else {
-		r.LocalStatics(StaticDir, "static")
-	}
+func initAdminUrlPatterns(r *kmux.Router) {
 	media_root := http.FileServer(http.Dir("./" + MediaDir))
-	r.GET(`/`+MediaDir+`/*`, func(c *kmux.Context) {
+	r.GET(`/`+MediaDir+`/*path`, func(c *kmux.Context) {
 		http.StripPrefix("/"+MediaDir+"/", media_root).ServeHTTP(c.ResponseWriter, c.Request)
 	})
 	r.GET("/mon/ping", func(c *kmux.Context) { c.Status(200).Text("pong") })
@@ -46,9 +40,9 @@ func initAdminUrlPatterns(r *kmux.Router, StaticAndTemplatesEmbeded ...embed.FS)
 	adminGroup.POST("/update/row", Admin(UpdateRowPost))
 	adminGroup.POST("/create/row", Admin(CreateModelView))
 	adminGroup.POST("/drop/table", Admin(DropTablePost))
-	adminGroup.GET("/table/model:str", Admin(AllModelsGet))
-	adminGroup.POST("/table/model:str/search", Admin(AllModelsSearch))
-	adminGroup.GET("/get/model:str/id:int", Admin(SingleModelGet))
-	adminGroup.GET("/export/table:str", Admin(ExportView))
+	adminGroup.GET("/table/:model", Admin(AllModelsGet))
+	adminGroup.POST("/table/:model/search", Admin(AllModelsSearch))
+	adminGroup.GET("/get/:model/:id", Admin(SingleModelGet))
+	adminGroup.GET("/export/:table", Admin(ExportView))
 	adminGroup.POST("/import", Admin(ImportView))
 }

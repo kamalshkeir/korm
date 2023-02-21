@@ -322,8 +322,8 @@ func WithDashboard(staticAndTemplatesEmbeded ...embed.FS) *ksbus.Server {
 	if serverBus == nil {
 		serverBus = WithBus(ksbus.NewServer())
 	}
-	cloneAndMigrateDashboard(staticAndTemplatesEmbeded...)
-	initAdminUrlPatterns(serverBus.App, staticAndTemplatesEmbeded...)
+	cloneAndMigrateDashboard(true, staticAndTemplatesEmbeded...)
+	initAdminUrlPatterns(serverBus.App)
 	var razor = `
                                __
   .'|   .'|   .'|=|'.     .'|=|  |   .'|\/|'.
@@ -336,25 +336,25 @@ func WithDashboard(staticAndTemplatesEmbeded ...embed.FS) *ksbus.Server {
 	return serverBus
 }
 
-func WithDocs(generate bool, outJsonSwagger string, handlerMiddlewares ...func(handler kmux.Handler) kmux.Handler) *ksbus.Server {
+func WithDocs(generateJsonDocs bool, outJsonDocs string, handlerMiddlewares ...func(handler kmux.Handler) kmux.Handler) *ksbus.Server {
 	if serverBus == nil {
 		serverBus = WithBus(ksbus.NewServer())
 	}
-	if outJsonSwagger != "" {
-		kmux.DocsOutJson = outJsonSwagger
+
+	if outJsonDocs != "" {
+		kmux.DocsOutJson = outJsonDocs
 	} else {
 		kmux.DocsOutJson = StaticDir + "/docs"
 	}
-	docsUsed = true
-	serverBus.App.WithDocs(generate, handlerMiddlewares...)
-	webPath := DocsUrl
 
+	docsUsed = true
+	// check swag install and init docs.Routes slice
+	serverBus.App.WithDocs(generateJsonDocs)
+	webPath := DocsUrl
 	if webPath[0] != '/' {
 		webPath = "/" + webPath
 	}
-	if webPath[len(webPath)-1] == '/' {
-		webPath = webPath[:len(webPath)-1]
-	}
+	webPath = strings.TrimSuffix(webPath, "/")
 	handler := func(c *kmux.Context) {
 		http.StripPrefix(webPath, http.FileServer(http.Dir(kmux.DocsOutJson))).ServeHTTP(c.ResponseWriter, c.Request)
 	}
@@ -363,7 +363,7 @@ func WithDocs(generate bool, outJsonSwagger string, handlerMiddlewares ...func(h
 			handler = mid(handler)
 		}
 	}
-	serverBus.App.GET(webPath+"*", handler)
+	serverBus.App.GET(webPath+"/*path", handler)
 	return serverBus
 }
 
@@ -382,9 +382,7 @@ func WithEmbededDocs(embeded embed.FS, embededDirPath string, handlerMiddlewares
 	if webPath[0] != '/' {
 		webPath = "/" + webPath
 	}
-	if webPath[len(webPath)-1] == '/' {
-		webPath = webPath[:len(webPath)-1]
-	}
+	webPath = strings.TrimSuffix(webPath, "/")
 	toembed_dir, err := fs.Sub(embeded, kmux.DocsOutJson)
 	if err != nil {
 		klog.Printf("rdServeEmbededDir error= %v\n", err)
@@ -399,7 +397,7 @@ func WithEmbededDocs(embeded embed.FS, embededDirPath string, handlerMiddlewares
 			handler = mid(handler)
 		}
 	}
-	serverBus.App.GET(webPath+"*", handler)
+	serverBus.App.GET(webPath+"/*path", handler)
 	return serverBus
 }
 

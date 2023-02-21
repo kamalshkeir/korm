@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/kamalshkeir/klog"
 	"github.com/kamalshkeir/kmux"
+	"github.com/kamalshkeir/ksbus"
 )
 
 var (
@@ -24,12 +24,10 @@ var ApiIndexHandler = func(c *kmux.Context) {
 		m[t] = tb
 	}
 	if len(tableMethods) == 0 {
-		klog.Printf("rderror: no method are allowed for the api\n")
 		c.Text("error: no method are allowed for the api")
 		return
 	}
 	if len(registeredTables) == 0 {
-		klog.Printf("rderror: no registered tables\n")
 		c.Text("error: no registered tables")
 		return
 	}
@@ -44,19 +42,16 @@ var ApiIndexHandler = func(c *kmux.Context) {
 	})
 }
 
-func WithAPI(rootPath string, middws ...func(handler kmux.Handler) kmux.Handler) error {
+func WithAPI(rootPath string, middws ...func(handler kmux.Handler) kmux.Handler) *ksbus.Server {
 	if serverBus == nil {
-		return fmt.Errorf("no server used, you can use korm.WithBus or korm.WithDashboard before executing ModelViewSet")
+		serverBus = WithBus(ksbus.NewServer())
 	}
 	if rootPath != "" {
 		basePath = rootPath
-		if !strings.HasPrefix(basePath, "/") {
+		if basePath[0] != '/' {
 			basePath = "/" + basePath
 		}
-		if strings.HasSuffix(basePath, "/") {
-			ln := len(basePath)
-			basePath = basePath[:ln-1]
-		}
+		basePath = strings.TrimSuffix(basePath, "/")
 	}
 	app := serverBus.App
 	ApiIndexHandler = wrapHandlerWithMiddlewares(ApiIndexHandler, middws...)
@@ -64,7 +59,7 @@ func WithAPI(rootPath string, middws ...func(handler kmux.Handler) kmux.Handler)
 		globalMiddws = middws
 	}
 	app.GET(basePath, ApiIndexHandler)
-	return nil
+	return serverBus
 }
 
 type TableRegistration[T comparable] struct {
@@ -93,6 +88,9 @@ func RegisterTable[T comparable](table TableRegistration[T], gendocs ...bool) er
 		if tbName == "" {
 			return fmt.Errorf("table %v not registered, use korm.AutoMigrate before", *new(T))
 		}
+	}
+	if !dashboardCloned {
+		cloneAndMigrateDashboard(false)
 	}
 
 	app := serverBus.App
@@ -131,7 +129,7 @@ func RegisterTable[T comparable](table TableRegistration[T], gendocs ...bool) er
 		if table.BuilderGetOne != nil {
 			q = table.BuilderGetOne(q)
 		}
-		rows, err := q.All()
+		rows, err := q.One()
 		if err != nil {
 			if err.Error() != "no data found" {
 				c.Status(http.StatusBadRequest).Json(map[string]any{

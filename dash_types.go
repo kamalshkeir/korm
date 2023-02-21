@@ -9,9 +9,11 @@ var (
 	PaginationPer      = 10
 	EmbededDashboard   = false
 	docsUsed           = false
+	dashboardCloned    = false
 	MediaDir           = "media"
-	AssetsDir          = "assets"
 	DocsUrl            = "/docs"
+	StaticUrl          = "/static"
+	AssetsDir          = "assets"
 	StaticDir          = path.Join(AssetsDir, "/", "static")
 	TemplatesDir       = path.Join(AssetsDir, "/", "templates")
 	RepoUser           = "kamalshkeir"

@@ -8,7 +8,7 @@ import (
 	"github.com/kamalshkeir/klog"
 )
 
-func cloneAndMigrateDashboard(staticAndTemplatesEmbeded ...embed.FS) {
+func cloneAndMigrateDashboard(migrateUser bool, staticAndTemplatesEmbeded ...embed.FS) {
 	if _, err := os.Stat(AssetsDir); err != nil && !EmbededDashboard {
 		// if not generated
 		cmd := exec.Command("git", "clone", "https://github.com/"+RepoUser+"/"+RepoName)
@@ -27,16 +27,19 @@ func cloneAndMigrateDashboard(staticAndTemplatesEmbeded ...embed.FS) {
 		klog.Printfs("grdashboard assets cloned\n")
 	}
 	if len(staticAndTemplatesEmbeded) > 0 {
-		serverBus.App.EmbededStatics(StaticDir, staticAndTemplatesEmbeded[0], "static")
-		err := serverBus.App.EmbededTemplates(staticAndTemplatesEmbeded[1], "assets/templates")
+		serverBus.App.EmbededStatics(staticAndTemplatesEmbeded[0], StaticDir, StaticUrl)
+		err := serverBus.App.EmbededTemplates(staticAndTemplatesEmbeded[1], TemplatesDir)
 		klog.CheckError(err)
 	} else {
-		serverBus.App.LocalStatics(StaticDir, "static")
-		err := serverBus.App.LocalTemplates("assets/templates")
+		serverBus.App.LocalStatics(StaticDir, StaticUrl)
+		err := serverBus.App.LocalTemplates(TemplatesDir)
 		klog.CheckError(err)
 	}
-	err := AutoMigrate[User]("users")
-	if klog.CheckError(err) {
-		return
+	dashboardCloned = true
+	if migrateUser {
+		err := AutoMigrate[User]("users")
+		if klog.CheckError(err) {
+			return
+		}
 	}
 }

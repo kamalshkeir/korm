@@ -39,7 +39,7 @@ var Auth = func(handler kmux.Handler) kmux.Handler {
 		// AUTHENTICATED AND FOUND IN DB
 		ctx := context.WithValue(c.Request.Context(), key, user)
 		*c = kmux.Context{
-			CtxParamsMap:   c.ParamsMap(),
+			CtxParams:      c.CtxParams,
 			Request:        c.Request.WithContext(ctx),
 			ResponseWriter: c.ResponseWriter,
 		}
@@ -78,7 +78,7 @@ var Admin = func(handler kmux.Handler) kmux.Handler {
 
 		ctx := context.WithValue(c.Request.Context(), key, user)
 		*c = kmux.Context{
-			CtxParamsMap:   c.ParamsMap(),
+			CtxParams:      c.CtxParams,
 			Request:        c.Request.WithContext(ctx),
 			ResponseWriter: c.ResponseWriter,
 		}
