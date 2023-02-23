@@ -363,7 +363,7 @@ func WithDocs(generateJsonDocs bool, outJsonDocs string, handlerMiddlewares ...f
 			handler = mid(handler)
 		}
 	}
-	serverBus.App.GET(webPath+"/*path", handler)
+	serverBus.App.Get(webPath+"/*path", handler)
 	return serverBus
 }
 
@@ -397,7 +397,7 @@ func WithEmbededDocs(embeded embed.FS, embededDirPath string, handlerMiddlewares
 			handler = mid(handler)
 		}
 	}
-	serverBus.App.GET(webPath+"/*path", handler)
+	serverBus.App.Get(webPath+"/*path", handler)
 	return serverBus
 }
 

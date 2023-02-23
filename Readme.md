@@ -112,7 +112,7 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@v1.7.3 // latest version
+go get -u github.com/kamalshkeir/korm@v1.7.4 // latest version
 ```
 
 # Drivers moved outside this package to not get them all in your go.mod file
@@ -607,7 +607,7 @@ func main() {
 	klog.Printfs("mgrunning on http://localhost:9313\n")
 	app := srv.App
 
-	app.GET("/", korm.Auth(func(c *kmux.Context) { // work with korm.Admin also
+	app.Get("/", korm.Auth(func(c *kmux.Context) { // work with korm.Admin also
 		// c.IsAuthenticated also return bool
 		if v, ok := c.User(); ok {
 			c.Json(map[string]any{
@@ -782,7 +782,7 @@ func main() {
 	korm.WithShell() // to enable shell
 	app := bus.App
 	klog.Printfs("mgrunning on http://localhost:9313\n")
-	app.GET("/", func(c *kmux.Context) {
+	app.Get("/", func(c *kmux.Context) {
 		c.Text("hello")
 	})
 
@@ -857,7 +857,7 @@ func main() {
 	})
 
 	// built in router to the bus, check it at https://github.com/kamalshkeir/ksbus
-	serverBus.App.GET("/",func(c *kmux.Context) {
+	serverBus.App.Get("/",func(c *kmux.Context) {
 		serverBus.SendToServer("localhost:9314",map[string]any{
 			"msg":"hello from server 1",
 		})

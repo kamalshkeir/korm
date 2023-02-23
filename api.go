@@ -58,7 +58,7 @@ func WithAPI(rootPath string, middws ...func(handler kmux.Handler) kmux.Handler)
 	if len(middws) > 0 {
 		globalMiddws = middws
 	}
-	app.GET(basePath, ApiIndexHandler)
+	app.Get(basePath, ApiIndexHandler)
 	return serverBus
 }
 
@@ -256,45 +256,45 @@ func RegisterTable[T comparable](table TableRegistration[T], gendocs ...bool) er
 		for _, meth := range table.Methods {
 			switch meth {
 			case "get", "GET":
-				getallRoute := app.GET(basePath+"/"+tbName, apiAllModels)
-				getsingleRoute := app.GET(basePath+"/"+tbName+"/:id", singleModelGet)
+				getallRoute := app.Get(basePath+"/"+tbName, apiAllModels)
+				getsingleRoute := app.Get(basePath+"/"+tbName+"/:id", singleModelGet)
 				if docsUsed && len(gendocs) == 1 && gendocs[0] {
 					getallRoute.Out("200 {array} "+modType+" 'all rows'", "400 {object} kmuxdocs.DocsError 'error message'").Tags(tbName).Summary("Get all rows from " + tbName)
 					getsingleRoute.In("id path int required 'Pk column'").Out("200 {object} "+modType+" 'user model'", "400 {object} kmuxdocs.DocsError 'error message'").Tags(tbName).Summary("Get single row from " + tbName)
 				}
 				tableMethods[tbName] = tableMethods[tbName] + ",get"
 			case "post", "POST":
-				postRoute := app.POST(basePath+"/"+tbName, modelCreate)
+				postRoute := app.Post(basePath+"/"+tbName, modelCreate)
 				if docsUsed && len(gendocs) == 1 && gendocs[0] {
 					postRoute.In("thebody body " + modType + " required 'create model'").Out("200 {object} kmuxdocs.DocsSuccess 'success message'").Tags(tbName).Summary("Create new row in " + tbName)
 				}
 				tableMethods[tbName] = tableMethods[tbName] + ",post"
 			case "put", "PUT":
-				putRoute := app.PUT(basePath+"/"+tbName+"/:id", singleModelPut)
+				putRoute := app.Put(basePath+"/"+tbName+"/:id", singleModelPut)
 				if docsUsed && len(gendocs) == 1 && gendocs[0] {
 					putRoute.In("id path int required 'Pk column'", "thebody body "+modType+" required 'model to update'").Out("200 {object} kmuxdocs.DocsSuccess 'success message'", "400 {object} kmuxdocs.DocsError 'error message'").Tags(tbName).Summary("Update a row from " + tbName)
 				}
 				tableMethods[tbName] = tableMethods[tbName] + ",put"
 			case "patch", "PATCH":
-				patchRoute := app.PATCH(basePath+"/"+tbName+"/:id", singleModelPut)
+				patchRoute := app.Patch(basePath+"/"+tbName+"/:id", singleModelPut)
 				if docsUsed && len(gendocs) == 1 && gendocs[0] {
 					patchRoute.In("id path int required 'Pk column'", "thebody body "+modType+" required 'model to update'").Out("200 {object} kmuxdocs.DocsSuccess 'success message'", "400 {object} kmuxdocs.DocsError 'error message'").Tags(tbName).Summary("Update a row from " + tbName)
 				}
 				tableMethods[tbName] = tableMethods[tbName] + ",patch"
 			case "delete", "DELETE":
-				deleteRoute := app.DELETE(basePath+"/"+tbName+"/:id", modelDelete)
+				deleteRoute := app.Delete(basePath+"/"+tbName+"/:id", modelDelete)
 				if docsUsed && len(gendocs) == 1 && gendocs[0] {
 					deleteRoute.In("id path int required 'Pk column'").Out("200 {object} kmuxdocs.DocsSuccess 'success message'", "400 {object} kmuxdocs.DocsError 'error message'").Tags(tbName).Summary("Delete a row from " + tbName)
 				}
 				tableMethods[tbName] = tableMethods[tbName] + ",delete"
 			case "*":
 				table.Methods = append(table.Methods, "get", "post", "put", "patch", "delete")
-				postRoute := app.POST(basePath+"/"+tbName, modelCreate)
-				getallRoute := app.GET(basePath+"/"+tbName, apiAllModels)
-				getsingleRoute := app.GET(basePath+"/"+tbName+"/:id", singleModelGet)
-				putRoute := app.PUT(basePath+"/"+tbName+"/:id", singleModelPut)
-				patchRoute := app.PATCH(basePath+"/"+tbName+"/:id", singleModelPut)
-				deleteRoute := app.DELETE(basePath+"/"+tbName+"/:id", modelDelete)
+				postRoute := app.Post(basePath+"/"+tbName, modelCreate)
+				getallRoute := app.Get(basePath+"/"+tbName, apiAllModels)
+				getsingleRoute := app.Get(basePath+"/"+tbName+"/:id", singleModelGet)
+				putRoute := app.Put(basePath+"/"+tbName+"/:id", singleModelPut)
+				patchRoute := app.Patch(basePath+"/"+tbName+"/:id", singleModelPut)
+				deleteRoute := app.Delete(basePath+"/"+tbName+"/:id", modelDelete)
 				if docsUsed && len(gendocs) == 1 && gendocs[0] {
 					postRoute.In("thebody body " + modType + " required 'create model'").Out("200 {object} kmuxdocs.DocsSuccess 'success message'").Tags(tbName).Summary("Create new row in " + tbName)
 					getallRoute.Out("200 {array} "+modType+" 'all rows'", "400 {object} kmuxdocs.DocsError 'error message'").Tags(tbName).Summary("Get all rows from " + tbName)
@@ -310,12 +310,12 @@ func RegisterTable[T comparable](table TableRegistration[T], gendocs ...bool) er
 		registeredTables = append(registeredTables, tbName)
 	} else {
 		table.Methods = append(table.Methods, "get", "post", "put", "patch", "delete")
-		postRoute := app.POST(basePath+"/"+tbName, modelCreate)
-		getallRoute := app.GET(basePath+"/"+tbName, apiAllModels)
-		getsingleRoute := app.GET(basePath+"/"+tbName+"/:id", singleModelGet)
-		putRoute := app.PUT(basePath+"/"+tbName+"/:id", singleModelPut)
-		patchRoute := app.PATCH(basePath+"/"+tbName+"/:id", singleModelPut)
-		deleteRoute := app.DELETE(basePath+"/"+tbName+"/:id", modelDelete)
+		postRoute := app.Post(basePath+"/"+tbName, modelCreate)
+		getallRoute := app.Get(basePath+"/"+tbName, apiAllModels)
+		getsingleRoute := app.Get(basePath+"/"+tbName+"/:id", singleModelGet)
+		putRoute := app.Put(basePath+"/"+tbName+"/:id", singleModelPut)
+		patchRoute := app.Patch(basePath+"/"+tbName+"/:id", singleModelPut)
+		deleteRoute := app.Delete(basePath+"/"+tbName+"/:id", modelDelete)
 		if docsUsed && len(gendocs) == 1 && gendocs[0] {
 			postRoute.In("thebody body " + modType + " required 'create model'").Out("200 {object} kmuxdocs.DocsSuccess 'success message'").Tags(tbName).Summary("Create new row in " + tbName)
 			getallRoute.Out("200 {array} "+modType+" 'all rows'", "400 {object} kmuxdocs.DocsError 'error message'").Tags(tbName).Summary("Get all rows from " + tbName)
