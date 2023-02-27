@@ -525,15 +525,14 @@ func handleMigrationBool(mi *migrationInput) {
 		return
 	}
 	for _, tag := range tags {
-		fmt.Println("tag=", tag)
 		if strings.Contains(tag, ":") {
 			sp := strings.Split(tag, ":")
 			switch sp[0] {
 			case "default":
 				if sp[1] != "" {
-					if sp[1] == "true" {
+					if strings.Contains(sp[1], "true") {
 						defaultt = " DEFAULT 1"
-					} else if sp[1] == "false" {
+					} else if strings.Contains(sp[1], "false") {
 						defaultt = " DEFAULT 0"
 					} else {
 						defaultt = " DEFAULT " + sp[1]
@@ -607,7 +606,8 @@ func handleMigrationBool(mi *migrationInput) {
 	}
 	if defaultt != "" {
 		(*mi.res)[mi.fName] = "INTEGER NOT NULL" + defaultt + " CHECK (" + mi.fName + " IN (0, 1))"
-	} else {
+	}
+	if (*mi.res)[mi.fName] == "" {
 		(*mi.res)[mi.fName] = "INTEGER NOT NULL CHECK (" + mi.fName + " IN (0, 1))"
 	}
 }
