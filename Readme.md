@@ -57,7 +57,12 @@
 
 ### It Has :
 
-- <a href="#swagger-documentation">New: Swagger Documentation and tutorial
+- <a href="#swagger-documentation">Auto Docs with Model API and video tutoriel
+</a><a href="https://www.youtube.com/watch?v=r7rbMrTkVek">
+	<img src="https://user-images.githubusercontent.com/54605903/217871012-9c5dc1da-25bd-47d5-ac9e-c3acee7178d5.svg" width="auto" height="50px">
+</a>
+
+- <a href="#swagger-documentation">Swagger Documentation and tutorial
 </a><a href="https://www.youtube.com/watch?v=RupARTkPzf4">
 	<img src="https://user-images.githubusercontent.com/54605903/217871012-9c5dc1da-25bd-47d5-ac9e-c3acee7178d5.svg" width="auto" height="50px">
 </a>
@@ -211,7 +216,7 @@ func main() {
 
 	// Insert return the inserted PK
 	insertedId, err := korm.Model[Profile]().Insert(&Profile{
-		Name:     "sarra",
+		Name:     "test",
 		Email:    "test@example.com",
 		Password: hashedPass,
 		IsAdmin:  false,
@@ -225,7 +230,7 @@ func main() {
 
 	// InsertR return the inserted model , here it's User
 	insertedProfile, err := korm.Model[Profile]().InsertR(&Profile{
-		Name:     "ali",
+		Name:     "test1",
 		Email:    "test1@example.com",
 		Password: hashedPass,
 		IsAdmin:  !true,
@@ -235,9 +240,9 @@ func main() {
 		return
 	}
 
-	insertedProfile2, err := korm.Model[Profile]().InsertR(&Profile{
-		Name:     "sarra",
-		Email:    "test2@example.com",
+	insertedProfile3, err := korm.Model[Profile]().InsertR(&Profile{
+		Name:     "test3",
+		Email:    "test3@example.com",
 		Password: hashedPass,
 		IsAdmin:  true,
 		Age:      40,
@@ -247,7 +252,7 @@ func main() {
 	}
 
 	klog.Printf("inserted userd name returned : %s \n", insertedProfile.Name)  // should be "ali"
-	klog.Printf("inserted userd name returned : %s \n", insertedProfile2.Name) // should be "sarra"
+	klog.Printf("inserted userd name returned : %s \n", insertedProfile3.Name) // should be "sarra"
 
 	// profiles, err := korm.Model[Profile]().Select("email", "uuid").OrderBy("-id").Limit(10).Page(1).All()
 	profiles, err := korm.Model[Profile]().All()
