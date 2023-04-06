@@ -9,15 +9,15 @@ require (
 	github.com/kamalshkeir/kmap v1.1.2
 	github.com/kamalshkeir/kmux v1.11.1
 	github.com/kamalshkeir/ksbus v1.1.3
-	github.com/kamalshkeir/kstrct v1.5.5
+	github.com/kamalshkeir/kstrct v1.5.7
 )
 
 require (
 	github.com/kamalshkeir/argon v1.0.0
 	golang.org/x/crypto v0.7.0 // indirect
-	golang.org/x/net v0.8.0 // indirect
-	golang.org/x/sys v0.6.0 // indirect
-	golang.org/x/term v0.6.0 // indirect
-	golang.org/x/text v0.8.0 // indirect
+	golang.org/x/net v0.9.0 // indirect
+	golang.org/x/sys v0.7.0 // indirect
+	golang.org/x/term v0.7.0 // indirect
+	golang.org/x/text v0.9.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
 )
