@@ -501,7 +501,7 @@ func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []
 						if ts, ok := ftags[d]; ok {
 							for _, t := range ts {
 								if t == "update" {
-									v := checkUpdatedAtTrigger(db.Dialect, to_table_name, d)
+									v := checkUpdatedAtTrigger(db.Dialect, to_table_name, d, pk)
 									for _, stmts := range v {
 										trigs = stmts
 									}

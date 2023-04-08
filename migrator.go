@@ -14,14 +14,16 @@ import (
 
 var migrationAutoCheck = true
 
-func checkUpdatedAtTrigger(dialect, tableName, col string) map[string][]string {
+// CREATE TRIGGER IF NOT EXISTS users_update_trig AFTER UPDATE ON
+
+func checkUpdatedAtTrigger(dialect, tableName, col, pk string) map[string][]string {
 	triggers := map[string][]string{}
 	t := "strftime('%s', 'now')"
 	if dialect == SQLITE || dialect == "sqlite" {
 		st := "CREATE TRIGGER IF NOT EXISTS "
 		st += tableName + "_update_trig AFTER UPDATE ON " + tableName
 		st += " BEGIN update " + tableName + " SET " + col + " = " + t
-		st += " WHERE " + col + " = " + "NEW." + col + ";"
+		st += " WHERE " + pk + " = " + "NEW." + pk + ";"
 		st += "End;"
 		triggers[col] = []string{st}
 	} else if dialect == POSTGRES {
@@ -152,7 +154,7 @@ func autoMigrate[T comparable](model *T, db *DatabaseEntity, tableName string, e
 		for col, tags := range mFieldName_Tags {
 			for _, tag := range tags {
 				if tag == "update" {
-					triggers = checkUpdatedAtTrigger(db.Dialect, tableName, col)
+					triggers = checkUpdatedAtTrigger(db.Dialect, tableName, col, pk)
 				}
 			}
 		}
