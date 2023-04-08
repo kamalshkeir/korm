@@ -8,6 +8,8 @@ import (
 	"github.com/kamalshkeir/klog"
 )
 
+var staticAndTemplatesFS []embed.FS
+
 func cloneAndMigrateDashboard(migrateUser bool, staticAndTemplatesEmbeded ...embed.FS) {
 	if _, err := os.Stat(AssetsDir); err != nil && !EmbededDashboard {
 		// if not generated
@@ -26,7 +28,9 @@ func cloneAndMigrateDashboard(migrateUser bool, staticAndTemplatesEmbeded ...emb
 		}
 		klog.Printfs("grdashboard assets cloned\n")
 	}
+
 	if len(staticAndTemplatesEmbeded) > 0 {
+		staticAndTemplatesFS = staticAndTemplatesEmbeded
 		serverBus.App.EmbededStatics(staticAndTemplatesEmbeded[0], StaticDir, StaticUrl)
 		err := serverBus.App.EmbededTemplates(staticAndTemplatesEmbeded[1], TemplatesDir)
 		klog.CheckError(err)

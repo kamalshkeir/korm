@@ -581,7 +581,7 @@ var ImportView = func(c *kmux.Context) {
 
 var ManifestView = func(c *kmux.Context) {
 	if EmbededDashboard {
-		f, err := kmux.Static.ReadFile(StaticDir + "/manifest.json")
+		f, err := staticAndTemplatesFS[0].ReadFile(StaticDir + "/manifest.json")
 		if err != nil {
 			klog.Printf("rdcannot embed manifest.json from static :%v\n", err)
 			return
@@ -594,7 +594,7 @@ var ManifestView = func(c *kmux.Context) {
 
 var ServiceWorkerView = func(c *kmux.Context) {
 	if EmbededDashboard {
-		f, err := kmux.Static.ReadFile(StaticDir + "/sw.js")
+		f, err := staticAndTemplatesFS[0].ReadFile(StaticDir + "/sw.js")
 		if err != nil {
 			klog.Printf("rdcannot embed sw.js from static %v\n", err)
 			return
