@@ -117,7 +117,7 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@v1.7.6 // latest version
+go get -u github.com/kamalshkeir/korm@v1.7.7 // latest version
 ```
 
 # Drivers moved outside this package to not get them all in your go.mod file
@@ -151,14 +151,14 @@ MaxIdleTime = 15 * time.Minute
 // mongodb
 err := kormongo.New("dbmongo", "localhost:27017")
 // sqlite
-sqlitedriver.Use() // load sqlite driver --> go get github.com/kamalshkeir/sqlitedriver
-err := korm.New(korm.SQLITE, "db") // Connect
+// go get github.com/kamalshkeir/sqlitedriver
+err := korm.New(korm.SQLITE, "db", sqlitedriver.Use()) // Connect
 // postgres, cockroach
-pgdriver.Use() // load postgres driver  --> go get github.com/kamalshkeir/pgdriver
-err := korm.New(korm.POSTGRES,"dbName", "user:password@localhost:5432") // Connect
+// go get github.com/kamalshkeir/pgdriver
+err := korm.New(korm.POSTGRES,"dbName", pgdriver.Use(), "user:password@localhost:5432") // Connect
 // mysql, maria
-mysqldriver.Use() // load mysql driver  --> go get github.com/kamalshkeir/mysqldriver
-err := korm.New(korm.MYSQL,"dbName","user:password@localhost:3306") // Connect
+// go get github.com/kamalshkeir/mysqldriver
+err := korm.New(korm.MYSQL,"dbName", mysqldriver.Use(), "user:password@localhost:3306") // Connect
 
 korm.Shutdown(databasesName ...string) error
 kormongo.ShutdownDatabases(databasesName ...string) error

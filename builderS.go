@@ -82,11 +82,6 @@ func (b *BuilderS[T]) Insert(model *T) (int, error) {
 	if b == nil || b.tableName == "" {
 		return 0, ErrTableNotFound
 	}
-	if useCache {
-		cachebus.Publish(CACHE_TOPIC, map[string]any{
-			"type": "create",
-		})
-	}
 	db, err := GetMemoryDatabase(b.database)
 	if klog.CheckError(err) {
 		return 0, err
@@ -208,11 +203,6 @@ func (b *BuilderS[T]) Insert(model *T) (int, error) {
 func (b *BuilderS[T]) InsertR(model *T) (T, error) {
 	if b == nil || b.tableName == "" {
 		return *new(T), ErrTableNotFound
-	}
-	if useCache {
-		cachebus.Publish(CACHE_TOPIC, map[string]any{
-			"type": "create",
-		})
 	}
 	db, err := GetMemoryDatabase(b.database)
 	if klog.CheckError(err) {
@@ -336,11 +326,6 @@ func (b *BuilderS[T]) InsertR(model *T) (T, error) {
 func (b *BuilderS[T]) BulkInsert(models ...*T) ([]int, error) {
 	if b == nil || b.tableName == "" {
 		return nil, ErrTableNotFound
-	}
-	if useCache {
-		cachebus.Publish(CACHE_TOPIC, map[string]any{
-			"type": "create",
-		})
 	}
 	db, err := GetMemoryDatabase(b.database)
 	if err != nil {
@@ -474,11 +459,6 @@ func (b *BuilderS[T]) AddRelated(relatedTable string, whereRelatedTable string, 
 	if b == nil || b.tableName == "" {
 		return 0, ErrTableNotFound
 	}
-	if useCache {
-		cachebus.Publish(CACHE_TOPIC, map[string]any{
-			"type": "create",
-		})
-	}
 
 	db, _ := GetMemoryDatabase(b.database)
 
@@ -580,11 +560,6 @@ func (b *BuilderS[T]) AddRelated(relatedTable string, whereRelatedTable string, 
 func (b *BuilderS[T]) DeleteRelated(relatedTable string, whereRelatedTable string, whereRelatedArgs ...any) (int, error) {
 	if b == nil || b.tableName == "" {
 		return 0, ErrTableNotFound
-	}
-	if useCache {
-		cachebus.Publish(CACHE_TOPIC, map[string]any{
-			"type": "delete",
-		})
 	}
 	relationTableName := "m2m_" + b.tableName + "-" + b.database + "-" + relatedTable
 	if _, ok := relationsMap.Get("m2m_" + b.tableName + "-" + b.database + "-" + relatedTable); !ok {
@@ -796,11 +771,6 @@ func (b *BuilderS[T]) Set(query string, args ...any) (int, error) {
 	if b == nil || b.tableName == "" {
 		return 0, ErrTableNotFound
 	}
-	if useCache {
-		cachebus.Publish(CACHE_TOPIC, map[string]any{
-			"type": "update",
-		})
-	}
 	if onSet != nil {
 		mToSet := map[string]any{}
 		sp := strings.Split(query, ",")
@@ -859,11 +829,6 @@ func (b *BuilderS[T]) Delete() (int, error) {
 	if b == nil || b.tableName == "" {
 		return 0, ErrTableNotFound
 	}
-	if useCache {
-		cachebus.Publish(CACHE_TOPIC, map[string]any{
-			"type": "delete",
-		})
-	}
 	db, err := GetMemoryDatabase(b.database)
 	if klog.CheckError(err) {
 		return 0, err
@@ -908,11 +873,6 @@ func (b *BuilderS[T]) Delete() (int, error) {
 func (b *BuilderS[T]) Drop() (int, error) {
 	if b == nil || b.tableName == "" {
 		return 0, ErrTableNotFound
-	}
-	if useCache {
-		cachebus.Publish(CACHE_TOPIC, map[string]any{
-			"type": "drop",
-		})
 	}
 	if onDrop != nil {
 		err := onDrop(b.database, b.tableName)

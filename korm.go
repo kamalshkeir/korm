@@ -2,6 +2,7 @@ package korm
 
 import (
 	"database/sql"
+	"database/sql/driver"
 	"embed"
 	"errors"
 	"fmt"
@@ -32,17 +33,25 @@ var (
 	relationsMap        = kmap.New[string, struct{}](false)
 	onceDone            = false
 	serverBus           *ksbus.Server
-	cachebus            *ksbus.Bus
-	switchBusMutex      sync.Mutex
 	cacheQueryS         = kmap.New[dbCache, any](false, cacheMaxMemoryMb)
 	cacheQueryM         = kmap.New[dbCache, any](false, cacheMaxMemoryMb)
 	ErrTableNotFound    = errors.New("unable to find tableName")
 	ErrBigData          = kmap.ErrLargeData
+	logQueries          = false
 )
 
+// LogQueries enable logging statement with measure time
+func LogQueries() {
+	logQueries = true
+}
+
 // NewDatabaseFromDSN the generic way to connect to all handled databases
-func New(dbType Dialect, dbName string, dbDSN ...string) error {
+func New(dbType Dialect, dbName string, dbDriver driver.Driver, dbDSN ...string) error {
 	var dsn string
+	if dbDriver == nil {
+		klog.Printf("rdNew expect a dbDriver, you can use sqlitedriver.Use that return a driver.Driver \n")
+		return fmt.Errorf("New expect a dbDriver, you can use sqlitedriver.Use that return a driver.Driver")
+	}
 	if defaultDB == "" {
 		defaultDB = dbName
 	}
@@ -112,7 +121,8 @@ func New(dbType Dialect, dbName string, dbDSN ...string) error {
 		}
 	}
 
-	conn, err := sql.Open(string(dbType), dsn)
+	sql.Register("custom", Wrap(dbDriver, &myLogAndCacheHook{}))
+	conn, err := sql.Open("custom", dsn)
 	if klog.CheckError(err) {
 		return err
 	}
@@ -143,16 +153,8 @@ func New(dbType Dialect, dbName string, dbDSN ...string) error {
 	}
 	if !onceDone {
 		if useCache {
-			cachebus = ksbus.New()
-			cachebus.Subscribe(CACHE_TOPIC, func(data map[string]any, _ ksbus.Channel) {
-				handleCache(data)
-			})
 			go RunEvery(FlushCacheEvery, func() {
-				switchBusMutex.Lock()
-				defer switchBusMutex.Unlock()
-				cachebus.Publish(CACHE_TOPIC, map[string]any{
-					"type": "clean",
-				})
+				flushCache()
 			})
 		}
 		onceDone = true
@@ -282,16 +284,8 @@ func NewFromConnection(dbType, dbName string, conn *sql.DB) error {
 	}
 	if !onceDone {
 		if useCache {
-			cachebus = ksbus.New()
-			cachebus.Subscribe(CACHE_TOPIC, func(data map[string]any, _ ksbus.Channel) {
-				handleCache(data)
-			})
 			go RunEvery(FlushCacheEvery, func() {
-				switchBusMutex.Lock()
-				defer switchBusMutex.Unlock()
-				cachebus.Publish(CACHE_TOPIC, map[string]any{
-					"type": "clean",
-				})
+				flushCache()
 			})
 		}
 		onceDone = true
@@ -302,16 +296,10 @@ func NewFromConnection(dbType, dbName string, conn *sql.DB) error {
 
 // WithBus take ksbus.NewServer() that can be Run, RunTLS, RunAutoTLS
 func WithBus(bus *ksbus.Server) *ksbus.Server {
-	switchBusMutex.Lock()
 	serverBus = bus
-	cachebus = bus.Bus
-	switchBusMutex.Unlock()
 	if useCache {
-		cachebus.Subscribe(CACHE_TOPIC, func(data map[string]any, _ ksbus.Channel) { handleCache(data) })
 		go RunEvery(FlushCacheEvery, func() {
-			cachebus.Publish(CACHE_TOPIC, map[string]any{
-				"type": "clean",
-			})
+			flushCache()
 		})
 	}
 	return bus
@@ -426,9 +414,7 @@ func Transaction(dbName ...string) (*sql.Tx, error) {
 
 // FlushCache send msg to the cache system to Flush all the cache, safe to use in concurrent mode, and safe to use in general, it's done every 30 minutes(korm.FlushCacheEvery) and on update , create, delete , drop
 func FlushCache() {
-	cachebus.Publish(CACHE_TOPIC, map[string]any{
-		"type": "clean",
-	})
+	flushCache()
 }
 
 // DisableCheck disable struct check for migrations on execution

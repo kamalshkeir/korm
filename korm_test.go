@@ -15,7 +15,7 @@ var DB_TEST_NAME = "test"
 func TestMain(m *testing.M) {
 	//sqlitedriver.Use()
 	DisableCheck()
-	err := New(SQLITE, DB_TEST_NAME)
+	err := New(SQLITE, DB_TEST_NAME, nil)
 	if err != nil {
 		log.Fatal(err)
 	}

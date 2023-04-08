@@ -1,7 +1,11 @@
 package korm
 
 import (
+	"context"
+	"fmt"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/kamalshkeir/kmux/ws"
 	"github.com/kamalshkeir/ksbus"
@@ -13,6 +17,28 @@ var (
 	onDelete func(database, table string, query string, args ...any) error
 	onDrop   func(database, table string) error
 )
+
+type myLogAndCacheHook struct{}
+
+func (h *myLogAndCacheHook) Before(ctx context.Context, query string, args ...interface{}) (context.Context, error) {
+	if logQueries {
+		fmt.Printf("> %s %q", query, args)
+		return context.WithValue(ctx, "begin", time.Now()), nil
+	}
+	return context.Background(), nil
+}
+
+func (h *myLogAndCacheHook) After(ctx context.Context, query string, args ...interface{}) (context.Context, error) {
+	if logQueries {
+		begin := ctx.Value("begin").(time.Time)
+		fmt.Printf(". took: %s\n", time.Since(begin))
+		return ctx, nil
+	}
+	if useCache && !strings.HasPrefix(strings.ToLower(query), "select") {
+		FlushCache()
+	}
+	return context.Background(), nil
+}
 
 type DbHook func(database, table string, data map[string]any) error
 

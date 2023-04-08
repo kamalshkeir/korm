@@ -926,57 +926,13 @@ func handleRename(to_table_name string, fields, cols, diff []string, db *Databas
 	}
 }
 
-func handleCache(data map[string]any) {
-	switch data["type"] {
-	case "create", "delete", "update":
-		go func() {
-			if cacheAllM.Len() > 0 {
-				cacheAllM.Flush()
-			}
-			if cacheAllS.Len() > 0 {
-				cacheAllS.Flush()
-			}
-			if cacheQueryS.Len() > 0 {
-				cacheQueryS.Flush()
-			}
-			if cacheQueryM.Len() > 0 {
-				cacheQueryM.Flush()
-			}
-			if cachesOneM.Len() > 0 {
-				cachesOneM.Flush()
-			}
-			if cacheOneS.Len() > 0 {
-				cacheOneS.Flush()
-			}
-		}()
-	case "drop", "clean":
-		go func() {
-			if cacheAllM.Len() > 0 {
-				cacheAllM.Flush()
-			}
-			if cacheAllS.Len() > 0 {
-				cacheAllS.Flush()
-			}
-			if cacheQueryS.Len() > 0 {
-				cacheQueryS.Flush()
-			}
-			if cacheQueryM.Len() > 0 {
-				cacheQueryM.Flush()
-			}
-			if cachesOneM.Len() > 0 {
-				cachesOneM.Flush()
-			}
-			if cacheOneS.Len() > 0 {
-				cacheOneS.Flush()
-			}
-			if cacheAllTables.Len() > 0 {
-				cacheAllTables.Flush()
-			}
-			if cacheAllCols.Len() > 0 {
-				cacheAllCols.Flush()
-			}
-		}()
-	default:
-		klog.Printf("CACHE DB: default case triggered %v \n", data)
-	}
+func flushCache() {
+	cacheAllM.Flush()
+	cacheAllS.Flush()
+	cacheQueryS.Flush()
+	cacheQueryM.Flush()
+	cachesOneM.Flush()
+	cacheOneS.Flush()
+	cacheAllTables.Flush()
+	cacheAllCols.Flush()
 }

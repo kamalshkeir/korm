@@ -41,7 +41,7 @@ type TestTableGorm struct {
 func TestMain(m *testing.M) {
 	var err error
 	//sqlitedriver.Use()
-	err = korm.New(korm.SQLITE, DB_BENCH_NAME)
+	//err = korm.New(korm.SQLITE, DB_BENCH_NAME)
 	if klog.CheckError(err) {
 		return
 	}
