@@ -2,8 +2,9 @@ github.com/kamalshkeir/aes v1.0.0 h1:yPbvUDctPdWtNhY5gf1IUK8Ifq8vk30ycqbqCn8GxIY
 github.com/kamalshkeir/aes v1.0.0/go.mod h1:5IAMiz3Onf0nNV1OAjc7A/H5z9pCIpRs+jmyjgFH5uQ=
 github.com/kamalshkeir/argon v1.0.0 h1:J9CyQhp7PPZq7eOIzDx7ISbT7yW+jiy9Z8J7e82BPSc=
 github.com/kamalshkeir/argon v1.0.0/go.mod h1:1MfpN5niTiIO5zWYPayb191wsM0cVH7LUDXw+9rfFWA=
-github.com/kamalshkeir/kasm v0.0.1 h1:JN/ABny+QKfKWkz7w5r8JDKZZ2Q8CSDf4ftlsZjySq0=
 github.com/kamalshkeir/kasm v0.0.1/go.mod h1:aB7Vg8R+kx104qe7Nz5nPPGKCvNYKFQsioinlTY1V1Q=
+github.com/kamalshkeir/kasm v0.0.2 h1:2OsJa39ZVFFFzxoGjVWIvpZzSutS5Vh3MHBj9Ya4VDU=
+github.com/kamalshkeir/kasm v0.0.2/go.mod h1:aB7Vg8R+kx104qe7Nz5nPPGKCvNYKFQsioinlTY1V1Q=
 github.com/kamalshkeir/kencoding v0.0.1 h1:kW4rxqQqlQ00daVlJM9O38LV/E4yoonHSwS7QZ3kXhw=
 github.com/kamalshkeir/kencoding v0.0.1/go.mod h1:34z0uVV3aBJx8VSt2SOlzqFgH9RAjEzhcyjnaLhajBQ=
 github.com/kamalshkeir/kinput v0.1.0 h1:mSGQoEE3lpxRN2azpXR2PulWHMNEvJeQVAXbqDfL0uw=
