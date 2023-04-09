@@ -10,15 +10,12 @@ require (
 	github.com/kamalshkeir/kmux v1.11.6
 	github.com/kamalshkeir/ksbus v1.1.3
 	github.com/kamalshkeir/kstrct v1.5.8
+	github.com/kamalshkeir/argon v1.0.0
 )
 
 require (
 	github.com/kamalshkeir/kasm v0.0.1 // indirect
 	github.com/kamalshkeir/kencoding v0.0.1 // indirect
-)
-
-require (
-	github.com/kamalshkeir/argon v1.0.0
 	golang.org/x/crypto v0.8.0 // indirect
 	golang.org/x/net v0.9.0 // indirect
 	golang.org/x/sys v0.7.0 // indirect
