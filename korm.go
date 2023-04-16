@@ -1,6 +1,7 @@
 package korm
 
 import (
+	"context"
 	"database/sql"
 	"database/sql/driver"
 	"embed"
@@ -27,7 +28,7 @@ var (
 	cacheMaxMemoryMb    = 100
 	databases           = []DatabaseEntity{}
 	mutexModelTablename sync.RWMutex
-	mModelTablename     = map[any]string{}
+	mModelTablename     = map[string]any{}
 	cacheAllTables      = kmap.New[string, []string](false)
 	cacheAllCols        = kmap.New[string, map[string]string](false)
 	relationsMap        = kmap.New[string, struct{}](false)
@@ -40,12 +41,11 @@ var (
 	logQueries          = false
 )
 
-// LogQueries enable logging statement with measure time
-func LogQueries() {
-	logQueries = true
-}
-
-// NewDatabaseFromDSN the generic way to connect to all handled databases
+// New the generic way to connect to all handled databases
+//
+//	Example:
+//	  korm.New(korm.SQLITE, "db", sqlitedriver.Use())
+//	  korm.New(korm.POSTGRES,"dbName", pgdriver.Use(), "user:password@localhost:5432")
 func New(dbType Dialect, dbName string, dbDriver driver.Driver, dbDSN ...string) error {
 	var dsn string
 	if dbDriver == nil {
@@ -120,9 +120,12 @@ func New(dbType Dialect, dbName string, dbDriver driver.Driver, dbDSN ...string)
 			dsn += "?_foreign_keys=true"
 		}
 	}
-
-	sql.Register("custom", Wrap(dbDriver, &myLogAndCacheHook{}))
-	conn, err := sql.Open("custom", dsn)
+	cstm := dbType
+	if useCache {
+		sql.Register("korm", Wrap(dbDriver, &myLogAndCacheHook{}))
+		cstm = "korm"
+	}
+	conn, err := sql.Open(cstm, dsn)
 	if klog.CheckError(err) {
 		return err
 	}
@@ -151,18 +154,11 @@ func New(dbType Dialect, dbName string, dbDriver driver.Driver, dbDSN ...string)
 			Tables:  []TableEntity{},
 		})
 	}
-	if !onceDone {
-		if useCache {
-			go RunEvery(FlushCacheEvery, func() {
-				flushCache()
-			})
-		}
-		onceDone = true
-	}
 
 	return nil
 }
 
+// WithShell enable shell, go run main.go shell
 func WithShell() {
 	runned := InitShell()
 	if runned {
@@ -245,70 +241,19 @@ func ManyToMany(table1, table2 string, dbName ...string) error {
 	return nil
 }
 
-// NewSQLDatabaseFromConnection register a new database from connection, without the need for a dsn, if you are already connected to it
-func NewFromConnection(dbType, dbName string, conn *sql.DB) error {
-	if strings.HasPrefix(dbType, "cockroach") {
-		dbType = POSTGRES
+// WithBus return ksbus.NewServer() that can be Run, RunTLS, RunAutoTLS
+func WithBus() *ksbus.Server {
+	if serverBus == nil {
+		serverBus = ksbus.NewServer()
 	}
-	if dbType == MARIA {
-		dbType = MYSQL
-	}
-	if defaultDB == "" {
-		defaultDB = dbName
-	}
-
-	err := conn.Ping()
-	if err != nil {
-		klog.Printf("rdcouldn't ping database %s : %v\n", dbName, err)
-		return err
-	}
-	dbFound := false
-	for _, dbb := range databases {
-		if dbb.Name == dbName {
-			dbFound = true
-		}
-	}
-
-	conn.SetMaxOpenConns(MaxOpenConns)
-	conn.SetMaxIdleConns(MaxIdleConns)
-	conn.SetConnMaxLifetime(MaxLifetime)
-	conn.SetConnMaxIdleTime(MaxIdleTime)
-
-	if !dbFound {
-		databases = append(databases, DatabaseEntity{
-			Name:    dbName,
-			Conn:    conn,
-			Dialect: dbType,
-			Tables:  []TableEntity{},
-		})
-	}
-	if !onceDone {
-		if useCache {
-			go RunEvery(FlushCacheEvery, func() {
-				flushCache()
-			})
-		}
-		onceDone = true
-	}
-
-	return nil
+	return serverBus
 }
 
-// WithBus take ksbus.NewServer() that can be Run, RunTLS, RunAutoTLS
-func WithBus(bus *ksbus.Server) *ksbus.Server {
-	serverBus = bus
-	if useCache {
-		go RunEvery(FlushCacheEvery, func() {
-			flushCache()
-		})
-	}
-	return bus
-}
-
+// WithDashboard enable admin dashboard
 func WithDashboard(staticAndTemplatesEmbeded ...embed.FS) *ksbus.Server {
 	EmbededDashboard = len(staticAndTemplatesEmbeded) > 0
 	if serverBus == nil {
-		serverBus = WithBus(ksbus.NewServer())
+		serverBus = WithBus()
 	}
 	cloneAndMigrateDashboard(true, staticAndTemplatesEmbeded...)
 	initAdminUrlPatterns(serverBus.App)
@@ -324,9 +269,10 @@ func WithDashboard(staticAndTemplatesEmbeded ...embed.FS) *ksbus.Server {
 	return serverBus
 }
 
+// WithDocs enable swagger docs at DocsUrl default to '/docs/'
 func WithDocs(generateJsonDocs bool, outJsonDocs string, handlerMiddlewares ...func(handler kmux.Handler) kmux.Handler) *ksbus.Server {
 	if serverBus == nil {
-		serverBus = WithBus(ksbus.NewServer())
+		serverBus = WithBus()
 	}
 
 	if outJsonDocs != "" {
@@ -355,9 +301,10 @@ func WithDocs(generateJsonDocs bool, outJsonDocs string, handlerMiddlewares ...f
 	return serverBus
 }
 
+// WithEmbededDocs same as WithDocs but embeded, enable swagger docs at DocsUrl default to '/docs/'
 func WithEmbededDocs(embeded embed.FS, embededDirPath string, handlerMiddlewares ...func(handler kmux.Handler) kmux.Handler) *ksbus.Server {
 	if serverBus == nil {
-		serverBus = WithBus(ksbus.NewServer())
+		serverBus = WithBus()
 	}
 	if embededDirPath != "" {
 		kmux.DocsOutJson = embededDirPath
@@ -392,7 +339,7 @@ func WithEmbededDocs(embeded embed.FS, embededDirPath string, handlerMiddlewares
 // WithMetrics enable path /metrics (default), it take http.Handler like promhttp.Handler()
 func WithMetrics(httpHandler http.Handler) *ksbus.Server {
 	if serverBus == nil {
-		serverBus = WithBus(ksbus.NewServer())
+		serverBus = WithBus()
 	}
 	serverBus.WithMetrics(httpHandler)
 	return serverBus
@@ -401,7 +348,7 @@ func WithMetrics(httpHandler http.Handler) *ksbus.Server {
 // WithPprof enable std library pprof at /debug/pprof, prefix default to 'debug'
 func WithPprof(path ...string) *ksbus.Server {
 	if serverBus == nil {
-		serverBus = WithBus(ksbus.NewServer())
+		serverBus = WithBus()
 	}
 	serverBus.WithPprof(path...)
 	return serverBus
@@ -415,11 +362,6 @@ func Transaction(dbName ...string) (*sql.Tx, error) {
 // FlushCache send msg to the cache system to Flush all the cache, safe to use in concurrent mode, and safe to use in general, it's done every 30 minutes(korm.FlushCacheEvery) and on update , create, delete , drop
 func FlushCache() {
 	flushCache()
-}
-
-// DisableCheck disable struct check for migrations on execution
-func DisableCheck() {
-	migrationAutoCheck = false
 }
 
 // DisableCache disable the cache system, if and only if you are having problem with it, also you can korm.FlushCache on command too
@@ -472,7 +414,7 @@ func GetAllTables(dbName ...string) []string {
 
 	switch db.Dialect {
 	case POSTGRES:
-		rows, err := db.Conn.Query(`SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname NOT IN ('pg_catalog','information_schema','crdb_internal','pg_extension') AND tableowner != 'node'`)
+		rows, err := db.Conn.Query(`select tablename FROM pg_catalog.pg_tables WHERE schemaname NOT IN ('pg_catalog','information_schema','crdb_internal','pg_extension') AND tableowner != 'node'`)
 		if klog.CheckError(err) {
 			return nil
 		}
@@ -501,7 +443,7 @@ func GetAllTables(dbName ...string) []string {
 			tables = append(tables, table)
 		}
 	case SQLITE, "":
-		rows, err := db.Conn.Query(`SELECT name FROM sqlite_master WHERE type ='table' AND name NOT LIKE 'sqlite_%';`)
+		rows, err := db.Conn.Query(`select name FROM sqlite_master WHERE type ='table' AND name NOT LIKE 'sqlite_%';`)
 		if klog.CheckError(err) {
 			return nil
 		}
@@ -547,11 +489,11 @@ func GetAllColumnsTypes(table string, dbName ...string) map[string]string {
 	columns := map[string]string{}
 	switch db.Dialect {
 	case POSTGRES:
-		statement = "SELECT column_name,data_type FROM information_schema.columns WHERE table_name = '" + table + "'"
+		statement = "select column_name,data_type FROM information_schema.columns WHERE table_name = '" + table + "'"
 	case MYSQL, MARIA:
-		statement = "SELECT column_name,data_type FROM information_schema.columns WHERE table_name = '" + table + "' AND TABLE_SCHEMA = '" + db.Name + "'"
+		statement = "select column_name,data_type FROM information_schema.columns WHERE table_name = '" + table + "' AND TABLE_SCHEMA = '" + db.Name + "'"
 	default:
-		statement = "PRAGMA table_info(" + table + ");"
+		statement = "pragma table_info(" + table + ");"
 		row, err := db.Conn.Query(statement)
 		if klog.CheckError(err) {
 			return nil
@@ -620,8 +562,20 @@ func Shutdown(dbNames ...string) error {
 
 // Query query sql and return result as slice maps
 func Query(dbName string, statement string, args ...any) ([]map[string]any, error) {
-	if dbName == "" {
-		dbName = databases[0].Name
+	var db *DatabaseEntity
+	dbn := databases[0].Name
+	if dbName != "" {
+		var err error
+		dbn = dbName
+		db, err = GetMemoryDatabase(dbn)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		db = &databases[0]
+	}
+	if db.Conn == nil {
+		return nil, errors.New("no connection")
 	}
 	c := dbCache{
 		database:  dbName,
@@ -633,17 +587,99 @@ func Query(dbName string, statement string, args ...any) ([]map[string]any, erro
 			return v.([]map[string]any), nil
 		}
 	}
-	db, err := GetMemoryDatabase(dbName)
+	adaptPlaceholdersToDialect(&statement, db.Dialect)
+	adaptTimeToUnixArgs(&args)
+	var rows *sql.Rows
+	rows, err := db.Conn.Query(statement, args...)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("queryM: no data found")
+	} else if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	columns, err := rows.Columns()
 	if err != nil {
 		return nil, err
+	}
+
+	models := make([]any, len(columns))
+	modelsPtrs := make([]any, len(columns))
+
+	listMap := make([]map[string]any, 0)
+
+	for rows.Next() {
+		for i := range models {
+			models[i] = &modelsPtrs[i]
+		}
+
+		err := rows.Scan(models...)
+		if err != nil {
+			return nil, err
+		}
+
+		m := map[string]any{}
+		for i := range columns {
+			if db.Dialect == MYSQL || db.Dialect == MARIA {
+				if v, ok := modelsPtrs[i].([]byte); ok {
+					modelsPtrs[i] = string(v)
+				}
+			}
+			m[columns[i]] = modelsPtrs[i]
+		}
+		listMap = append(listMap, m)
+	}
+	if len(listMap) == 0 {
+		return nil, errors.New("no data found")
+	}
+	if useCache {
+		_ = cacheQueryM.Set(c, listMap)
+	}
+	return listMap, nil
+}
+
+// QueryNamed query sql and return result as slice maps
+//
+// Example:
+//
+//		QueryNamed("select * from users where email = :email",map[string]any{
+//			"email":"email@mail.com",
+//	    })
+func QueryNamed(statement string, args map[string]any, dbName ...string) ([]map[string]any, error) {
+	var db *DatabaseEntity
+	dbn := databases[0].Name
+	if len(dbName) > 0 && dbName[0] != "" {
+		var err error
+		dbn = dbName[0]
+		db, err = GetMemoryDatabase(dbn)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		db = &databases[0]
 	}
 	if db.Conn == nil {
 		return nil, errors.New("no connection")
 	}
-	adaptPlaceholdersToDialect(&statement, db.Dialect)
-	adaptTrueFalseArgs(&args)
+	rgs := ""
+	for _, v := range args {
+		rgs += fmt.Sprint(v)
+	}
+	c := dbCache{
+		database:  dbn,
+		statement: statement,
+		args:      rgs,
+	}
+	if useCache {
+		if v, ok := cacheQueryM.Get(c); ok {
+			return v.([]map[string]any), nil
+		}
+	}
+	query, newargs, err := AdaptNamedParams(db.Dialect, statement, args)
+	if err != nil {
+		return nil, err
+	}
 	var rows *sql.Rows
-	rows, err = db.Conn.Query(statement, args...)
+	rows, err = db.Conn.Query(query, newargs...)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("queryM: no data found")
 	} else if err != nil {
@@ -696,7 +732,7 @@ func Exec(dbName, query string, args ...any) error {
 	if conn == nil {
 		return errors.New("no connection found")
 	}
-	adaptTrueFalseArgs(&args)
+	adaptTimeToUnixArgs(&args)
 	_, err := conn.Exec(query, args...)
 	if err != nil {
 		return err
@@ -704,19 +740,211 @@ func Exec(dbName, query string, args ...any) error {
 	return nil
 }
 
-func getTableName[T comparable]() string {
-	mutexModelTablename.RLock()
-	defer mutexModelTablename.RUnlock()
-	if v, ok := mModelTablename[*new(T)]; ok {
-		return v
-	} else {
-		return ""
+// ExecContext exec sql and return error if any
+func ExecContext(ctx context.Context, dbName, query string, args ...any) error {
+	conn := GetConnection(dbName)
+	if conn == nil {
+		return errors.New("no connection found")
 	}
+	adaptTimeToUnixArgs(&args)
+	_, err := conn.ExecContext(ctx, query, args...)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
+// ExecNamed exec named sql and return error if any
+func ExecNamed(query string, args map[string]any, dbName ...string) error {
+	db := databases[0]
+	if len(dbName) > 0 && dbName[0] != "" {
+		dbb, err := GetMemoryDatabase(dbName[0])
+		if err != nil {
+			return errors.New("no connection found")
+		}
+		db = *dbb
+	}
+	q, newargs, err := AdaptNamedParams(db.Dialect, query, args)
+	if err != nil {
+		return err
+	}
+	_, err = db.Conn.Exec(q, newargs...)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// ExecContextNamed exec named sql and return error if any
+func ExecContextNamed(ctx context.Context, query string, args map[string]any, dbName ...string) error {
+	db := databases[0]
+	if len(dbName) > 0 && dbName[0] != "" {
+		dbb, err := GetMemoryDatabase(dbName[0])
+		if err != nil {
+			return errors.New("no connection found")
+		}
+		db = *dbb
+	}
+	q, newargs, err := AdaptNamedParams(db.Dialect, query, args)
+	if err != nil {
+		return err
+	}
+	_, err = db.Conn.ExecContext(ctx, q, newargs...)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func getTableName[T any]() string {
+	mutexModelTablename.RLock()
+	defer mutexModelTablename.RUnlock()
+	for k, v := range mModelTablename {
+		if _, ok := v.(T); ok {
+			return k
+		} else if _, ok := v.(*T); ok {
+			return k
+		}
+	}
+	return ""
+}
+
+// QueryNamedS query sql and return result as slice of structs T
+//
+// Example:
+//
+//		QueryNamedS[models.User]("select * from users where email = :email",map[string]any{
+//			"email":"email@mail.com",
+//	    })
+func QueryNamedS[T any](statement string, args map[string]any, dbName ...string) ([]T, error) {
+	var db *DatabaseEntity
+	dbn := databases[0].Name
+	if len(dbName) > 0 && dbName[0] != "" {
+		var err error
+		dbn = dbName[0]
+		db, err = GetMemoryDatabase(dbn)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		db = &databases[0]
+	}
+	if db.Conn == nil {
+		return nil, errors.New("no connection")
+	}
+	rgs := ""
+	for _, v := range args {
+		rgs += fmt.Sprint(v)
+	}
+	c := dbCache{
+		database:  db.Name,
+		statement: statement,
+		args:      rgs,
+	}
+	if useCache {
+		if v, ok := cacheQueryS.Get(c); ok {
+			return v.([]T), nil
+		}
+	}
+	query, newargs, err := AdaptNamedParams(db.Dialect, statement, args)
+	if err != nil {
+		return nil, err
+	}
+	tbName := getTableName[T]()
+	pk := ""
+	if tbName != "" {
+		for _, t := range db.Tables {
+			if t.Name == tbName {
+				pk = t.Pk
+			}
+		}
+	}
+	rows, err := db.Conn.Query(query, newargs...)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("no data found")
+	} else if err != nil {
+		return nil, err
+	}
+
+	defer rows.Close()
+	columns, err := rows.Columns()
+	if err != nil {
+		return nil, err
+	}
+	columns_ptr_to_values := make([]any, len(columns))
+	values := make([]any, len(columns))
+	res := make([]T, 0, 5)
+	var nested *T
+	index := 0
+	lastData := map[string]any{}
+	for rows.Next() {
+		for i := range values {
+			columns_ptr_to_values[i] = &values[i]
+		}
+
+		err := rows.Scan(columns_ptr_to_values...)
+		if err != nil {
+			klog.Printf("yl%s\n", statement)
+			return nil, err
+		}
+
+		m := map[string]any{}
+		for i, key := range columns {
+			if db.Dialect == MYSQL || db.Dialect == MARIA {
+				if v, ok := values[i].([]byte); ok {
+					values[i] = string(v)
+				}
+			}
+			m[key] = values[i]
+		}
+		if len(lastData) == 0 {
+			lastData = m
+			res = append(res, *new(T))
+			nested = &res[0]
+		}
+		if pk != "" && m[pk] == lastData[pk] {
+			lastData = m
+		} else if pk != "" && m[pk] != lastData[pk] {
+			lastData = m
+			index++
+			res = append(res, *new(T))
+			nested = &res[index]
+		}
+		err = kstrct.FillFromMap(nested, m)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if len(res) == 0 {
+		return nil, errors.New("no data found")
+	}
+	if useCache {
+		_ = cacheQueryS.Set(c, res)
+	}
+	return res, nil
+}
+
+// QueryS query sql and return result as slice of structs T
+//
+// Example:
+//
+//	QueryS[models.User]("select * from users where email = ?", "email@mail.com")
 func QueryS[T any](dbName string, statement string, args ...any) ([]T, error) {
-	if dbName == "" {
-		dbName = databases[0].Name
+	var db *DatabaseEntity
+	dbn := databases[0].Name
+	if dbName != "" {
+		var err error
+		dbn = dbName
+		db, err = GetMemoryDatabase(dbn)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		db = &databases[0]
+	}
+	if db.Conn == nil {
+		return nil, errors.New("no connection")
 	}
 	c := dbCache{
 		database:  dbName,
@@ -728,16 +956,17 @@ func QueryS[T any](dbName string, statement string, args ...any) ([]T, error) {
 			return v.([]T), nil
 		}
 	}
-	db, err := GetMemoryDatabase(dbName)
-	if err != nil {
-		return nil, err
-	}
-	if db.Conn == nil {
-		return nil, errors.New("no connection")
-	}
 	adaptPlaceholdersToDialect(&statement, db.Dialect)
-	adaptTrueFalseArgs(&args)
-
+	adaptTimeToUnixArgs(&args)
+	tbName := getTableName[T]()
+	pk := ""
+	if tbName != "" {
+		for _, t := range db.Tables {
+			if t.Name == tbName {
+				pk = t.Pk
+			}
+		}
+	}
 	rows, err := db.Conn.Query(statement, args...)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("no data found")
@@ -752,8 +981,10 @@ func QueryS[T any](dbName string, statement string, args ...any) ([]T, error) {
 	}
 	columns_ptr_to_values := make([]any, len(columns))
 	values := make([]any, len(columns))
-	res := make([]T, 0)
-
+	res := make([]T, 0, 5)
+	var nested *T
+	index := 0
+	lastData := map[string]any{}
 	for rows.Next() {
 		for i := range values {
 			columns_ptr_to_values[i] = &values[i]
@@ -765,8 +996,6 @@ func QueryS[T any](dbName string, statement string, args ...any) ([]T, error) {
 			return nil, err
 		}
 
-		row := new(T)
-
 		m := map[string]any{}
 		for i, key := range columns {
 			if db.Dialect == MYSQL || db.Dialect == MARIA {
@@ -776,11 +1005,23 @@ func QueryS[T any](dbName string, statement string, args ...any) ([]T, error) {
 			}
 			m[key] = values[i]
 		}
-		err = kstrct.FillFromMap(row, m)
+		if len(lastData) == 0 {
+			lastData = m
+			res = append(res, *new(T))
+			nested = &res[0]
+		}
+		if pk != "" && m[pk] == lastData[pk] {
+			lastData = m
+		} else if pk != "" && m[pk] != lastData[pk] {
+			lastData = m
+			index++
+			res = append(res, *new(T))
+			nested = &res[index]
+		}
+		err = kstrct.FillFromMap(nested, m)
 		if err != nil {
 			return nil, err
 		}
-		res = append(res, *row)
 	}
 
 	if len(res) == 0 {
@@ -790,4 +1031,9 @@ func QueryS[T any](dbName string, statement string, args ...any) ([]T, error) {
 		_ = cacheQueryS.Set(c, res)
 	}
 	return res, nil
+}
+
+// LogQueries enable logging sql statements with time tooked
+func LogQueries() {
+	logQueries = true
 }

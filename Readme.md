@@ -50,12 +50,18 @@
 
 #### Why settle for less when you can have the best ?
 - Django become very hard to work with when you need concurrency and async, you will need django channels and a server like daphne or uvicorn, Go have the perfect implementation
-- Django can handle at most 300 request per second, Go handle 40,000 request per second (benchmarks done on my machine)
+- Django can handle at most 300 request per second, Go handle 44,000 requests per second (benchmarks done on my machine)
 - The API is also more user-friendly and less verbose than Django's
 - Deploying an executable binary file using Korm , with automatic TLS Let's encrypt, a built-in Admin Dashboard, Interactive Shell, Eventbus to communicate between multiple Korm applications is pretty neat
 - Additionally, its caching system uses goroutines and channels to efficiently to clean the cache when rows or tables are created, updated, deleted, or dropped
 
 ### It Has :
+
+- <strong>New:</strong>  [Handle Nested or Embeded structs](#example-nested-or-embeded-structs) and slice of structs through joins, like sqlx, but sqlx doesn't handle slice of structs
+
+- <strong>New:</strong> korm.QueryNamed, QueryNamedS, korm.ExecNamed, korm.ExecContextNamed and WhereNamed(query string, args map[string]any) like :Where("email = :email",map[string]any{"email":"abc@mail.com"}) 
+
+- <strong>New:</strong>  korm.LogsQueries() that log statements and time tooked by sql queries 
 
 - <a href="#swagger-documentation">Auto Docs with Model API and video tutoriel
 </a><a href="https://www.youtube.com/watch?v=r7rbMrTkVek">
@@ -67,9 +73,9 @@
 	<img src="https://user-images.githubusercontent.com/54605903/217871012-9c5dc1da-25bd-47d5-ac9e-c3acee7178d5.svg" width="auto" height="50px">
 </a>
 
-- New: [PPROF](#pprof) Go profiling tool and [Metrics Prometheus](#metrics-prometheus)
+- [PPROF](#pprof) Go profiling tool and [Metrics Prometheus](#metrics-prometheus)
 
-- New: [Logs Middleware](#logs-middleware)
+- [Logs Middleware](#logs-middleware)
 
 - [Admin dashboard](#example-with-dashboard-you-dont-need-kormwithbus-with-it-because-withdashboard-already-call-it-and-return-the-server-bus-for-you) with ready offline and installable PWA (using /static/sw.js and /static/manifest.webmanifest). All statics mentionned in `sw.js` will be cached and served by the service worker, you can inspect the Network Tab in the browser to check it
 
@@ -77,13 +83,13 @@
 
 - [Built-in Authentication](#auth-middleware-example) using `korm.Auth` , `korm.Admin` or `korm.BasicAuth` middlewares, whenever Auth and Admin middlewares are used, you get access to the `.User` model and variable `.IsAuthenticated` from any template html like this example [admin_nav.html](#example-admin-and-auth-user-model-and-isauthenticated) 
 
-- [Interactive Shell](#interactive-shell), to CRUD in your databases, call `korm.WithBus()` after `korm.WithDashboard()`, or after `korm.New` if dashboard not used then `go run main.go shell` or `go run main.go mongoshell` for mongo
+- [Interactive Shell](#interactive-shell), to CRUD in your databases from command line, use `korm.WithShell()`
 
-- [AutoMigrate](#automigrate) directly from struct, for mongo it will only link the struct to the tableName, allowing usage of BuilderS. For all sql, whenever you add or remove a field from a migrated struct, you will get a prompt proposing to add the column for the table in the database or remove a column, you can also only generate the query without execute, and then you can use the shell to migrate the generated file, to disable the check for sql, you can use `korm.DisableCheck()`
+- [AutoMigrate](#automigrate) directly from struct
 
 - [Crud Api From Model](#example-korm-api) , similar to Model Viewsets from django rest framework
 
-- Compatible with official database/sql, and the Mongo official driver, so you can do your queries yourself using sql.DB or mongo.Client  `korm.GetConnection(dbName)` or `kormongo.GetConnection(dbName)`, and overall a painless integration of your existing codebases using database/sql
+- Compatible with official database/sql,  so you can do your queries yourself using sql.DB  `korm.GetConnection()``, and overall a painless integration of your existing codebases using database/sql
 
 - [Router/Mux](https://github.com/kamalshkeir/kmux) accessible from the serverBus after calling `korm.WithBus()` or `korm.WithDashboard()`
 
@@ -102,15 +108,12 @@
 - [Python Bus Client](#python-bus-client-example) `pip install ksbus`
 
 ####  All drivers concurrent safe read and write
-##### Korm also supports both SQL databases and mongo through [Kormongo](https://github.com/kamalshkeir/kormongo), and has a consistent API for both
-
 #### Supported databases:
 - Sqlite
-- Postgres
 - Mysql
 - Maria
+- Postgres
 - Cockroach
-- Mongo via [MONGO](https://github.com/kamalshkeir/kormongo)
 
 
 ---
@@ -122,13 +125,9 @@ go get -u github.com/kamalshkeir/korm@v1.7.9 // latest version
 
 # Drivers moved outside this package to not get them all in your go.mod file
 ```sh
-go get -u github.com/kamalshkeir/sqlitedriver@v1.2.1
-go get -u github.com/kamalshkeir/pgdriver@v1.0.0
-go get -u github.com/kamalshkeir/mysqldriver@v1.0.0
-```
-
-```sh
-go get -u github.com/kamalshkeir/kormongo@latest // Mongo ORM
+go get -u github.com/kamalshkeir/sqlitedriver@latest
+go get -u github.com/kamalshkeir/pgdriver@latest
+go get -u github.com/kamalshkeir/mysqldriver@latest
 ```
 
 ### Global Vars
@@ -148,8 +147,6 @@ MaxIdleTime = 15 * time.Minute
 
 ### Connect to a database
 ```go
-// mongodb
-err := kormongo.New("dbmongo", "localhost:27017")
 // sqlite
 // go get github.com/kamalshkeir/sqlitedriver
 err := korm.New(korm.SQLITE, "db", sqlitedriver.Use()) // Connect
@@ -159,9 +156,10 @@ err := korm.New(korm.POSTGRES,"dbName", pgdriver.Use(), "user:password@localhost
 // mysql, maria
 // go get github.com/kamalshkeir/mysqldriver
 err := korm.New(korm.MYSQL,"dbName", mysqldriver.Use(), "user:password@localhost:3306") // Connect
+// mongodb
+err := kormongo.New("dbmongo", "localhost:27017")
 
 korm.Shutdown(databasesName ...string) error
-kormongo.ShutdownDatabases(databasesName ...string) error
 ```
 
 ### Hello world example
@@ -187,13 +185,12 @@ type Profile struct {
 	CreatedAt time.Time `korm:"now"`             // auto now
 	UpdatedAt time.Time `korm:"update"`          // auto update
 	Age       int
-	AgeTwice  int `korm:"generated:age*2"`
+	LenEmailTwice  int `korm:"generated:len(email)*2"`
 	//Role string `korm:"default:'worker'"`
 }
 
 func main() {
-	sqlitedriver.Use()
-	err := korm.New(korm.SQLITE, "db")
+	err := korm.New(korm.SQLITE, "db", sqlitedriver.Use())
 	if klog.CheckError(err) {
 		return
 	}
@@ -297,7 +294,7 @@ type Bookmark struct {
 }
 
 all, _ := korm.Model[User]()
-                   .Where("id = ?",id) // notice here not like mongo, mongo will be like Where("_id",id) without '= ?'
+                   .Where("id = ?",id) 
                    .Select("item1","item2")
                    .OrderBy("created")
 				   .Limit(8)
@@ -305,56 +302,40 @@ all, _ := korm.Model[User]()
                    .All()
 ```
 
-MONGO: (No TAGS), only primitive.ObjectID `bson:"_id"` is mandatory
-```go
-type FirstTable struct {
-	Id      primitive.ObjectID `bson:"_id"`
-	Num     uint
-	Item1   string
-	Item2   string
-	Bool1   bool
-	Created time.Time
-}
-
-err = korm.AutoMigrate[FirstTable]("first_table")
-klog.CheckError(err)
-
-id,_ := primitive.ObjectIDFromHex("636d4c7bcfde1f5b625f12a4")
-all, _ := korm.Model[FirstTable]()
-                   .Where("_id",id) // notice here for mongo it's not like sql Where("_id = ?",id) 
-                   .Select("item1","item2")
-                   .OrderBy("created")
-				   .Limit(8)
-				   .Page(2)
-                   .All()
-```
 
 ### API
-#### General
 ```go
-func New(dbType, dbName string, dbDSN ...string) error
-func NewFromConnection(dbType, dbName string, conn *sql.DB) error
-func NewFromConnection(dbName string,dbConn *mongo.Database) error (kormongo)
-func QueryS[T any](dbName string, statement string, args ...any) ([]T, error)
-func Query(dbName string, statement string, args ...any) ([]map[string]any, error)
-func Exec(dbName, query string, args ...any) error
-func Transaction(dbName ...string) (*sql.Tx, error)
-func WithBus(bus *ksbus.Server) *ksbus.Server // Usage: WithBus(ksbus.NewServer()) or share an existing one
-func WithDashboard(staticAndTemplatesEmbeded ...embed.FS) *ksbus.Server
-func WithShell()
-func BeforeServersData(fn func(data any, conn *ws.Conn))
-func BeforeDataWS(fn func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) bool)
-func GetConnection(dbName ...string) *sql.DB
-func GetAllTables(dbName ...string) []string
-func GetAllColumnsTypes(table string, dbName ...string) map[string]string
-func GetMemoryTable(tbName string, dbName ...string) (TableEntity, error)
-func GetMemoryTables(dbName ...string) ([]TableEntity, error)
-func GetMemoryDatabases() []DatabaseEntity
-func GetMemoryDatabase(dbName string) (*DatabaseEntity, error)
-func Shutdown(databasesName ...string) error
-func FlushCache()
-func DisableCheck() // Korm Only, disable struct check on change to add or remove column
-func ManyToMany(table1, table2 string, dbName ...string) error // add table relation m2m 
+korm.New(dbType Dialect, dbName string, dbDriver driver.Driver, dbDSN ...string) error
+korm.LogQueries()
+korm.GetConnection(dbName ...string) *sql.DB
+korm.WithBus(bus *ksbus.Server) *ksbus.Server // Usage: WithBus(ksbus.NewServer()) or share an existing one
+korm.WithDashboard(staticAndTemplatesEmbeded ...embed.FS) *ksbus.Server
+korm.WithShell()
+korm.WithDocs(generateJsonDocs bool, outJsonDocs string, handlerMiddlewares ...func(handler kmux.Handler) kmux.Handler) *ksbus.Server
+korm.WithEmbededDocs(embeded embed.FS, embededDirPath string, handlerMiddlewares ...func(handler kmux.Handler) kmux.Handler) *ksbus.Server
+korm.WithMetrics(httpHandler http.Handler) *ksbus.Server
+korm.WithPprof(path ...string) *ksbus.Server
+korm.Transaction(dbName ...string) (*sql.Tx, error)
+korm.Exec(dbName, query string, args ...any) error
+korm.ExecContext(ctx context.Context, dbName, query string, args ...any) error
+korm.ExecNamed(query string, args map[string]any, dbName ...string) error
+korm.ExecContextNamed(ctx context.Context, query string, args map[string]any, dbName ...string) error
+korm.QueryNamed(statement string, args map[string]any, dbName ...string) ([]map[string]any, error)
+korm.QueryNamedS[T any](statement string, args map[string]any, dbName ...string) ([]T, error)
+korm.QueryS[T any](dbName string, statement string, args ...any) ([]T, error)
+korm.Query(dbName string, statement string, args ...any) ([]map[string]any, error)
+korm.BeforeServersData(fn func(data any, conn *ws.Conn))
+korm.BeforeDataWS(fn func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) bool)
+korm.GetAllTables(dbName ...string) []string
+korm.GetAllColumnsTypes(table string, dbName ...string) map[string]string
+korm.GetMemoryTable(tbName string, dbName ...string) (TableEntity, error)
+korm.GetMemoryTables(dbName ...string) ([]TableEntity, error)
+korm.GetMemoryDatabases() []DatabaseEntity
+korm.GetMemoryDatabase(dbName string) (*DatabaseEntity, error)
+korm.Shutdown(databasesName ...string) error
+korm.FlushCache()
+korm.DisableCache() // Korm Only, disable struct check on change to add or remove column
+korm.ManyToMany(table1, table2 string, dbName ...string) error // add table relation m2m 
 ```
 #### Builder `Struct`:
 ```go
@@ -507,21 +488,17 @@ korm.Database("dbNameHere").Table("tableName").Where("id = ? AND email = ?",1,"t
 Where("id = ? AND email = ?",1,"test@example.com") // this work
 Where("id,email",1,"test@example.com") // and this work
 
-korm.Table("tableName").Where("id = ? AND email = ?",1,"test@example.com").One() // SQL
-kormongo.Table("tableName").Where("id, email",1,"test@example.com").One() // Mongo
+korm.Table("tableName").Where("id = ? AND email = ?",1,"test@example.com").One() 
 
 // delete
-korm.Table("tableName").Where("id = ? AND email = ?",1,"test@example.com").Delete() // SQL
-kormongo.Table("tableName").Where("id,email", 1, "test@example.com").Delete() // Mongo
+korm.Table("tableName").Where("id = ? AND email = ?",1,"test@example.com").Delete() 
 
 // drop table
 korm.Table("tableName").Drop()
 
 // update
-korm.Table("tableName").Where("id = ?",1).Set("email = ?","new@example.com") // SQL 
+korm.Table("tableName").Where("id = ?",1).Set("email = ?","new@example.com") 
 korm.Table("tableName").Where("id",1).Set("email","new@example.com") 
-
-korm.Table("tableName").Where("id",1).Set("email","new@example.com") // Mongo
 ```
 
 ### Dashboard defaults you can set
@@ -552,8 +529,7 @@ import (
 )
 
 func main() {
-	sqlitedriver.Use()
-	err := korm.New(korm.SQLITE, "db")
+	err := korm.New(korm.SQLITE, "db", sqlitedriver.Use())
 	klog.CheckError(err)
 
 
@@ -600,8 +576,7 @@ Then you can visit `/admin`
 ### Auth middleware example
 ```go
 func main() {
-	sqlitedriver.Use()
-	err := korm.New(korm.SQLITE, "db")
+	err := korm.New(korm.SQLITE, "db", sqlitedriver.Use())
 	if klog.CheckError(err) {
 		return
 	}
@@ -776,8 +751,7 @@ import (
 )
 
 func main() {
-	sqlitedriver.Use()
-	err := korm.New(korm.SQLITE, "db")
+	err := korm.New(korm.SQLITE, "db",sqlitedriver.Use())
 	if klog.CheckError(err) {
 		return
 	}
@@ -843,10 +817,11 @@ import (
 	"github.com/kamalshkeir/kmux/ws"
 	"github.com/kamalshkeir/korm"
 	"github.com/kamalshkeir/ksbus"
+	"github.com/kamalshkeir/sqlitedriver"
 )
 
 func main() {
-	err := korm.New(korm.SQLITE,"db1")
+	err := korm.New(korm.SQLITE,"db1", sqlitedriver.Use())
 	if klog.CheckError(err) {return}
 
 	korm.WithShell()
@@ -888,10 +863,11 @@ import (
 	"github.com/kamalshkeir/kmux"
 	"github.com/kamalshkeir/kmux/ws"
 	"github.com/kamalshkeir/korm"
+	"github.com/kamalshkeir/sqlitedriver"
 )
 
 func main() {
-	err := korm.New(korm.SQLITE,"db2")
+	err := korm.New(korm.SQLITE,"db2",sqlitedriver.Use())
 	if klog.CheckError(err) {return}
 
 	korm.WithShell() // if dashboard used, this line should be after it
@@ -973,8 +949,7 @@ func TestConcatANDLen(t *testing.T) {
 Learn more about [Kmux](https://github.com/kamalshkeir/kmux)
 ```go
 func main() {
-	sqlitedriver.Use()
-	err := korm.New(korm.SQLITE, "db")
+	err := korm.New(korm.SQLITE, "db", sqlitedriver.Use())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -1270,6 +1245,103 @@ kenv.Load(".env") // load env file
 Config := &GlobalConfig{}
 err := kenv.Fill(Config) // fill struct with env vars loaded before
 ```
+
+# Example nested or embeded structs
+
+```go
+package main
+
+import (
+	"fmt"
+
+	"github.com/kamalshkeir/klog"
+	"github.com/kamalshkeir/korm"
+	"github.com/kamalshkeir/sqlitedriver"
+)
+
+// korm now able to handle filling structs directly from joins data
+// on both nested structs and nested slice of structs
+
+type Group struct {
+	Id            uint `korm:"pk"`
+	Name          string
+	GroupProfiles []Profile // this field name is used in the mapping
+	// from queries as you will notice below 'group_profiles.id' ...
+}
+
+type GroupSingleProfile struct { 
+	Id            uint `korm:"pk"`
+	Name          string
+	GroupProfiles Profile
+}
+
+type Profile struct {
+	Id      uint `korm:"pk"`
+	Name    string
+	GroupId uint `korm:"fk:groups.id:cascade:cascade"` // fk tag not mandatory
+	// this wil only avoid manual delete of profiles related 
+	// to groups or other handling methods
+}
+
+func main() {
+	err := korm.New(korm.SQLITE, "db", sqlitedriver.Use())
+	if klog.CheckError(err) {
+		return
+	}
+	defer korm.Shutdown()
+	srv := korm.WithDashboard()
+	korm.WithShell()
+	err = korm.AutoMigrate[Group]("groups")
+	klog.CheckError(err)
+	err = korm.AutoMigrate[Profile]("profiles")
+	klog.CheckError(err)
+
+	query := `
+	select groups.*,
+		   profiles.id as 'group_profiles.id',
+		   profiles.name as 'group_profiles.name',
+		   profiles.group_id as 'group_profiles.group_id'
+	from groups 
+	join profiles on profiles.group_id = groups.id;
+	`
+	groups, err := korm.QueryS[Group]("", query)
+	if klog.CheckError(err) {
+		return
+	}
+	for _, g := range groups {
+		fmt.Println(g)
+	}
+
+	srv.Run(":9313")
+}
+
+```
+
+# [Kormongo](https://github.com/kamalshkeir/kormongo)
+```go
+type FirstTable struct {
+	Id      primitive.ObjectID `bson:"_id"`
+	Num     uint
+	Item1   string
+	Item2   string
+	Bool1   bool
+	Created time.Time
+}
+
+err = korm.AutoMigrate[FirstTable]("first_table")
+klog.CheckError(err)
+
+id,_ := primitive.ObjectIDFromHex("636d4c7bcfde1f5b625f12a4")
+all, _ := korm.Model[FirstTable]()
+                   .Where("_id",id) 
+                   .Select("item1","item2")
+                   .OrderBy("created")
+				   .Limit(8)
+				   .Page(2)
+                   .All()
+```
+
+
 
 
 # Benchmark vs Tarantool, Pgx, Gorm

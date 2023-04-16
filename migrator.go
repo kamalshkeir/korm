@@ -12,10 +12,7 @@ import (
 	"github.com/kamalshkeir/kstrct"
 )
 
-var migrationAutoCheck = true
-
 // CREATE TRIGGER IF NOT EXISTS users_update_trig AFTER UPDATE ON
-
 func checkUpdatedAtTrigger(dialect, tableName, col, pk string) map[string][]string {
 	triggers := map[string][]string{}
 	t := "strftime('%s', 'now')"
@@ -41,7 +38,7 @@ func checkUpdatedAtTrigger(dialect, tableName, col, pk string) map[string][]stri
 	return triggers
 }
 
-func autoMigrate[T comparable](model *T, db *DatabaseEntity, tableName string, execute bool) (string, error) {
+func autoMigrate[T any](model *T, db *DatabaseEntity, tableName string, execute bool) (string, error) {
 	toReturnstats := []string{}
 	dialect := db.Dialect
 	s := reflect.ValueOf(model).Elem()
@@ -132,23 +129,7 @@ func autoMigrate[T comparable](model *T, db *DatabaseEntity, tableName string, e
 	}
 	statement := prepareCreateStatement(tableName, res, fkeys, cols)
 	var triggers map[string][]string
-	tbFound := false
 
-	// check if table in memory
-	for _, t := range db.Tables {
-		if t.Name == tableName {
-			tbFound = true
-			if len(t.Columns) == 0 {
-				t.Columns = cols
-			}
-			if len(t.Tags) == 0 {
-				t.Tags = mFieldName_Tags
-			}
-			if len(t.ModelTypes) == 0 {
-				t.Types = mFieldName_Type
-			}
-		}
-	}
 	// check for update field to create a trigger
 	if db.Dialect != MYSQL && db.Dialect != MARIA {
 		for col, tags := range mFieldName_Tags {
@@ -160,15 +141,6 @@ func autoMigrate[T comparable](model *T, db *DatabaseEntity, tableName string, e
 		}
 	}
 
-	if !tbFound {
-		db.Tables = append(db.Tables, TableEntity{
-			Name:       tableName,
-			Columns:    cols,
-			Tags:       mFieldName_Tags,
-			ModelTypes: mFieldName_Type,
-			Pk:         pk,
-		})
-	}
 	if Debug {
 		klog.Printf("ylstatement:%s\n", statement)
 	}
@@ -281,13 +253,20 @@ func autoMigrate[T comparable](model *T, db *DatabaseEntity, tableName string, e
 		klog.Printfs("gr %s migrated\n", tableName)
 	}
 	toReturnQuery := strings.Join(toReturnstats, ";")
+	linkModel[T](tableName, db)
 	return toReturnQuery, nil
 }
 
-func AutoMigrate[T comparable](tableName string, dbName ...string) error {
+func AutoMigrate[T any](tableName string, dbName ...string) error {
 	mutexModelTablename.Lock()
-	if _, ok := mModelTablename[*new(T)]; !ok {
-		mModelTablename[*new(T)] = tableName
+	foundm := false
+	for k := range mModelTablename {
+		if k == tableName {
+			foundm = true
+		}
+	}
+	if !foundm {
+		mModelTablename[tableName] = *new(T)
 	}
 	mutexModelTablename.Unlock()
 	var db *DatabaseEntity
@@ -316,24 +295,16 @@ func AutoMigrate[T comparable](tableName string, dbName ...string) error {
 			tbFoundDB = true
 		}
 	}
+	if !tbFoundDB {
+		_, err := autoMigrate(new(T), db, tableName, true)
+		if klog.CheckError(err) {
+			return err
+		}
+		return nil
+	}
 
 	tbFoundLocal := false
 	if len(db.Tables) == 0 {
-		if tbFoundDB && migrationAutoCheck {
-			// found db not local
-			linkModel[T](tableName, db)
-			return nil
-		} else {
-			// not db and not local
-			_, err := autoMigrate(new(T), db, tableName, true)
-			if klog.CheckError(err) {
-				return err
-			}
-			klog.Printfs("gr%s migrated\n", tableName)
-			return nil
-		}
-	} else {
-		// db have tables
 		for _, t := range db.Tables {
 			if t.Name == tableName {
 				tbFoundLocal = true
@@ -341,14 +312,8 @@ func AutoMigrate[T comparable](tableName string, dbName ...string) error {
 		}
 	}
 
-	if migrationAutoCheck && (tbFoundDB || tbFoundLocal) {
+	if !tbFoundLocal {
 		linkModel[T](tableName, db)
-		return nil
-	} else {
-		_, err := autoMigrate(new(T), db, tableName, true)
-		if klog.CheckError(err) {
-			return err
-		}
 	}
 
 	return nil

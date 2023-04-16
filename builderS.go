@@ -20,7 +20,7 @@ var (
 )
 
 // BuilderS is query builder for struct using generics
-type BuilderS[T comparable] struct {
+type BuilderS[T any] struct {
 	debug      bool
 	limit      int
 	page       int
@@ -37,7 +37,7 @@ type BuilderS[T comparable] struct {
 }
 
 // Model is a starter for Buider
-func Model[T comparable](model ...T) *BuilderS[T] {
+func Model[T any](model ...T) *BuilderS[T] {
 	tName := getTableName[T]()
 	if tName == "" {
 		return nil
@@ -48,11 +48,11 @@ func Model[T comparable](model ...T) *BuilderS[T] {
 	}
 }
 
-func ModelTable[T comparable](tableName string, model ...T) *BuilderS[T] {
+func ModelTable[T any](tableName string, model ...T) *BuilderS[T] {
 	tName := getTableName[T]()
 	if tName != tableName {
 		mutexModelTablename.Lock()
-		mModelTablename[*new(T)] = tableName
+		mModelTablename[tableName] = new(T)
 		mutexModelTablename.Unlock()
 		tName = tableName
 	}
@@ -491,7 +491,7 @@ func (b *BuilderS[T]) AddRelated(relatedTable string, whereRelatedTable string, 
 		return 0, fmt.Errorf("memory table not found:" + relatedTable)
 	}
 
-	adaptTrueFalseArgs(&whereRelatedArgs)
+	adaptTimeToUnixArgs(&whereRelatedArgs)
 	whereRelatedTable = adaptConcatAndLen(whereRelatedTable, db.Dialect)
 	adaptWhereQuery(&whereRelatedTable, relatedTable)
 	data, err := Table(relatedTable).Where(whereRelatedTable, whereRelatedArgs...).One()
@@ -543,7 +543,7 @@ func (b *BuilderS[T]) AddRelated(relatedTable string, whereRelatedTable string, 
 			return 0, err
 		}
 	}
-	stat := "INSERT INTO " + relationTableName + "(" + cols + ") SELECT ?,? WHERE NOT EXISTS (SELECT * FROM " + relationTableName + " WHERE " + wherecols + ");"
+	stat := "INSERT INTO " + relationTableName + "(" + cols + ") select ?,? WHERE NOT EXISTS (select * FROM " + relationTableName + " WHERE " + wherecols + ");"
 	adaptPlaceholdersToDialect(&stat, db.Dialect)
 	if b.debug {
 		klog.Printf("statement:%s\n", stat)
@@ -588,7 +588,7 @@ func (b *BuilderS[T]) DeleteRelated(relatedTable string, whereRelatedTable strin
 		return 0, fmt.Errorf("memory table not found:" + relatedTable)
 	}
 	ids := make([]any, 2)
-	adaptTrueFalseArgs(&whereRelatedArgs)
+	adaptTimeToUnixArgs(&whereRelatedArgs)
 	if b.database == "" && len(databases) == 1 {
 		whereRelatedTable = adaptConcatAndLen(whereRelatedTable, databases[0].Dialect)
 	} else if b.database != "" {
@@ -667,9 +667,9 @@ func (b *BuilderS[T]) GetRelated(relatedTable string, dest any) error {
 				b.selected = b.tableName + "." + b.selected
 			}
 		}
-		b.statement = "SELECT " + b.selected + " FROM " + relatedTable
+		b.statement = "select " + b.selected + " FROM " + relatedTable
 	} else {
-		b.statement = "SELECT " + relatedTable + ".* FROM " + relatedTable
+		b.statement = "select " + relatedTable + ".* FROM " + relatedTable
 	}
 
 	b.statement += " JOIN " + relationTableName + " ON " + relatedTable + ".id = " + relationTableName + "." + relatedTable + "_id"
@@ -733,9 +733,9 @@ func (b *BuilderS[T]) JoinRelated(relatedTable string, dest any) error {
 				b.selected = b.tableName + "." + b.selected
 			}
 		}
-		b.statement = "SELECT " + b.selected + " FROM " + relatedTable
+		b.statement = "select " + b.selected + " FROM " + relatedTable
 	} else {
-		b.statement = "SELECT " + relatedTable + ".*," + b.tableName + ".* FROM " + relatedTable
+		b.statement = "select " + relatedTable + ".*," + b.tableName + ".* FROM " + relatedTable
 	}
 
 	b.statement += " JOIN " + relationTableName + " ON " + relatedTable + ".id = " + relationTableName + "." + relatedTable + "_id"
@@ -799,7 +799,7 @@ func (b *BuilderS[T]) Set(query string, args ...any) (int, error) {
 	}
 	adaptSetQuery(&query)
 	b.statement = "UPDATE " + b.tableName + " SET " + query + " WHERE " + b.whereQuery
-	adaptTrueFalseArgs(&args)
+	adaptTimeToUnixArgs(&args)
 
 	adaptPlaceholdersToDialect(&b.statement, db.Dialect)
 	args = append(args, b.args...)
@@ -927,9 +927,39 @@ func (b *BuilderS[T]) Where(query string, args ...any) *BuilderS[T] {
 		}
 	}
 	adaptWhereQuery(&query, b.tableName)
-	adaptTrueFalseArgs(&args)
+	adaptTimeToUnixArgs(&args)
 	b.whereQuery = query
 	b.args = append(b.args, args...)
+	b.order = append(b.order, "where")
+	return b
+}
+
+// WhereNamed can be like : Where("email = :email",map[string]any{"email":"abc@mail.com"})
+func (b *BuilderS[T]) WhereNamed(query string, args map[string]any) *BuilderS[T] {
+	if b == nil || b.tableName == "" {
+		return nil
+	}
+	db := databases[0]
+	if b.database == "" && len(databases) == 1 {
+		query = adaptConcatAndLen(query, databases[0].Dialect)
+	} else if b.database != "" {
+		dbb, err := GetMemoryDatabase(b.database)
+		if err == nil {
+			query = adaptConcatAndLen(query, db.Dialect)
+			b.database = db.Name
+		}
+		db = *dbb
+	}
+	q, newargs, err := AdaptNamedParams(db.Dialect, query, args)
+	if err != nil {
+		b.whereQuery = query
+		for _, v := range args {
+			b.args = append(b.args, v)
+		}
+	} else {
+		b.whereQuery = q
+		b.args = newargs
+	}
 	b.order = append(b.order, "where")
 	return b
 }
@@ -1146,7 +1176,7 @@ func (b *BuilderS[T]) queryS(query string, args ...any) ([]T, error) {
 		return nil, errors.New("no connection")
 	}
 	adaptPlaceholdersToDialect(&query, db.Dialect)
-	adaptTrueFalseArgs(&args)
+	adaptTimeToUnixArgs(&args)
 	res := make([]T, 0)
 	var rows *sql.Rows
 	if b.ctx != nil {
@@ -1229,7 +1259,7 @@ func (b *BuilderS[T]) queryOneS(query string, args ...any) (res T, err error) {
 	}
 
 	adaptPlaceholdersToDialect(&query, db.Dialect)
-	adaptTrueFalseArgs(&args)
+	adaptTimeToUnixArgs(&args)
 	if db.Conn == nil {
 		return res, errors.New("no connection")
 	}
@@ -1259,6 +1289,7 @@ func (b *BuilderS[T]) queryOneS(query string, args ...any) (res T, err error) {
 
 	columns_ptr_to_values := make([]any, len(cols))
 	values := make([]any, len(cols))
+	index := 0
 	for rows.Next() {
 		for i := range values {
 			columns_ptr_to_values[i] = &values[i]
@@ -1293,8 +1324,9 @@ func (b *BuilderS[T]) queryOneS(query string, args ...any) (res T, err error) {
 		if err != nil {
 			return res, err
 		}
+		index++
 	}
-	if res == *new(T) {
+	if index == 0 {
 		return res, fmt.Errorf("no data")
 	}
 	return res, nil

@@ -45,19 +45,19 @@ func encodeHex(dst []byte, uuid [16]byte) {
 	hex.Encode(dst[24:], uuid[10:])
 }
 
-func RunEvery(t time.Duration, function any) {
+func RunEvery(t time.Duration, fn func(cancelChan chan struct{})) {
 	//Usage : go RunEvery(2 * time.Second,func(){})
-	fn, ok := function.(func())
-	if !ok {
-		klog.Printf("rdERROR : fn is not a function\n")
-		return
-	}
-
-	fn()
+	cancel := make(chan struct{})
+	fn(cancel)
 	c := time.NewTicker(t)
-
-	for range c.C {
-		fn()
+loop:
+	for {
+		select {
+		case <-c.C:
+			fn(cancel)
+		case <-cancel:
+			break loop
+		}
 	}
 }
 
@@ -246,7 +246,7 @@ func checkAndGenerateDocs(dirPath string) {
 }
 
 // getStructInfos very useful to access all struct fields data using reflect package
-func getStructInfos[T comparable](strctt *T, ignoreZeroValues ...bool) (fields []string, fValues map[string]any, fTypes map[string]string, fTags map[string][]string) {
+func getStructInfos[T any](strctt *T, ignoreZeroValues ...bool) (fields []string, fValues map[string]any, fTypes map[string]string, fTags map[string][]string) {
 	fields = []string{}
 	fValues = map[string]any{}
 	fTypes = map[string]string{}

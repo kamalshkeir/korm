@@ -44,7 +44,7 @@ var ApiIndexHandler = func(c *kmux.Context) {
 
 func WithAPI(rootPath string, middws ...func(handler kmux.Handler) kmux.Handler) *ksbus.Server {
 	if serverBus == nil {
-		serverBus = WithBus(ksbus.NewServer())
+		serverBus = WithBus()
 	}
 	if rootPath != "" {
 		basePath = rootPath
@@ -62,7 +62,7 @@ func WithAPI(rootPath string, middws ...func(handler kmux.Handler) kmux.Handler)
 	return serverBus
 }
 
-type TableRegistration[T comparable] struct {
+type TableRegistration[T any] struct {
 	TableName     string
 	Middws        []func(handler kmux.Handler) kmux.Handler
 	Methods       []string
@@ -79,7 +79,7 @@ func (tr *TableRegistration[T]) HaveMethod(method string) bool {
 	return false
 }
 
-func RegisterTable[T comparable](table TableRegistration[T], gendocs ...bool) error {
+func RegisterTable[T any](table TableRegistration[T], gendocs ...bool) error {
 	var tbName string
 	if table.TableName != "" {
 		tbName = table.TableName

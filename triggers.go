@@ -114,11 +114,11 @@ func StorageSize(dbName string) float64 {
 	var statement string
 	switch db.Dialect {
 	case SQLITE:
-		statement = "SELECT (page_count * page_size) as size FROM pragma_page_count(), pragma_page_size();"
+		statement = "select (page_count * page_size) as size FROM pragma_page_count(), pragma_page_size();"
 	case POSTGRES, COCKROACH:
-		statement = "SELECT pg_database_size('" + db.Name + "') as size;"
+		statement = "select pg_database_size('" + db.Name + "') as size;"
 	case MYSQL, MARIA:
-		statement = "SELECT SUM(data_length + index_length) as size FROM information_schema.tables WHERE table_schema = '" + db.Name + "';"
+		statement = "select SUM(data_length + index_length) as size FROM information_schema.tables WHERE table_schema = '" + db.Name + "';"
 	default:
 		return -1
 	}

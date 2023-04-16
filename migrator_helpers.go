@@ -4,14 +4,13 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"sync"
 
 	"github.com/kamalshkeir/kinput"
 	"github.com/kamalshkeir/klog"
 )
 
 // linkModel link a struct model to a  db_table_name
-func linkModel[T comparable](to_table_name string, db *DatabaseEntity) {
+func linkModel[T any](to_table_name string, db *DatabaseEntity) {
 	if db.Name == "" {
 		var err error
 		db.Name = databases[0].Name
@@ -27,43 +26,40 @@ func linkModel[T comparable](to_table_name string, db *DatabaseEntity) {
 	for k := range colsNameType {
 		cols = append(cols, k)
 	}
-	for _, list := range ftags {
-		for i := range list {
-			list[i] = strings.TrimSpace(list[i])
-		}
-	}
 	pk := ""
 	for col, tags := range ftags {
-		if SliceContains(tags, "autoinc", "pk") {
-			pk = col
-			break
+		for i := range tags {
+			tags[i] = strings.TrimSpace(tags[i])
+			if tags[i] == "pk" || tags[i] == "autoinc" {
+				pk = col
+				break
+			}
 		}
 	}
 
-	diff := DifferenceBetweenSlices(fields, cols)
-	if pk == "" {
-		pk = "id"
-		ftypes["id"] = "int"
-		if !SliceContains(fields, "id") {
-			fields = append([]string{"id"}, fields...)
-		}
-		RemoveFromSlice(&diff, "id")
-	}
-
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		// add or remove field from struct
-		handleAddOrRemove[T](to_table_name, fields, cols, diff, db, ftypes, ftags, pk)
-	}()
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		// rename field
-		handleRename(to_table_name, fields, cols, diff, db, ftags, pk)
-	}()
-	wg.Wait()
+	// diff := DifferenceBetweenSlices(fields, cols)
+	// if pk == "" {
+	// 	pk = "id"
+	// 	ftypes["id"] = "int"
+	// 	if !SliceContains(fields, "id") {
+	// 		fields = append([]string{"id"}, fields...)
+	// 	}
+	// 	RemoveFromSlice(&diff, "id")
+	// }
+	// var wg sync.WaitGroup
+	// wg.Add(1)
+	// go func() {
+	// 	defer wg.Done()
+	// 	// add or remove field from struct
+	// 	handleAddOrRemove[T](to_table_name, fields, cols, diff, db, ftypes, ftags, pk)
+	// }()
+	// wg.Add(1)
+	// go func() {
+	// 	defer wg.Done()
+	// 	// rename field
+	// 	handleRename(to_table_name, fields, cols, diff, db, ftags, pk)
+	// }()
+	// wg.Wait()
 
 	tFound := false
 	for _, t := range db.Tables {
@@ -73,6 +69,44 @@ func linkModel[T comparable](to_table_name string, db *DatabaseEntity) {
 	}
 
 	if !tFound {
+	loop:
+		for k, v := range ftypes {
+			if v, ok := ftags[k]; ok {
+				for _, t := range v {
+					if t == "-" || t == "skip" {
+						for i := range fields {
+							if fields[i] == k {
+								fields = append(fields[:i], fields[i+1:]...)
+							}
+						}
+						delete(ftags, k)
+						delete(ftypes, k)
+						delete(colsNameType, k)
+						continue loop
+					}
+				}
+			}
+			if strings.HasPrefix(v, "[]") {
+				for i := range fields {
+					if fields[i] == k {
+						fields = append(fields[:i], fields[i+1:]...)
+					}
+				}
+				delete(ftags, k)
+				delete(ftypes, k)
+				delete(colsNameType, k)
+			} else if strings.Contains(v, ".") && !strings.HasSuffix(v, "Time") {
+				// if struct
+				for i := range fields {
+					if fields[i] == k {
+						fields = append(fields[:i], fields[i+1:]...)
+					}
+				}
+				delete(ftags, k)
+				delete(ftypes, k)
+				delete(colsNameType, k)
+			}
+		}
 		db.Tables = append(db.Tables, TableEntity{
 			Name:       to_table_name,
 			Columns:    fields,
@@ -85,7 +119,7 @@ func linkModel[T comparable](to_table_name string, db *DatabaseEntity) {
 }
 
 // handleAddOrRemove handle sync with db when adding or removing from a struct auto migrated
-func handleAddOrRemove[T comparable](to_table_name string, fields, cols, diff []string, db *DatabaseEntity, ftypes map[string]string, ftags map[string][]string, pk string) {
+func handleAddOrRemove[T any](to_table_name string, fields, cols, diff []string, db *DatabaseEntity, ftypes map[string]string, ftags map[string][]string, pk string) {
 	if len(cols) > len(fields) { // extra column db
 		for _, d := range diff {
 			fileName := "drop_" + to_table_name + "_" + d + ".sql"
@@ -927,12 +961,14 @@ func handleRename(to_table_name string, fields, cols, diff []string, db *Databas
 }
 
 func flushCache() {
-	cacheAllM.Flush()
-	cacheAllS.Flush()
-	cacheQueryS.Flush()
-	cacheQueryM.Flush()
-	cachesOneM.Flush()
-	cacheOneS.Flush()
-	cacheAllTables.Flush()
-	cacheAllCols.Flush()
+	go func() {
+		cacheAllM.Flush()
+		cacheAllS.Flush()
+		cacheQueryS.Flush()
+		cacheQueryM.Flush()
+		cachesOneM.Flush()
+		cacheOneS.Flush()
+		cacheAllTables.Flush()
+		cacheAllCols.Flush()
+	}()
 }

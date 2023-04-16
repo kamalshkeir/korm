@@ -54,28 +54,28 @@ func (drv *Driver) Open(name string) (driver.Conn, error) {
 		return nil, errors.New("driver must implement driver.ConnBeginTx")
 	}
 
-	wrapped := &Conn{conn, drv.hooks}
+	wrapped := &driverConn{conn, drv.hooks}
 	if isExecer(conn) && isQueryer(conn) && isSessionResetter(conn) {
 		return &ExecerQueryerContextWithSessionResetter{wrapped,
-			&ExecerContext{wrapped}, &QueryerContext{wrapped},
+			&execerContext{wrapped}, &queryerContext{wrapped},
 			&SessionResetter{wrapped}}, nil
 	} else if isExecer(conn) && isQueryer(conn) {
-		return &ExecerQueryerContext{wrapped, &ExecerContext{wrapped},
-			&QueryerContext{wrapped}}, nil
+		return &ExecerQueryerContext{wrapped, &execerContext{wrapped},
+			&queryerContext{wrapped}}, nil
 	} else if isExecer(conn) {
 		// If conn implements an Execer interface, return a driver.Conn which
 		// also implements Execer
-		return &ExecerContext{wrapped}, nil
+		return &execerContext{wrapped}, nil
 	} else if isQueryer(conn) {
 		// If conn implements an Queryer interface, return a driver.Conn which
 		// also implements Queryer
-		return &QueryerContext{wrapped}, nil
+		return &queryerContext{wrapped}, nil
 	}
 	return wrapped, nil
 }
 
-// Conn implements a database/sql.driver.Conn
-type Conn struct {
+// driverConn implements a database/sql.driver.driverConn
+type driverConn struct {
 	Conn  driver.Conn
 	hooks Hooks
 }
@@ -85,7 +85,7 @@ func isSessionResetter(conn driver.Conn) bool {
 	return ok
 }
 
-func (conn *Conn) PrepareContext(ctx context.Context, query string) (driver.Stmt, error) {
+func (conn *driverConn) PrepareContext(ctx context.Context, query string) (driver.Stmt, error) {
 	var (
 		stmt driver.Stmt
 		err  error
@@ -104,16 +104,16 @@ func (conn *Conn) PrepareContext(ctx context.Context, query string) (driver.Stmt
 	return &Stmt{stmt, conn.hooks, query}, nil
 }
 
-func (conn *Conn) Prepare(query string) (driver.Stmt, error) { return conn.Conn.Prepare(query) }
-func (conn *Conn) Close() error                              { return conn.Conn.Close() }
-func (conn *Conn) Begin() (driver.Tx, error)                 { return conn.Conn.Begin() }
-func (conn *Conn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.Tx, error) {
+func (conn *driverConn) Prepare(query string) (driver.Stmt, error) { return conn.Conn.Prepare(query) }
+func (conn *driverConn) Close() error                              { return conn.Conn.Close() }
+func (conn *driverConn) Begin() (driver.Tx, error)                 { return conn.Conn.Begin() }
+func (conn *driverConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.Tx, error) {
 	return conn.Conn.(driver.ConnBeginTx).BeginTx(ctx, opts)
 }
 
-// ExecerContext implements a database/sql.driver.ExecerContext
-type ExecerContext struct {
-	*Conn
+// execerContext implements a database/sql.driver.execerContext
+type execerContext struct {
+	*driverConn
 }
 
 func isExecer(conn driver.Conn) bool {
@@ -127,8 +127,8 @@ func isExecer(conn driver.Conn) bool {
 	}
 }
 
-func (conn *ExecerContext) execContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
-	switch c := conn.Conn.Conn.(type) {
+func (conn *execerContext) execContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
+	switch c := conn.Conn.(type) {
 	case driver.ExecerContext:
 		return c.ExecContext(ctx, query, args)
 	case driver.Execer:
@@ -143,7 +143,7 @@ func (conn *ExecerContext) execContext(ctx context.Context, query string, args [
 	}
 }
 
-func (conn *ExecerContext) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
+func (conn *execerContext) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
 	var err error
 
 	list := namedToInterface(args)
@@ -165,7 +165,7 @@ func (conn *ExecerContext) ExecContext(ctx context.Context, query string, args [
 	return results, err
 }
 
-func (conn *ExecerContext) Exec(query string, args []driver.Value) (driver.Result, error) {
+func (conn *execerContext) Exec(query string, args []driver.Value) (driver.Result, error) {
 	// We have to implement Exec since it is required in the current version of
 	// Go for it to run ExecContext. From Go 10 it will be optional. However,
 	// this code should never run since database/sql always prefers to run
@@ -173,9 +173,9 @@ func (conn *ExecerContext) Exec(query string, args []driver.Value) (driver.Resul
 	return nil, errors.New("Exec was called when ExecContext was implemented")
 }
 
-// QueryerContext implements a database/sql.driver.QueryerContext
-type QueryerContext struct {
-	*Conn
+// queryerContext implements a database/sql.driver.queryerContext
+type queryerContext struct {
+	*driverConn
 }
 
 func isQueryer(conn driver.Conn) bool {
@@ -189,8 +189,8 @@ func isQueryer(conn driver.Conn) bool {
 	}
 }
 
-func (conn *QueryerContext) queryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
-	switch c := conn.Conn.Conn.(type) {
+func (conn *queryerContext) queryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
+	switch c := conn.Conn.(type) {
 	case driver.QueryerContext:
 		return c.QueryContext(ctx, query, args)
 	case driver.Queryer:
@@ -205,7 +205,7 @@ func (conn *QueryerContext) queryContext(ctx context.Context, query string, args
 	}
 }
 
-func (conn *QueryerContext) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
+func (conn *queryerContext) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
 	var err error
 
 	list := namedToInterface(args)
@@ -230,22 +230,22 @@ func (conn *QueryerContext) QueryContext(ctx context.Context, query string, args
 // ExecerQueryerContext implements database/sql.driver.ExecerContext and
 // database/sql.driver.QueryerContext
 type ExecerQueryerContext struct {
-	*Conn
-	*ExecerContext
-	*QueryerContext
+	*driverConn
+	*execerContext
+	*queryerContext
 }
 
 // ExecerQueryerContext implements database/sql.driver.ExecerContext and
 // database/sql.driver.QueryerContext
 type ExecerQueryerContextWithSessionResetter struct {
-	*Conn
-	*ExecerContext
-	*QueryerContext
+	*driverConn
+	*execerContext
+	*queryerContext
 	*SessionResetter
 }
 
 type SessionResetter struct {
-	*Conn
+	*driverConn
 }
 
 // Stmt implements a database/sql/driver.Stmt
@@ -333,6 +333,10 @@ func (stmt *Stmt) Query(args []driver.Value) (driver.Rows, error)  { return stmt
 // It's usually used inside a sql.Register() statement
 func Wrap(driver driver.Driver, hooks Hooks) driver.Driver {
 	return &Driver{driver, hooks}
+}
+
+func WrapConn(conn driver.Conn, hooks Hooks) driver.Conn {
+	return &driverConn{conn, hooks}
 }
 
 func namedToInterface(args []driver.NamedValue) []interface{} {

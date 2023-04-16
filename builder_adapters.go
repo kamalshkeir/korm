@@ -1,10 +1,61 @@
 package korm
 
 import (
+	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 )
+
+var varRegex = regexp.MustCompile(`:(\w+)`)
+
+func AdaptNamedParams(dialect, statement string, variables map[string]any) (string, []any, error) {
+	if !strings.Contains(statement, ":") {
+		return statement, nil, nil
+	}
+	var paramCount int
+	for i := 0; i < len(statement); i++ {
+		if statement[i] == ':' {
+			paramCount++
+			for i < len(statement) && statement[i] != ' ' && statement[i] != ',' && statement[i] != ')' {
+				i++
+			}
+		}
+	}
+	anys := make([]any, 0, paramCount)
+	buf := strings.Builder{}
+	lastIndex := 0
+	for {
+		index := strings.Index(statement[lastIndex:], ":")
+		if index == -1 {
+			break
+		}
+		start := lastIndex + index
+		end := start
+		for end < len(statement) && statement[end] != ' ' && statement[end] != ',' && statement[end] != ')' {
+			end++
+		}
+		key := statement[start+1 : end]
+		value, ok := variables[key]
+		if !ok {
+			return "", nil, fmt.Errorf("missing variable value for '%s'", key)
+		}
+		switch vt := value.(type) {
+		case time.Time:
+			value = vt.Unix()
+		case *time.Time:
+			value = vt.Unix()
+		}
+		buf.WriteString(statement[lastIndex:start])
+		buf.WriteString("?")
+		anys = append(anys, value)
+		lastIndex = end
+	}
+	buf.WriteString(statement[lastIndex:])
+	res := buf.String()
+	return res, anys, nil
+}
 
 func adaptPlaceholdersToDialect(query *string, dialect string) {
 	if strings.Contains(*query, "?") && (dialect != MYSQL) {
@@ -20,15 +71,12 @@ func adaptPlaceholdersToDialect(query *string, dialect string) {
 	}
 }
 
-func adaptTrueFalseArgs(args *[]any) {
+func adaptTimeToUnixArgs(args *[]any) {
 	for i := range *args {
-		if (*args)[i] == true {
-			(*args)[i] = 1
-		} else if (*args)[i] == false {
-			(*args)[i] = 0
-		} else if v, ok := (*args)[i].(time.Time); ok {
+		switch v := (*args)[i].(type) {
+		case time.Time:
 			(*args)[i] = v.Unix()
-		} else if v, ok := (*args)[i].(*time.Time); ok {
+		case *time.Time:
 			(*args)[i] = v.Unix()
 		}
 	}

@@ -80,9 +80,40 @@ func (b *BuilderM) Where(query string, args ...any) *BuilderM {
 		}
 	}
 	adaptWhereQuery(&query, b.tableName)
-	adaptTrueFalseArgs(&args)
+	adaptTimeToUnixArgs(&args)
 	b.whereQuery = query
 	b.args = append(b.args, args...)
+	b.order = append(b.order, "where")
+	return b
+}
+
+// WhereNamed can be like : Where("email = :email",map[string]any{"email":"abc@mail.com"})
+func (b *BuilderM) WhereNamed(query string, args map[string]any) *BuilderM {
+	if b == nil || b.tableName == "" {
+		return nil
+	}
+	db := databases[0]
+	if b.database == "" && len(databases) == 1 {
+		query = adaptConcatAndLen(query, databases[0].Dialect)
+	} else if b.database != "" {
+		var err error
+		dbb, err := GetMemoryDatabase(b.database)
+		if err == nil {
+			query = adaptConcatAndLen(query, db.Dialect)
+			b.database = db.Name
+		}
+		db = *dbb
+	}
+	q, newargs, err := AdaptNamedParams(db.Dialect, query, args)
+	if err != nil {
+		b.whereQuery = query
+		for _, v := range args {
+			b.args = append(b.args, v)
+		}
+	} else {
+		b.whereQuery = q
+		b.args = newargs
+	}
 	b.order = append(b.order, "where")
 	return b
 }
@@ -640,7 +671,7 @@ func (b *BuilderM) Set(query string, args ...any) (int, error) {
 	}
 	adaptSetQuery(&query)
 	b.statement = "UPDATE " + b.tableName + " SET " + query + " WHERE " + b.whereQuery
-	adaptTrueFalseArgs(&args)
+	adaptTimeToUnixArgs(&args)
 	adaptPlaceholdersToDialect(&b.statement, db.Dialect)
 	args = append(args, b.args...)
 	if b.debug {
@@ -779,7 +810,7 @@ func (b *BuilderM) AddRelated(relatedTable string, whereRelatedTable string, whe
 		return 0, fmt.Errorf("memory table not found:" + relatedTable)
 	}
 	ids := make([]any, 4)
-	adaptTrueFalseArgs(&whereRelatedArgs)
+	adaptTimeToUnixArgs(&whereRelatedArgs)
 	whereRelatedTable = adaptConcatAndLen(whereRelatedTable, db.Dialect)
 	adaptWhereQuery(&whereRelatedTable, relatedTable)
 	data, err := Table(relatedTable).Where(whereRelatedTable, whereRelatedArgs...).One()
@@ -830,7 +861,7 @@ func (b *BuilderM) AddRelated(relatedTable string, whereRelatedTable string, whe
 			return 0, err
 		}
 	}
-	stat := "INSERT INTO " + relationTableName + "(" + cols + ") SELECT ?,? WHERE NOT EXISTS (SELECT * FROM " + relationTableName + " WHERE " + wherecols + ");"
+	stat := "INSERT INTO " + relationTableName + "(" + cols + ") select ?,? WHERE NOT EXISTS (select * FROM " + relationTableName + " WHERE " + wherecols + ");"
 	adaptPlaceholdersToDialect(&stat, db.Dialect)
 	if b.debug {
 		klog.Printf("ylstatement:%s\n", stat)
@@ -879,9 +910,9 @@ func (b *BuilderM) GetRelated(relatedTable string, dest *[]map[string]any) error
 				b.selected = b.tableName + "." + b.selected
 			}
 		}
-		b.statement = "SELECT " + b.selected + " FROM " + relatedTable
+		b.statement = "select " + b.selected + " FROM " + relatedTable
 	} else {
-		b.statement = "SELECT " + relatedTable + ".* FROM " + relatedTable
+		b.statement = "select " + relatedTable + ".* FROM " + relatedTable
 	}
 
 	b.statement += " JOIN " + relationTableName + " ON " + relatedTable + ".id = " + relationTableName + "." + relatedTable + "_id"
@@ -950,9 +981,9 @@ func (b *BuilderM) JoinRelated(relatedTable string, dest *[]map[string]any) erro
 				b.selected = b.tableName + "." + b.selected
 			}
 		}
-		b.statement = "SELECT " + b.selected + " FROM " + relatedTable
+		b.statement = "select " + b.selected + " FROM " + relatedTable
 	} else {
-		b.statement = "SELECT " + relatedTable + ".*," + b.tableName + ".* FROM " + relatedTable
+		b.statement = "select " + relatedTable + ".*," + b.tableName + ".* FROM " + relatedTable
 	}
 	b.statement += " JOIN " + relationTableName + " ON " + relatedTable + ".id = " + relationTableName + "." + relatedTable + "_id"
 	b.statement += " JOIN " + b.tableName + " ON " + b.tableName + ".id = " + relationTableName + "." + b.tableName + "_id"
@@ -1016,7 +1047,7 @@ func (b *BuilderM) DeleteRelated(relatedTable string, whereRelatedTable string, 
 		return 0, fmt.Errorf("memory table not found:" + relatedTable)
 	}
 	ids := make([]any, 2)
-	adaptTrueFalseArgs(&whereRelatedArgs)
+	adaptTimeToUnixArgs(&whereRelatedArgs)
 	if b.database == "" && len(databases) == 1 {
 		whereRelatedTable = adaptConcatAndLen(whereRelatedTable, databases[0].Dialect)
 	} else if b.database != "" {
@@ -1072,7 +1103,7 @@ func (b *BuilderM) queryM(statement string, args ...any) ([]map[string]any, erro
 		return nil, errors.New("no connection")
 	}
 	adaptPlaceholdersToDialect(&statement, db.Dialect)
-	adaptTrueFalseArgs(&args)
+	adaptTimeToUnixArgs(&args)
 	var rows *sql.Rows
 	if b.ctx != nil {
 		rows, err = db.Conn.QueryContext(b.ctx, statement, args...)
@@ -1147,7 +1178,7 @@ func (b *BuilderM) queryS(ptrStrctSlice any, statement string, args ...any) erro
 		return err
 	}
 	adaptPlaceholdersToDialect(&statement, db.Dialect)
-	adaptTrueFalseArgs(&args)
+	adaptTimeToUnixArgs(&args)
 	if db.Conn == nil {
 		return errors.New("no connection")
 	}

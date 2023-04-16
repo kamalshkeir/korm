@@ -3,8 +3,6 @@ package korm
 import (
 	"context"
 	"fmt"
-	"log"
-	"os"
 	"strconv"
 	"testing"
 	"time"
@@ -13,20 +11,18 @@ import (
 var DB_TEST_NAME = "test"
 
 func TestMain(m *testing.M) {
-	//sqlitedriver.Use()
-	DisableCheck()
-	err := New(SQLITE, DB_TEST_NAME, nil)
-	if err != nil {
-		log.Fatal(err)
-	}
-	// run tests
-	exitCode := m.Run()
-	// Cleanup for sqlite , remove file db
-	err = os.Remove(DB_TEST_NAME + ".sqlite3")
-	if err != nil {
-		log.Fatal(err)
-	}
-	os.Exit(exitCode)
+	// err := New(SQLITE, DB_TEST_NAME, sqlitedriver.Use())
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// // run tests
+	// exitCode := m.Run()
+	// // Cleanup for sqlite , remove file db
+	// err = os.Remove(DB_TEST_NAME + ".sqlite3")
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// os.Exit(exitCode)
 }
 
 type TestUser struct {

@@ -2,11 +2,11 @@ package korm
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/kamalshkeir/klog"
 	"github.com/kamalshkeir/kmux/ws"
 	"github.com/kamalshkeir/ksbus"
 )
@@ -21,8 +21,23 @@ var (
 type myLogAndCacheHook struct{}
 
 func (h *myLogAndCacheHook) Before(ctx context.Context, query string, args ...interface{}) (context.Context, error) {
+	if useCache && len(query) > 6 {
+		if !onceDone {
+			go RunEvery(FlushCacheEvery, func(cancelChan chan struct{}) {
+				if !useCache {
+					cancelChan <- struct{}{}
+				}
+				flushCache()
+			})
+			onceDone = true
+		}
+		q := strings.TrimSpace(strings.ToLower(query[:6]))
+		if q != "select" && q != "pragma" {
+			flushCache()
+		}
+	}
 	if logQueries {
-		fmt.Printf("> %s %q", query, args)
+		klog.Printfs("yl> %s %v", query, args)
 		return context.WithValue(ctx, "begin", time.Now()), nil
 	}
 	return context.Background(), nil
@@ -31,11 +46,8 @@ func (h *myLogAndCacheHook) Before(ctx context.Context, query string, args ...in
 func (h *myLogAndCacheHook) After(ctx context.Context, query string, args ...interface{}) (context.Context, error) {
 	if logQueries {
 		begin := ctx.Value("begin").(time.Time)
-		fmt.Printf(". took: %s\n", time.Since(begin))
+		klog.Printfs("yl, took: %v\n", time.Since(begin))
 		return ctx, nil
-	}
-	if useCache && !strings.HasPrefix(strings.ToLower(query), "select") {
-		FlushCache()
 	}
 	return context.Background(), nil
 }
