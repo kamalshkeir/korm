@@ -9,13 +9,11 @@ import (
 	"net/http"
 	"net/mail"
 	"os"
-	"os/exec"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/kamalshkeir/klog"
 	"github.com/kamalshkeir/kmap"
 	"github.com/kamalshkeir/kstrct"
 )
@@ -202,8 +200,6 @@ func GetMemoryDatabase(dbName string) (*DatabaseEntity, error) {
 	}
 }
 
-var swagFound bool
-
 func DownloadFile(filepath string, url string) error {
 	// Get the data
 	resp, err := http.Get(url)
@@ -224,26 +220,26 @@ func DownloadFile(filepath string, url string) error {
 	return err
 }
 
-func checkAndGenerateDocs(dirPath string) {
-	if !swagFound {
-		if _, err := exec.LookPath("swag"); err != nil {
-			cmd := exec.Command("go", "install", "github.com/swaggo/swag/cmd/swag@latest")
-			err := cmd.Run()
-			if klog.CheckError(err) {
-				klog.Printfs("rdinstalling github.com/swaggo/swag/cmd/swag@latest : %v\n", err)
-				return
-			}
-		}
-	}
-	swagFound = true
+// var swagFound bool
 
-	cmd := exec.Command("swag", "init", "-o", dirPath, "--outputTypes", "json")
-	err := cmd.Run()
-	if err != nil {
-		klog.Printfs("executing : swag init -o %s --outputTypes json\n", dirPath)
-		klog.Printfs("rdcould not generate swagger.json")
-	}
-}
+// func checkAndGenerateDocs(dirPath string) {
+
+//if _, err := exec.LookPath("swag"); err != nil {
+// 			cmd := exec.Command("go", "install", "github.com/swaggo/swag/cmd/swag@latest")
+// 			err := cmd.Run()
+// 			if klog.CheckError(err) {
+// 				klog.Printfs("rdinstalling github.com/swaggo/swag/cmd/swag@latest : %v\n", err)
+// 				return
+// 			}
+// 		}
+
+// 	cmd := exec.Command("swag", "init", "-o", dirPath, "--outputTypes", "json")
+// 	err := cmd.Run()
+// 	if err != nil {
+// 		klog.Printfs("executing : swag init -o %s --outputTypes json\n", dirPath)
+// 		klog.Printfs("rdcould not generate swagger.json")
+// 	}
+// }
 
 // getStructInfos very useful to access all struct fields data using reflect package
 func getStructInfos[T any](strctt *T, ignoreZeroValues ...bool) (fields []string, fValues map[string]any, fTypes map[string]string, fTags map[string][]string) {

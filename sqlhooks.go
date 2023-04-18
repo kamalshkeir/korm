@@ -104,9 +104,13 @@ func (conn *driverConn) PrepareContext(ctx context.Context, query string) (drive
 	return &Stmt{stmt, conn.hooks, query}, nil
 }
 
-func (conn *driverConn) Prepare(query string) (driver.Stmt, error) { return conn.Conn.Prepare(query) }
-func (conn *driverConn) Close() error                              { return conn.Conn.Close() }
-func (conn *driverConn) Begin() (driver.Tx, error)                 { return conn.Conn.Begin() }
+func (conn *driverConn) Prepare(query string) (driver.Stmt, error) {
+	return conn.Conn.Prepare(query)
+}
+func (conn *driverConn) Close() error { return conn.Conn.Close() }
+func (conn *driverConn) Begin() (driver.Tx, error) {
+	return conn.BeginTx(context.Background(), driver.TxOptions{})
+}
 func (conn *driverConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.Tx, error) {
 	return conn.Conn.(driver.ConnBeginTx).BeginTx(ctx, opts)
 }
@@ -120,8 +124,6 @@ func isExecer(conn driver.Conn) bool {
 	switch conn.(type) {
 	case driver.ExecerContext:
 		return true
-	case driver.Execer:
-		return true
 	default:
 		return false
 	}
@@ -131,12 +133,6 @@ func (conn *execerContext) execContext(ctx context.Context, query string, args [
 	switch c := conn.Conn.(type) {
 	case driver.ExecerContext:
 		return c.ExecContext(ctx, query, args)
-	case driver.Execer:
-		dargs, err := namedValueToValue(args)
-		if err != nil {
-			return nil, err
-		}
-		return c.Exec(query, dargs)
 	default:
 		// This should not happen
 		return nil, errors.New("ExecerContext created for a non Execer driver.Conn")
@@ -146,7 +142,7 @@ func (conn *execerContext) execContext(ctx context.Context, query string, args [
 func (conn *execerContext) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
 	var err error
 
-	list := namedToInterface(args)
+	list := namedValueToAny(args)
 
 	// Exec `Before` Hooks
 	if ctx, err = conn.hooks.Before(ctx, query, list...); err != nil {
@@ -182,8 +178,6 @@ func isQueryer(conn driver.Conn) bool {
 	switch conn.(type) {
 	case driver.QueryerContext:
 		return true
-	case driver.Queryer:
-		return true
 	default:
 		return false
 	}
@@ -193,12 +187,6 @@ func (conn *queryerContext) queryContext(ctx context.Context, query string, args
 	switch c := conn.Conn.(type) {
 	case driver.QueryerContext:
 		return c.QueryContext(ctx, query, args)
-	case driver.Queryer:
-		dargs, err := namedValueToValue(args)
-		if err != nil {
-			return nil, err
-		}
-		return c.Query(query, dargs)
 	default:
 		// This should not happen
 		return nil, errors.New("QueryerContext created for a non Queryer driver.Conn")
@@ -208,7 +196,7 @@ func (conn *queryerContext) queryContext(ctx context.Context, query string, args
 func (conn *queryerContext) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
 	var err error
 
-	list := namedToInterface(args)
+	list := namedValueToAny(args)
 
 	// Query `Before` Hooks
 	if ctx, err = conn.hooks.Before(ctx, query, list...); err != nil {
@@ -271,7 +259,7 @@ func (stmt *Stmt) execContext(ctx context.Context, args []driver.NamedValue) (dr
 func (stmt *Stmt) ExecContext(ctx context.Context, args []driver.NamedValue) (driver.Result, error) {
 	var err error
 
-	list := namedToInterface(args)
+	list := namedValueToAny(args)
 
 	// Exec `Before` Hooks
 	if ctx, err = stmt.hooks.Before(ctx, stmt.query, list...); err != nil {
@@ -305,7 +293,7 @@ func (stmt *Stmt) queryContext(ctx context.Context, args []driver.NamedValue) (d
 func (stmt *Stmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driver.Rows, error) {
 	var err error
 
-	list := namedToInterface(args)
+	list := namedValueToAny(args)
 
 	// Exec Before Hooks
 	if ctx, err = stmt.hooks.Before(ctx, stmt.query, list...); err != nil {
@@ -324,13 +312,33 @@ func (stmt *Stmt) QueryContext(ctx context.Context, args []driver.NamedValue) (d
 	return rows, err
 }
 
-func (stmt *Stmt) Close() error                                    { return stmt.Stmt.Close() }
-func (stmt *Stmt) NumInput() int                                   { return stmt.Stmt.NumInput() }
-func (stmt *Stmt) Exec(args []driver.Value) (driver.Result, error) { return stmt.Stmt.Exec(args) }
-func (stmt *Stmt) Query(args []driver.Value) (driver.Rows, error)  { return stmt.Stmt.Query(args) }
+func (stmt *Stmt) Close() error  { return stmt.Stmt.Close() }
+func (stmt *Stmt) NumInput() int { return stmt.Stmt.NumInput() }
+func (stmt *Stmt) Exec(args []driver.Value) (driver.Result, error) {
+	named := make([]driver.NamedValue, 0, len(args))
+	for i, a := range args {
+		v := driver.NamedValue{
+			Ordinal: i + 1,
+			Name:    "",
+			Value:   a,
+		}
+		named = append(named, v)
+	}
+	return stmt.ExecContext(context.Background(), named)
+}
+func (stmt *Stmt) Query(args []driver.Value) (driver.Rows, error) {
+	named := make([]driver.NamedValue, 0, len(args))
+	for i, a := range args {
+		v := driver.NamedValue{
+			Ordinal: i + 1,
+			Name:    "",
+			Value:   a,
+		}
+		named = append(named, v)
+	}
+	return stmt.QueryContext(context.Background(), named)
+}
 
-// Wrap is used to create a new instrumented driver, it takes a vendor specific driver, and a Hooks instance to produce a new driver instance.
-// It's usually used inside a sql.Register() statement
 func Wrap(driver driver.Driver, hooks Hooks) driver.Driver {
 	return &Driver{driver, hooks}
 }
@@ -339,22 +347,10 @@ func WrapConn(conn driver.Conn, hooks Hooks) driver.Conn {
 	return &driverConn{conn, hooks}
 }
 
-func namedToInterface(args []driver.NamedValue) []interface{} {
+func namedValueToAny(args []driver.NamedValue) []interface{} {
 	list := make([]interface{}, len(args))
 	for i, a := range args {
 		list[i] = a.Value
 	}
 	return list
-}
-
-// namedValueToValue copied from database/sql
-func namedValueToValue(named []driver.NamedValue) ([]driver.Value, error) {
-	dargs := make([]driver.Value, len(named))
-	for n, param := range named {
-		if len(param.Name) > 0 {
-			return nil, errors.New("sql: driver does not support the use of Named Parameters")
-		}
-		dargs[n] = param.Value
-	}
-	return dargs, nil
 }

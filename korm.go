@@ -563,11 +563,9 @@ func Shutdown(dbNames ...string) error {
 // Query query sql and return result as slice maps
 func Query(dbName string, statement string, args ...any) ([]map[string]any, error) {
 	var db *DatabaseEntity
-	dbn := databases[0].Name
 	if dbName != "" {
 		var err error
-		dbn = dbName
-		db, err = GetMemoryDatabase(dbn)
+		db, err = GetMemoryDatabase(dbName)
 		if err != nil {
 			return nil, err
 		}
@@ -818,11 +816,9 @@ func getTableName[T any]() string {
 //	    })
 func QueryNamedS[T any](statement string, args map[string]any, dbName ...string) ([]T, error) {
 	var db *DatabaseEntity
-	dbn := databases[0].Name
 	if len(dbName) > 0 && dbName[0] != "" {
 		var err error
-		dbn = dbName[0]
-		db, err = GetMemoryDatabase(dbn)
+		db, err = GetMemoryDatabase(dbName[0])
 		if err != nil {
 			return nil, err
 		}
@@ -932,11 +928,9 @@ func QueryNamedS[T any](statement string, args map[string]any, dbName ...string)
 //	QueryS[models.User]("select * from users where email = ?", "email@mail.com")
 func QueryS[T any](dbName string, statement string, args ...any) ([]T, error) {
 	var db *DatabaseEntity
-	dbn := databases[0].Name
 	if dbName != "" {
 		var err error
-		dbn = dbName
-		db, err = GetMemoryDatabase(dbn)
+		db, err = GetMemoryDatabase(dbName)
 		if err != nil {
 			return nil, err
 		}

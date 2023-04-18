@@ -2,15 +2,20 @@ package korm
 
 import (
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
 )
 
-var varRegex = regexp.MustCompile(`:(\w+)`)
+func UnsafeNamedQuery(query string, args map[string]any) (string, error) {
+	q, _, err := AdaptNamedParams("", query, args, true)
+	if err != nil {
+		return "", err
+	}
+	return q, nil
+}
 
-func AdaptNamedParams(dialect, statement string, variables map[string]any) (string, []any, error) {
+func AdaptNamedParams(dialect, statement string, variables map[string]any, unsafe ...bool) (string, []any, error) {
 	if !strings.Contains(statement, ":") {
 		return statement, nil, nil
 	}
@@ -48,12 +53,21 @@ func AdaptNamedParams(dialect, statement string, variables map[string]any) (stri
 			value = vt.Unix()
 		}
 		buf.WriteString(statement[lastIndex:start])
-		buf.WriteString("?")
+		if len(unsafe) > 0 && unsafe[0] {
+			if v, ok := value.(string); ok {
+				buf.WriteString(v)
+			}
+		} else {
+			buf.WriteString("?")
+		}
 		anys = append(anys, value)
 		lastIndex = end
 	}
 	buf.WriteString(statement[lastIndex:])
 	res := buf.String()
+	if len(unsafe) == 0 {
+		adaptPlaceholdersToDialect(&res, dialect)
+	}
 	return res, anys, nil
 }
 
