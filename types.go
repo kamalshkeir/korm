@@ -23,6 +23,7 @@ type TableEntity struct {
 	ModelTypes map[string]string
 	Tags       map[string][]string
 	Columns    []string
+	Fkeys      []kormFkey
 	Pk         string
 	Name       string
 }

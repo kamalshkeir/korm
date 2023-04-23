@@ -44,5 +44,6 @@ func initAdminUrlPatterns(r *kmux.Router) {
 	adminGroup.Post("/table/:model/search", Admin(AllModelsSearch))
 	adminGroup.Get("/get/:model/:id", Admin(SingleModelGet))
 	adminGroup.Get("/export/:table", Admin(ExportView))
+	adminGroup.Get("/export/:table/csv", Admin(ExportCSVView))
 	adminGroup.Post("/import", Admin(ImportView))
 }

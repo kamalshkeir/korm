@@ -62,13 +62,12 @@ func autoMigrate[T any](model *T, db *DatabaseEntity, tableName string, execute 
 		if ftag, ok := typeOfT.Field(i).Tag.Lookup("korm"); ok {
 			tags := strings.Split(ftag, ";")
 			for i, tag := range tags {
-				tag := strings.TrimSpace(tag)
-				if tag == "autoinc" || tag == "pk" {
-					pk = fname
-				} else if fname == "id" {
-					pk = fname
-				} else if ftag == "-" {
+				if ftag == "-" {
 					continue
+				}
+				tag := strings.TrimSpace(tag)
+				if tag == "autoinc" || tag == "pk" || fname == "id" {
+					pk = fname
 				}
 				tags[i] = strings.TrimSpace(tags[i])
 			}
@@ -253,7 +252,6 @@ func autoMigrate[T any](model *T, db *DatabaseEntity, tableName string, execute 
 		klog.Printfs("gr %s migrated\n", tableName)
 	}
 	toReturnQuery := strings.Join(toReturnstats, ";")
-	linkModel[T](tableName, db)
 	return toReturnQuery, nil
 }
 
@@ -300,7 +298,6 @@ func AutoMigrate[T any](tableName string, dbName ...string) error {
 		if klog.CheckError(err) {
 			return err
 		}
-		return nil
 	}
 
 	tbFoundLocal := false
@@ -380,6 +377,7 @@ func handleMigrationInt(mi *migrationInput) {
 				ref := strings.Split(sp[1], ".")
 				if len(ref) == 2 {
 					fkey := "FOREIGN KEY (" + mi.fName + ") REFERENCES " + ref[0] + "(" + ref[1] + ")"
+
 					if len(sp) > 2 {
 						switch sp[2] {
 						case "cascade":

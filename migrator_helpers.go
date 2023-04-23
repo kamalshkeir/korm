@@ -4,7 +4,14 @@ import (
 	"strings"
 
 	"github.com/kamalshkeir/klog"
+	"github.com/kamalshkeir/kstrct"
 )
+
+type kormFkey struct {
+	FromTableField string
+	ToTableField   string
+	Unique         bool
+}
 
 // linkModel link a struct model to a  db_table_name
 func linkModel[T any](to_table_name string, db *DatabaseEntity) {
@@ -21,12 +28,13 @@ func linkModel[T any](to_table_name string, db *DatabaseEntity) {
 	colsNameType := GetAllColumnsTypes(to_table_name, db.Name)
 
 	pk := ""
+tagsLoop:
 	for col, tags := range ftags {
 		for i := range tags {
 			tags[i] = strings.TrimSpace(tags[i])
 			if tags[i] == "pk" || tags[i] == "autoinc" {
 				pk = col
-				break
+				break tagsLoop
 			}
 		}
 	}
@@ -37,7 +45,7 @@ func linkModel[T any](to_table_name string, db *DatabaseEntity) {
 			tFound = true
 		}
 	}
-
+	var kfkeys = []kormFkey{}
 	if !tFound {
 	loop:
 		for k, v := range ftypes {
@@ -53,6 +61,16 @@ func linkModel[T any](to_table_name string, db *DatabaseEntity) {
 						delete(ftypes, k)
 						delete(colsNameType, k)
 						continue loop
+					} else if strings.HasPrefix(t, "fk:") {
+						st := strings.Split(t, ":")[1]
+						fkey := kormFkey{
+							FromTableField: to_table_name + "." + kstrct.ToSnakeCase(k),
+							ToTableField:   st,
+						}
+						if strings.Contains(strings.Join(ftags[k], ";"), "unique") {
+							fkey.Unique = true
+						}
+						kfkeys = append(kfkeys, fkey)
 					}
 				}
 			}
@@ -78,6 +96,7 @@ func linkModel[T any](to_table_name string, db *DatabaseEntity) {
 			}
 		}
 		db.Tables = append(db.Tables, TableEntity{
+			Fkeys:      kfkeys,
 			Name:       to_table_name,
 			Columns:    fields,
 			ModelTypes: ftypes,

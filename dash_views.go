@@ -1,6 +1,8 @@
 package korm
 
 import (
+	"bytes"
+	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -90,22 +92,17 @@ var AllModelsGet = func(c *kmux.Context) {
 		return
 	}
 
-	dbsMem := GetMemoryDatabases()
-	if len(dbsMem) == 0 {
-		c.Status(http.StatusBadRequest).Json(map[string]any{
-			"error": "dbType not found",
-		})
-		return
+	dbMem, _ := GetMemoryDatabase(defaultDB)
+	if dbMem == nil {
+		klog.Printf("rdunable to find db in mem %s\n", defaultDB)
+		dbMem = &databases[0]
 	}
-
 	idString := "id"
-	t := TableEntity{}
-	for _, tb := range dbsMem[0].Tables {
-		if tb.Name == strings.TrimSpace(model) {
-			t = tb
-			if tb.Pk != "" && tb.Pk != "id" {
-				idString = tb.Pk
-			}
+	var t *TableEntity
+	for i, tt := range dbMem.Tables {
+		if tt.Name == model {
+			idString = tt.Pk
+			t = &dbMem.Tables[i]
 		}
 	}
 
@@ -115,27 +112,47 @@ var AllModelsGet = func(c *kmux.Context) {
 		if err != nil {
 			// usualy should not use error string because it divulge infkormation, but here only admin use it, so no worry
 			if err.Error() != "no data found" {
-				c.Status(http.StatusBadRequest).Json(map[string]any{
-					"error": err.Error(),
-				})
+				klog.CheckError(err)
+				c.TextHtml("<h1>Unable to find this model</h1>")
 				return
 			}
 		}
 	}
-
+	mmfkeys := map[string][]any{}
+	for _, fkey := range t.Fkeys {
+		spFrom := strings.Split(fkey.FromTableField, ".")
+		if len(spFrom) == 2 {
+			spTo := strings.Split(fkey.ToTableField, ".")
+			if len(spTo) == 2 {
+				q := "select " + spTo[1] + " from " + spTo[0] + " order by " + spTo[1]
+				mm, err := Query(defaultDB, q)
+				if !klog.CheckError(err) {
+					ress := []any{}
+					for _, res := range mm {
+						ress = append(ress, res[spTo[1]])
+					}
+					if len(ress) > 0 {
+						mmfkeys[spFrom[1]] = ress
+					}
+				}
+			}
+		}
+	}
 	dbCols := GetAllColumnsTypes(model)
-	if len(dbsMem) > 0 {
+	if dbMem != nil {
 		c.Html("admin/admin_all_models.html", map[string]any{
-			"dbType":         dbsMem[0].Dialect,
+			"dbType":         dbMem.Dialect,
 			"model_name":     model,
 			"rows":           rows,
 			"columns":        t.ModelTypes,
 			"dbcolumns":      dbCols,
 			"pk":             idString,
+			"fkeys":          mmfkeys,
 			"columnsOrdered": t.Columns,
 		})
 	} else {
-		klog.Printf("rddbType not known, do you have .env %s %v \n", dbsMem[0].Dialect, err)
+		klog.Printf("rdtable %s not found\n", model)
+		c.TextHtml("<h1>Unable to find this model</h1>")
 	}
 }
 
@@ -349,10 +366,31 @@ var SingleModelGet = func(c *kmux.Context) {
 		return
 	}
 	dbCols := GetAllColumnsTypes(model)
+	mmfkeys := map[string][]any{}
+	for _, fkey := range t.Fkeys {
+		spFrom := strings.Split(fkey.FromTableField, ".")
+		if len(spFrom) == 2 {
+			spTo := strings.Split(fkey.ToTableField, ".")
+			if len(spTo) == 2 {
+				q := "select " + spTo[1] + " from " + spTo[0] + " order by " + spTo[1]
+				mm, err := Query(defaultDB, q)
+				if !klog.CheckError(err) {
+					ress := []any{}
+					for _, res := range mm {
+						ress = append(ress, res[spTo[1]])
+					}
+					if len(ress) > 0 {
+						mmfkeys[spFrom[1]] = ress
+					}
+				}
+			}
+		}
+	}
 	c.Html("admin/admin_single_model.html", map[string]any{
 		"model":      modelRow,
 		"model_name": model,
 		"id":         id,
+		"fkeys":      mmfkeys,
 		"columns":    t.ModelTypes,
 		"dbcolumns":  dbCols,
 		"pk":         t.Pk,
@@ -524,6 +562,64 @@ var ExportView = func(c *kmux.Context) {
 	c.Download(data_bytes, table+".json")
 }
 
+var ExportCSVView = func(c *kmux.Context) {
+	table := c.Param("table")
+	if table == "" {
+		c.Status(http.StatusBadRequest).Json(map[string]any{
+			"error": "no param table found",
+		})
+		return
+	}
+	data, err := Table(table).All()
+	klog.CheckError(err)
+	var buff bytes.Buffer
+	writer := csv.NewWriter(&buff)
+
+	cols := []string{}
+	tab, _ := GetMemoryTable(table)
+	if len(tab.Columns) > 0 {
+		cols = tab.Columns
+	} else if len(data) > 0 {
+		d := data[0]
+		for k := range d {
+			cols = append(cols, k)
+		}
+	}
+
+	err = writer.Write(cols)
+	klog.CheckError(err)
+	for _, sd := range data {
+		values := []string{}
+		for _, k := range cols {
+			switch vv := sd[k].(type) {
+			case string:
+				values = append(values, vv)
+			case bool:
+				if vv {
+					values = append(values, "true")
+				} else {
+					values = append(values, "false")
+				}
+			case int:
+				values = append(values, strconv.Itoa(vv))
+			case int64:
+				values = append(values, strconv.Itoa(int(vv)))
+			case uint:
+				values = append(values, strconv.Itoa(int(vv)))
+			case time.Time:
+				values = append(values, vv.String())
+			default:
+				values = append(values, fmt.Sprintf("%v", vv))
+			}
+
+		}
+		err = writer.Write(values)
+		klog.CheckError(err)
+	}
+	writer.Flush()
+	c.Download(buff.Bytes(), table+".csv")
+}
+
 var ImportView = func(c *kmux.Context) {
 	// get table name
 	table := c.Request.FormValue("table")
@@ -533,14 +629,22 @@ var ImportView = func(c *kmux.Context) {
 		})
 		return
 	}
-	// upload file and return bytes of file
-	_, dataBytes, err := c.UploadFile("thefile", "backup", "json")
+	t, err := GetMemoryTable(table)
 	if klog.CheckError(err) {
 		c.Status(http.StatusBadRequest).Json(map[string]any{
 			"error": err.Error(),
 		})
 		return
 	}
+	// upload file and return bytes of file
+	fname, dataBytes, err := c.UploadFile("thefile", "backup", "json", "csv")
+	if klog.CheckError(err) {
+		c.Status(http.StatusBadRequest).Json(map[string]any{
+			"error": err.Error(),
+		})
+		return
+	}
+	isCsv := strings.HasSuffix(fname, ".csv")
 
 	// get old data and backup
 	modelsOld, _ := Table(table).All()
@@ -558,7 +662,33 @@ var ImportView = func(c *kmux.Context) {
 
 	// fill list_map
 	list_map := []map[string]any{}
-	json.Unmarshal(dataBytes, &list_map)
+	if isCsv {
+		reader := csv.NewReader(bytes.NewReader(dataBytes))
+		lines, err := reader.ReadAll()
+		if klog.CheckError(err) {
+			c.Status(http.StatusBadRequest).Json(map[string]any{
+				"error": err.Error(),
+			})
+			return
+		}
+
+		for _, values := range lines {
+			m := map[string]any{}
+			for i := range values {
+				m[t.Columns[i]] = values[i]
+			}
+			list_map = append(list_map, m)
+		}
+	} else {
+		err := json.Unmarshal(dataBytes, &list_map)
+		if klog.CheckError(err) {
+			c.Status(http.StatusBadRequest).Json(map[string]any{
+				"error": err.Error(),
+			})
+			return
+		}
+	}
+
 	// create models in database
 	var retErr []error
 	for _, m := range list_map {
