@@ -1154,6 +1154,9 @@ func (b *BuilderS[T]) QueryNamed(statement string, args map[string]any, unsafe .
 		if err != nil {
 			return nil, err
 		}
+		if pk == "" {
+			pk = columns[0]
+		}
 	}
 	columns_ptr_to_values := make([]any, len(columns))
 	values := make([]any, len(columns))
@@ -1239,8 +1242,6 @@ func (b *BuilderS[T]) Query(statement string, args ...any) ([]T, error) {
 				pk = t.Pk
 			}
 		}
-	} else {
-		return nil, fmt.Errorf("model is not linked, try korm.LinkModel[models.Model](\"dbTableName\")")
 	}
 	var rows *sql.Rows
 	var err error
@@ -1264,6 +1265,9 @@ func (b *BuilderS[T]) Query(statement string, args ...any) ([]T, error) {
 		if err != nil {
 			return nil, err
 		}
+		if pk == "" {
+			pk = columns[0]
+		}
 	}
 	columns_ptr_to_values := make([]any, len(columns))
 	values := make([]any, len(columns))
@@ -1281,7 +1285,7 @@ func (b *BuilderS[T]) Query(statement string, args ...any) ([]T, error) {
 			return nil, err
 		}
 
-		m := map[string]any{}
+		m := make(map[string]any, len(columns))
 		for i, key := range columns {
 			if b.db.Dialect == MYSQL || b.db.Dialect == MARIA {
 				if v, ok := values[i].([]byte); ok {

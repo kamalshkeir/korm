@@ -18,6 +18,7 @@ import (
 	"github.com/kamalshkeir/kmap"
 	"github.com/kamalshkeir/kmux"
 	"github.com/kamalshkeir/ksbus"
+	"github.com/kamalshkeir/kstrct"
 )
 
 var (
@@ -645,4 +646,109 @@ func getTableName[T any]() string {
 // LogQueries enable logging sql statements with time tooked
 func LogQueries() {
 	logQueries = true
+}
+
+// Q query to struct, if multiple db, expect last arg as string 'db:dbName'
+func Q[T any](statement string, args ...any) ([]T, error) {
+	var db *DatabaseEntity
+	if len(databases) == 1 {
+		db = &databases[0]
+	} else if len(args) > 0 {
+		if v, ok := args[len(args)-1].(string); ok {
+			if strings.HasPrefix(v, "db:") {
+				db, _ = GetMemoryDatabase(strings.TrimSpace(v[3:]))
+			}
+		}
+	} else if len(databases) > 1 {
+		db = &databases[0]
+	}
+	if db.Conn == nil {
+		return nil, errors.New("no connection")
+	}
+	c := dbCache{
+		database:  db.Name,
+		statement: statement,
+		args:      fmt.Sprint(args...),
+	}
+	if useCache {
+		if v, ok := cacheQueryS.Get(c); ok {
+			return v.([]T), nil
+		}
+	}
+	adaptPlaceholdersToDialect(&statement, db.Dialect)
+	adaptTimeToUnixArgs(&args)
+	tbName := getTableName[T]()
+	pk := ""
+	if tbName != "" {
+		for _, t := range db.Tables {
+			if t.Name == tbName {
+				pk = t.Pk
+			}
+		}
+	}
+	rows, err := db.Conn.Query(statement, args...)
+	if err == sql.ErrNoRows {
+		return nil, ErrNoData
+	} else if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	columns, err := rows.Columns()
+	if err != nil {
+		return nil, err
+	}
+	if pk == "" {
+		pk = columns[0]
+	}
+	columns_ptr_to_values := make([]any, len(columns))
+	values := make([]any, len(columns))
+	res := make([]T, 0, 7)
+	var nested *T
+	index := 0
+	lastData := make(map[string]any, len(columns))
+	for rows.Next() {
+		for i := range values {
+			columns_ptr_to_values[i] = &values[i]
+		}
+		err := rows.Scan(columns_ptr_to_values...)
+		if err != nil {
+			klog.Printf("yl%s\n", statement)
+			return nil, err
+		}
+
+		m := make(map[string]any, len(columns))
+		for i, key := range columns {
+			if db.Dialect == MYSQL || db.Dialect == MARIA {
+				if v, ok := values[i].([]byte); ok {
+					values[i] = string(v)
+				}
+			}
+			m[key] = values[i]
+		}
+		if len(lastData) == 0 {
+			lastData = m
+			res = append(res, *new(T))
+			nested = &res[0]
+		}
+		if pk != "" && m[pk] == lastData[pk] {
+			lastData = m
+		} else if pk != "" && m[pk] != lastData[pk] {
+			lastData = m
+			index++
+			res = append(res, *new(T))
+			nested = &res[index]
+		}
+		err = kstrct.FillFromMap(nested, m)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if len(res) == 0 {
+		return nil, ErrNoData
+	}
+	if useCache {
+		_ = cacheQueryS.Set(c, res)
+	}
+	return res, nil
 }
