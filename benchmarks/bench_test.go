@@ -14,7 +14,7 @@ import (
 )
 
 var DB_BENCH_NAME = "bench"
-var NumberOfModel = 1000 // min 300
+var NumberOfModel = 300 // min 300
 
 type TestTable struct {
 	Id        uint `korm:"pk"`
@@ -40,11 +40,10 @@ type TestTableGorm struct {
 
 func TestMain(m *testing.M) {
 	var err error
-	//sqlitedriver.Use()
-	//err = korm.New(korm.SQLITE, DB_BENCH_NAME)
-	if klog.CheckError(err) {
-		return
-	}
+	// err = korm.New(korm.SQLITE, DB_BENCH_NAME, sqlitedriver.Use())
+	// if klog.CheckError(err) {
+	// 	return
+	// }
 	// gormDB, err = gorm.Open(sqlite.Open("benchgorm.sqlite"), &gorm.Config{})
 	// if klog.CheckError(err) {
 	// 	return
@@ -100,7 +99,7 @@ func TestMain(m *testing.M) {
 	// 	return
 	// }
 	// Cleanup for sqlite , remove file db
-	err = os.Remove(DB_BENCH_NAME + ".sqlite")
+	err = os.Remove(DB_BENCH_NAME + ".sqlite3")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -144,9 +143,25 @@ func BenchmarkQueryS(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		a, err := korm.QueryS[TestTable]("", "select * from test_table where is_admin =?", true)
+		a, err := korm.Model[TestTable]().Query("select * from test_table where is_admin =?", true)
 		if err != nil {
 			b.Error("error BenchmarkQueryS:", err)
+		}
+		if len(a) != NumberOfModel || a[0].Email != "test-0@example.com" {
+			b.Error("Failed:", len(a), a[0].Email)
+		}
+	}
+}
+
+func BenchmarkQueryNamedS(b *testing.B) {
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		a, err := korm.Model[TestTable]().QueryNamed("select * from test_table where is_admin = :ad", map[string]any{
+			"ad": true,
+		})
+		if err != nil {
+			b.Error("error BenchmarkQueryNamedS:", err)
 		}
 		if len(a) != NumberOfModel || a[0].Email != "test-0@example.com" {
 			b.Error("Failed:", len(a), a[0].Email)
@@ -158,9 +173,25 @@ func BenchmarkQueryM(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		a, err := korm.Query("", "select * from test_table where is_admin =?", true)
+		a, err := korm.Table("test_table").Query("select * from test_table where is_admin =?", true)
 		if err != nil {
 			b.Error("error BenchmarkQueryM:", err)
+		}
+		if len(a) != NumberOfModel || a[0]["email"] != "test-0@example.com" {
+			b.Error("Failed:", len(a), a[0]["email"])
+		}
+	}
+}
+
+func BenchmarkQueryNamedM(b *testing.B) {
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		a, err := korm.Table("test_table").QueryNamed("select * from test_table where is_admin =:ad", map[string]any{
+			"ad": true,
+		})
+		if err != nil {
+			b.Error("error BenchmarkQueryNamedM:", err)
 		}
 		if len(a) != NumberOfModel || a[0]["email"] != "test-0@example.com" {
 			b.Error("Failed:", len(a), a[0]["email"])

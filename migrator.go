@@ -310,7 +310,7 @@ func AutoMigrate[T any](tableName string, dbName ...string) error {
 	}
 
 	if !tbFoundLocal {
-		linkModel[T](tableName, db)
+		LinkModel[T](tableName, db.Name)
 	}
 
 	return nil

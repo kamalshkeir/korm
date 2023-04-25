@@ -13,15 +13,17 @@ type kormFkey struct {
 	Unique         bool
 }
 
-// linkModel link a struct model to a  db_table_name
-func linkModel[T any](to_table_name string, db *DatabaseEntity) {
-	if db.Name == "" {
-		var err error
-		db.Name = databases[0].Name
-		db, err = GetMemoryDatabase(db.Name)
+// LinkModel link a struct model to a  db_table_name
+func LinkModel[T any](to_table_name string, dbName ...string) {
+	var db *DatabaseEntity
+	if len(dbName) == 0 && len(databases) > 0 {
+		db = &databases[0]
+	} else {
+		dbb, err := GetMemoryDatabase(dbName[0])
 		if klog.CheckError(err) {
 			return
 		}
+		db = dbb
 	}
 	fields, _, ftypes, ftags := getStructInfos(new(T))
 	// get columns from db

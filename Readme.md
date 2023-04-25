@@ -120,7 +120,7 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@latest // v1.8.2
+go get -u github.com/kamalshkeir/korm@latest // v1.8.3
 ```
 
 # Drivers moved outside this package to not get them all in your go.mod file
@@ -320,10 +320,6 @@ korm.Exec(dbName, query string, args ...any) error
 korm.ExecContext(ctx context.Context, dbName, query string, args ...any) error
 korm.ExecNamed(query string, args map[string]any, dbName ...string) error
 korm.ExecContextNamed(ctx context.Context, query string, args map[string]any, dbName ...string) error
-korm.QueryNamed(statement string, args map[string]any, dbName ...string) ([]map[string]any, error)
-korm.QueryNamedS[T any](statement string, args map[string]any, dbName ...string) ([]T, error)
-korm.QueryS[T any](dbName string, statement string, args ...any) ([]T, error)
-korm.Query(dbName string, statement string, args ...any) ([]map[string]any, error)
 korm.BeforeServersData(fn func(data any, conn *ws.Conn))
 korm.BeforeDataWS(fn func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) bool)
 korm.GetAllTables(dbName ...string) []string
@@ -1302,9 +1298,10 @@ func main() {
 		   profiles.name as 'group_profiles.name',
 		   profiles.group_id as 'group_profiles.group_id'
 	from groups 
-	join profiles on profiles.group_id = groups.id;
+	join profiles on profiles.group_id = groups.id
+	where profile.name = ?;
 	`
-	groups, err := korm.QueryS[Group]("", query)
+	groups, err := korm.Model[Group]().Query(query,"bob")
 	if klog.CheckError(err) {
 		return
 	}

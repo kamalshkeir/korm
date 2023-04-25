@@ -300,7 +300,7 @@ func TestGetAllM(t *testing.T) {
 }
 
 func TestQuery(t *testing.T) {
-	u, err := Query(DB_TEST_NAME, "select * from users")
+	u, err := Table("users").Query(DB_TEST_NAME, "select * from users")
 	if err != nil {
 		t.Error(err)
 	}
@@ -430,7 +430,7 @@ func TestWithCtxM(t *testing.T) {
 }
 
 func TestQueryS(t *testing.T) {
-	u, err := QueryS[TestUser]("", "select * from users")
+	u, err := Model[TestUser]().Query("select * from users")
 	if err != nil {
 		t.Error(err)
 	}
@@ -440,7 +440,7 @@ func TestQueryS(t *testing.T) {
 }
 
 func TestQueryM(t *testing.T) {
-	u, err := Query("", "select * from users")
+	u, err := Table("users").Query("", "select * from users")
 	if err != nil {
 		t.Error(err)
 	}

@@ -15,8 +15,10 @@ import (
 )
 
 var (
-	cacheOneS = kmap.New[dbCache, any](false)
-	cacheAllS = kmap.New[dbCache, any](false, cacheMaxMemoryMb)
+	cacheOneS       = kmap.New[dbCache, any](false)
+	cacheAllS       = kmap.New[dbCache, any](false, cacheMaxMemoryMb)
+	ErrNoConnection = errors.New("no connection")
+	ErrNoData       = errors.New("no data")
 )
 
 // BuilderS is query builder for struct using generics
@@ -30,10 +32,17 @@ type BuilderS[T any] struct {
 	whereQuery string
 	offset     string
 	statement  string
-	database   string
+	db         *DatabaseEntity
 	args       []any
 	order      []string
 	ctx        context.Context
+}
+
+// BuilderStruct empty query to struct starter, default db first connected
+func BuilderStruct[T any]() *BuilderS[T] {
+	return &BuilderS[T]{
+		db: &databases[0],
+	}
 }
 
 // Model is a starter for Buider
@@ -44,7 +53,7 @@ func Model[T any](model ...T) *BuilderS[T] {
 	}
 	return &BuilderS[T]{
 		tableName: tName,
-		database:  databases[0].Name,
+		db:        &databases[0],
 	}
 }
 
@@ -58,21 +67,19 @@ func ModelTable[T any](tableName string, model ...T) *BuilderS[T] {
 	}
 	return &BuilderS[T]{
 		tableName: tName,
-		database:  databases[0].Name,
+		db:        &databases[0],
 	}
 }
 
 // Database allow to choose database to execute query on
 func (b *BuilderS[T]) Database(dbName string, model ...T) *BuilderS[T] {
 	if b == nil || b.tableName == "" {
-		return nil
+		return b
 	}
-	b.database = dbName
-	db, err := GetMemoryDatabase(b.database)
-	if err != nil {
-		b.database = databases[0].Name
-	} else {
-		b.database = db.Name
+	for i := range databases {
+		if databases[i].Name == dbName {
+			b.db = &databases[i]
+		}
 	}
 	return b
 }
@@ -82,18 +89,14 @@ func (b *BuilderS[T]) Insert(model *T) (int, error) {
 	if b == nil || b.tableName == "" {
 		return 0, ErrTableNotFound
 	}
-	db, err := GetMemoryDatabase(b.database)
-	if klog.CheckError(err) {
-		return 0, err
-	}
-
+	var err error
 	names, mvalues, mTypes, mtags := getStructInfos(model, true)
 	values := []any{}
 	if len(names) < len(mvalues) {
 		return 0, errors.New("more values than fields")
 	}
 	if onInsert != nil {
-		err := onInsert(b.database, b.tableName, mvalues)
+		err := onInsert(b.db.Name, b.tableName, mvalues)
 		if err != nil {
 			return 0, err
 		}
@@ -162,17 +165,17 @@ func (b *BuilderS[T]) Insert(model *T) (int, error) {
 	stat.WriteString(placeholders)
 	stat.WriteString(")")
 	b.statement = stat.String()
-	adaptPlaceholdersToDialect(&b.statement, db.Dialect)
+	adaptPlaceholdersToDialect(&b.statement, b.db.Dialect)
 
-	if db.Dialect != POSTGRES {
+	if b.db.Dialect != POSTGRES {
 		var res sql.Result
 		if b.debug {
 			klog.Printf("statement : %s, values : %s\n", b.statement, values)
 		}
 		if b.ctx != nil {
-			res, err = db.Conn.ExecContext(b.ctx, b.statement, values...)
+			res, err = b.db.Conn.ExecContext(b.ctx, b.statement, values...)
 		} else {
-			res, err = db.Conn.Exec(b.statement, values...)
+			res, err = b.db.Conn.Exec(b.statement, values...)
 		}
 		if err != nil {
 			return 0, err
@@ -188,9 +191,9 @@ func (b *BuilderS[T]) Insert(model *T) (int, error) {
 			klog.Printf("statement : %s, values : %s\n", b.statement+" RETURNING "+pk, values)
 		}
 		if b.ctx != nil {
-			err = db.Conn.QueryRowContext(b.ctx, b.statement+" RETURNING "+pk, values...).Scan(&id)
+			err = b.db.Conn.QueryRowContext(b.ctx, b.statement+" RETURNING "+pk, values...).Scan(&id)
 		} else {
-			err = db.Conn.QueryRow(b.statement+" RETURNING "+pk, values...).Scan(&id)
+			err = b.db.Conn.QueryRow(b.statement+" RETURNING "+pk, values...).Scan(&id)
 		}
 		if err != nil {
 			return id, err
@@ -204,10 +207,6 @@ func (b *BuilderS[T]) InsertR(model *T) (T, error) {
 	if b == nil || b.tableName == "" {
 		return *new(T), ErrTableNotFound
 	}
-	db, err := GetMemoryDatabase(b.database)
-	if klog.CheckError(err) {
-		return *new(T), err
-	}
 
 	names, mvalues, mTypes, mtags := getStructInfos(model, true)
 	values := []any{}
@@ -215,7 +214,7 @@ func (b *BuilderS[T]) InsertR(model *T) (T, error) {
 		return *new(T), errors.New("more values than fields")
 	}
 	if onInsert != nil {
-		err := onInsert(b.database, b.tableName, mvalues)
+		err := onInsert(b.db.Name, b.tableName, mvalues)
 		if err != nil {
 			return *new(T), err
 		}
@@ -285,17 +284,18 @@ func (b *BuilderS[T]) InsertR(model *T) (T, error) {
 	stat.WriteString(placeholders)
 	stat.WriteString(")")
 	b.statement = stat.String()
-	adaptPlaceholdersToDialect(&b.statement, db.Dialect)
+	adaptPlaceholdersToDialect(&b.statement, b.db.Dialect)
 	if b.debug {
 		klog.Printf("statement : %s, values : %s\n", b.statement, values)
 	}
 	var id int
-	if db.Dialect != POSTGRES {
+	var err error
+	if b.db.Dialect != POSTGRES {
 		var res sql.Result
 		if b.ctx != nil {
-			res, err = db.Conn.ExecContext(b.ctx, b.statement, values...)
+			res, err = b.db.Conn.ExecContext(b.ctx, b.statement, values...)
 		} else {
-			res, err = db.Conn.Exec(b.statement, values...)
+			res, err = b.db.Conn.Exec(b.statement, values...)
 		}
 		if err != nil {
 			return *new(T), err
@@ -307,9 +307,9 @@ func (b *BuilderS[T]) InsertR(model *T) (T, error) {
 		id = int(rows)
 	} else {
 		if b.ctx != nil {
-			err = db.Conn.QueryRowContext(b.ctx, b.statement+" RETURNING "+pk, values...).Scan(&id)
+			err = b.db.Conn.QueryRowContext(b.ctx, b.statement+" RETURNING "+pk, values...).Scan(&id)
 		} else {
-			err = db.Conn.QueryRow(b.statement+" RETURNING "+pk, values...).Scan(&id)
+			err = b.db.Conn.QueryRow(b.statement+" RETURNING "+pk, values...).Scan(&id)
 		}
 		if err != nil {
 			return *new(T), err
@@ -327,11 +327,7 @@ func (b *BuilderS[T]) BulkInsert(models ...*T) ([]int, error) {
 	if b == nil || b.tableName == "" {
 		return nil, ErrTableNotFound
 	}
-	db, err := GetMemoryDatabase(b.database)
-	if err != nil {
-		return nil, err
-	}
-	tx, err := db.Conn.BeginTx(context.Background(), &sql.TxOptions{})
+	tx, err := b.db.Conn.BeginTx(context.Background(), &sql.TxOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -343,7 +339,7 @@ func (b *BuilderS[T]) BulkInsert(models ...*T) ([]int, error) {
 			return nil, errors.New("more values than fields")
 		}
 		if onInsert != nil {
-			err := onInsert(b.database, b.tableName, mvalues)
+			err := onInsert(b.db.Name, b.tableName, mvalues)
 			if err != nil {
 				return nil, err
 			}
@@ -410,17 +406,17 @@ func (b *BuilderS[T]) BulkInsert(models ...*T) ([]int, error) {
 		stat.WriteString(ph)
 		stat.WriteString(");")
 		statem := stat.String()
-		adaptPlaceholdersToDialect(&statem, db.Dialect)
+		adaptPlaceholdersToDialect(&statem, b.db.Dialect)
 		if b.debug {
 			klog.Printf("%s,%s\n", statem, values)
 		}
 
-		if db.Dialect != POSTGRES {
+		if b.db.Dialect != POSTGRES {
 			var res sql.Result
 			if b.ctx != nil {
-				res, err = db.Conn.ExecContext(b.ctx, statem, values...)
+				res, err = b.db.Conn.ExecContext(b.ctx, statem, values...)
 			} else {
-				res, err = db.Conn.Exec(statem, values...)
+				res, err = b.db.Conn.Exec(statem, values...)
 			}
 			if err != nil {
 				errRoll := tx.Rollback()
@@ -437,9 +433,9 @@ func (b *BuilderS[T]) BulkInsert(models ...*T) ([]int, error) {
 		} else {
 			var idInserted int
 			if b.ctx != nil {
-				err = db.Conn.QueryRowContext(b.ctx, statem+" RETURNING "+pk, values...).Scan(&idInserted)
+				err = b.db.Conn.QueryRowContext(b.ctx, statem+" RETURNING "+pk, values...).Scan(&idInserted)
 			} else {
-				err = db.Conn.QueryRow(statem+" RETURNING "+pk, values...).Scan(&idInserted)
+				err = b.db.Conn.QueryRow(statem+" RETURNING "+pk, values...).Scan(&idInserted)
 			}
 			if err != nil {
 				return ids, err
@@ -460,12 +456,10 @@ func (b *BuilderS[T]) AddRelated(relatedTable string, whereRelatedTable string, 
 		return 0, ErrTableNotFound
 	}
 
-	db, _ := GetMemoryDatabase(b.database)
-
-	relationTableName := "m2m_" + b.tableName + "-" + b.database + "-" + relatedTable
-	if _, ok := relationsMap.Get("m2m_" + b.tableName + "-" + b.database + "-" + relatedTable); !ok {
-		relationTableName = "m2m_" + relatedTable + "-" + b.database + "-" + b.tableName
-		if _, ok2 := relationsMap.Get("m2m_" + relatedTable + "-" + b.database + "-" + b.tableName); !ok2 {
+	relationTableName := "m2m_" + b.tableName + "-" + b.db.Name + "-" + relatedTable
+	if _, ok := relationsMap.Get("m2m_" + b.tableName + "-" + b.db.Name + "-" + relatedTable); !ok {
+		relationTableName = "m2m_" + relatedTable + "-" + b.db.Name + "-" + b.tableName
+		if _, ok2 := relationsMap.Get("m2m_" + relatedTable + "-" + b.db.Name + "-" + b.tableName); !ok2 {
 			return 0, fmt.Errorf("no relations many to many between theses 2 tables: %s, %s", b.tableName, relatedTable)
 		}
 	}
@@ -492,7 +486,7 @@ func (b *BuilderS[T]) AddRelated(relatedTable string, whereRelatedTable string, 
 	}
 
 	adaptTimeToUnixArgs(&whereRelatedArgs)
-	whereRelatedTable = adaptConcatAndLen(whereRelatedTable, db.Dialect)
+	whereRelatedTable = adaptConcatAndLen(whereRelatedTable, b.db.Dialect)
 	adaptWhereQuery(&whereRelatedTable, relatedTable)
 	data, err := Table(relatedTable).Where(whereRelatedTable, whereRelatedArgs...).One()
 	if err != nil {
@@ -538,18 +532,18 @@ func (b *BuilderS[T]) AddRelated(relatedTable string, whereRelatedTable string, 
 				relatedTable + "_id": ids[0],
 			}
 		}
-		err := onInsert(db.Name, relationTableName, mInsert)
+		err := onInsert(b.db.Name, relationTableName, mInsert)
 		if err != nil {
 			return 0, err
 		}
 	}
 	stat := "INSERT INTO " + relationTableName + "(" + cols + ") select ?,? WHERE NOT EXISTS (select * FROM " + relationTableName + " WHERE " + wherecols + ");"
-	adaptPlaceholdersToDialect(&stat, db.Dialect)
+	adaptPlaceholdersToDialect(&stat, b.db.Dialect)
 	if b.debug {
 		klog.Printf("statement:%s\n", stat)
 		klog.Printf("args:%v\n", ids)
 	}
-	err = Exec(b.database, stat, ids...)
+	err = Exec(b.db.Name, stat, ids...)
 	if err != nil {
 		return 0, err
 	}
@@ -561,10 +555,10 @@ func (b *BuilderS[T]) DeleteRelated(relatedTable string, whereRelatedTable strin
 	if b == nil || b.tableName == "" {
 		return 0, ErrTableNotFound
 	}
-	relationTableName := "m2m_" + b.tableName + "-" + b.database + "-" + relatedTable
-	if _, ok := relationsMap.Get("m2m_" + b.tableName + "-" + b.database + "-" + relatedTable); !ok {
-		relationTableName = "m2m_" + relatedTable + "-" + b.database + "-" + b.tableName
-		if _, ok2 := relationsMap.Get("m2m_" + relatedTable + "-" + b.database + "-" + b.tableName); !ok2 {
+	relationTableName := "m2m_" + b.tableName + "-" + b.db.Name + "-" + relatedTable
+	if _, ok := relationsMap.Get("m2m_" + b.tableName + "-" + b.db.Name + "-" + relatedTable); !ok {
+		relationTableName = "m2m_" + relatedTable + "-" + b.db.Name + "-" + b.tableName
+		if _, ok2 := relationsMap.Get("m2m_" + relatedTable + "-" + b.db.Name + "-" + b.tableName); !ok2 {
 			return 0, fmt.Errorf("no relations many to many between theses 2 tables: %s, %s", b.tableName, relatedTable)
 		}
 	}
@@ -589,13 +583,10 @@ func (b *BuilderS[T]) DeleteRelated(relatedTable string, whereRelatedTable strin
 	}
 	ids := make([]any, 2)
 	adaptTimeToUnixArgs(&whereRelatedArgs)
-	if b.database == "" && len(databases) == 1 {
+	if b.db == nil && len(databases) == 1 {
 		whereRelatedTable = adaptConcatAndLen(whereRelatedTable, databases[0].Dialect)
-	} else if b.database != "" {
-		db, err := GetMemoryDatabase(b.database)
-		if err == nil {
-			whereRelatedTable = adaptConcatAndLen(whereRelatedTable, db.Dialect)
-		}
+	} else if b.db != nil {
+		whereRelatedTable = adaptConcatAndLen(whereRelatedTable, b.db.Dialect)
 	}
 	adaptWhereQuery(&whereRelatedTable, relatedTable)
 	data, err := Table(relatedTable).Where(whereRelatedTable, whereRelatedArgs...).One()
@@ -636,10 +627,10 @@ func (b *BuilderS[T]) GetRelated(relatedTable string, dest any) error {
 	if b == nil || b.tableName == "" {
 		return ErrTableNotFound
 	}
-	relationTableName := "m2m_" + b.tableName + "-" + b.database + "-" + relatedTable
-	if _, ok := relationsMap.Get("m2m_" + b.tableName + "-" + b.database + "-" + relatedTable); !ok {
-		relationTableName = "m2m_" + relatedTable + "-" + b.database + "-" + b.tableName
-		if _, ok2 := relationsMap.Get("m2m_" + relatedTable + "-" + b.database + "-" + b.tableName); !ok2 {
+	relationTableName := "m2m_" + b.tableName + "-" + b.db.Name + "-" + relatedTable
+	if _, ok := relationsMap.Get("m2m_" + b.tableName + "-" + b.db.Name + "-" + relatedTable); !ok {
+		relationTableName = "m2m_" + relatedTable + "-" + b.db.Name + "-" + b.tableName
+		if _, ok2 := relationsMap.Get("m2m_" + relatedTable + "-" + b.db.Name + "-" + b.tableName); !ok2 {
 			return fmt.Errorf("no relations many to many between theses 2 tables: %s, %s", b.tableName, relatedTable)
 		}
 	}
@@ -702,10 +693,10 @@ func (b *BuilderS[T]) JoinRelated(relatedTable string, dest any) error {
 	if b == nil || b.tableName == "" {
 		return ErrTableNotFound
 	}
-	relationTableName := "m2m_" + b.tableName + "-" + b.database + "-" + relatedTable
-	if _, ok := relationsMap.Get("m2m_" + b.tableName + "-" + b.database + "-" + relatedTable); !ok {
-		relationTableName = "m2m_" + relatedTable + "-" + b.database + "-" + b.tableName
-		if _, ok2 := relationsMap.Get("m2m_" + relatedTable + "-" + b.database + "-" + b.tableName); !ok2 {
+	relationTableName := "m2m_" + b.tableName + "-" + b.db.Name + "-" + relatedTable
+	if _, ok := relationsMap.Get("m2m_" + b.tableName + "-" + b.db.Name + "-" + relatedTable); !ok {
+		relationTableName = "m2m_" + relatedTable + "-" + b.db.Name + "-" + b.tableName
+		if _, ok2 := relationsMap.Get("m2m_" + relatedTable + "-" + b.db.Name + "-" + b.tableName); !ok2 {
 			return fmt.Errorf("no relations many to many between theses 2 tables: %s, %s", b.tableName, relatedTable)
 		}
 	}
@@ -784,14 +775,10 @@ func (b *BuilderS[T]) Set(query string, args ...any) (int, error) {
 				mToSet[strings.TrimSpace(sp[i])] = args[i]
 			}
 		}
-		err := onSet(b.database, b.tableName, mToSet)
+		err := onSet(b.db.Name, b.tableName, mToSet)
 		if err != nil {
 			return 0, err
 		}
-	}
-	db, err := GetMemoryDatabase(b.database)
-	if klog.CheckError(err) {
-		return 0, err
 	}
 
 	if b.whereQuery == "" {
@@ -801,18 +788,21 @@ func (b *BuilderS[T]) Set(query string, args ...any) (int, error) {
 	b.statement = "UPDATE " + b.tableName + " SET " + query + " WHERE " + b.whereQuery
 	adaptTimeToUnixArgs(&args)
 
-	adaptPlaceholdersToDialect(&b.statement, db.Dialect)
+	adaptPlaceholdersToDialect(&b.statement, b.db.Dialect)
 	args = append(args, b.args...)
 	if b.debug {
 		klog.Printf("statement:%s\n", b.statement)
 		klog.Printf("args:%v\n", args)
 	}
 
-	var res sql.Result
+	var (
+		res sql.Result
+		err error
+	)
 	if b.ctx != nil {
-		res, err = db.Conn.ExecContext(b.ctx, b.statement, args...)
+		res, err = b.db.Conn.ExecContext(b.ctx, b.statement, args...)
 	} else {
-		res, err = db.Conn.Exec(b.statement, args...)
+		res, err = b.db.Conn.Exec(b.statement, args...)
 	}
 	if err != nil {
 		return 0, err
@@ -829,12 +819,8 @@ func (b *BuilderS[T]) Delete() (int, error) {
 	if b == nil || b.tableName == "" {
 		return 0, ErrTableNotFound
 	}
-	db, err := GetMemoryDatabase(b.database)
-	if klog.CheckError(err) {
-		return 0, err
-	}
 	if onDelete != nil {
-		err := onDelete(b.database, b.tableName, b.whereQuery, b.args...)
+		err := onDelete(b.db.Name, b.tableName, b.whereQuery, b.args...)
 		if err != nil {
 			return 0, err
 		}
@@ -846,18 +832,18 @@ func (b *BuilderS[T]) Delete() (int, error) {
 	} else {
 		return 0, errors.New("no Where was given for this query:" + b.whereQuery)
 	}
-	adaptPlaceholdersToDialect(&b.statement, db.Dialect)
+	adaptPlaceholdersToDialect(&b.statement, b.db.Dialect)
 	if b.debug {
 		klog.Printf("statement:%s\n", b.statement)
 		klog.Printf("args:%v\n", b.args)
 	}
 
 	var res sql.Result
-
+	var err error
 	if b.ctx != nil {
-		res, err = db.Conn.ExecContext(b.ctx, b.statement, b.args...)
+		res, err = b.db.Conn.ExecContext(b.ctx, b.statement, b.args...)
 	} else {
-		res, err = db.Conn.Exec(b.statement, b.args...)
+		res, err = b.db.Conn.Exec(b.statement, b.args...)
 	}
 	if err != nil {
 		return 0, err
@@ -875,22 +861,21 @@ func (b *BuilderS[T]) Drop() (int, error) {
 		return 0, ErrTableNotFound
 	}
 	if onDrop != nil {
-		err := onDrop(b.database, b.tableName)
+		err := onDrop(b.db.Name, b.tableName)
 		if err != nil {
 			return 0, err
 		}
 	}
-	db, err := GetMemoryDatabase(b.database)
-	if klog.CheckError(err) {
-		return 0, err
-	}
 
 	b.statement = "DROP TABLE " + b.tableName
-	var res sql.Result
+	var (
+		res sql.Result
+		err error
+	)
 	if b.ctx != nil {
-		res, err = db.Conn.ExecContext(b.ctx, b.statement)
+		res, err = b.db.Conn.ExecContext(b.ctx, b.statement)
 	} else {
-		res, err = db.Conn.Exec(b.statement)
+		res, err = b.db.Conn.Exec(b.statement)
 	}
 	if err != nil {
 		return 0, err
@@ -917,14 +902,10 @@ func (b *BuilderS[T]) Where(query string, args ...any) *BuilderS[T] {
 	if b == nil || b.tableName == "" {
 		return nil
 	}
-	if b.database == "" && len(databases) == 1 {
+	if b.db == nil && len(databases) == 1 {
 		query = adaptConcatAndLen(query, databases[0].Dialect)
-	} else if b.database != "" {
-		db, err := GetMemoryDatabase(b.database)
-		if err == nil {
-			query = adaptConcatAndLen(query, db.Dialect)
-			b.database = db.Name
-		}
+	} else if b.db != nil {
+		query = adaptConcatAndLen(query, b.db.Dialect)
 	}
 	adaptWhereQuery(&query, b.tableName)
 	adaptTimeToUnixArgs(&args)
@@ -939,18 +920,12 @@ func (b *BuilderS[T]) WhereNamed(query string, args map[string]any) *BuilderS[T]
 	if b == nil || b.tableName == "" {
 		return nil
 	}
-	db := databases[0]
-	if b.database == "" && len(databases) == 1 {
+	if b.db == nil && len(databases) == 1 {
 		query = adaptConcatAndLen(query, databases[0].Dialect)
-	} else if b.database != "" {
-		dbb, err := GetMemoryDatabase(b.database)
-		if err == nil {
-			query = adaptConcatAndLen(query, db.Dialect)
-			b.database = db.Name
-		}
-		db = *dbb
+	} else if b.db != nil {
+		query = adaptConcatAndLen(query, b.db.Dialect)
 	}
-	q, newargs, err := AdaptNamedParams(db.Dialect, query, args)
+	q, newargs, err := AdaptNamedParams(b.db.Dialect, query, args)
 	if err != nil {
 		b.whereQuery = query
 		for _, v := range args {
@@ -1048,7 +1023,7 @@ func (b *BuilderS[T]) All() ([]T, error) {
 		return nil, ErrTableNotFound
 	}
 	c := dbCache{
-		database:   b.database,
+		database:   b.db.Name,
 		table:      b.tableName,
 		selected:   b.selected,
 		statement:  b.statement,
@@ -1092,7 +1067,7 @@ func (b *BuilderS[T]) All() ([]T, error) {
 		klog.Printf("args:%v\n", b.args)
 	}
 
-	models, err := b.queryS(b.statement, b.args...)
+	models, err := b.Query(b.statement, b.args...)
 	if err != nil {
 		return nil, err
 	}
@@ -1102,13 +1077,254 @@ func (b *BuilderS[T]) All() ([]T, error) {
 	return models, nil
 }
 
+// QueryNamedS query sql and return result as slice of structs T
+//
+// Example:
+//
+//		QueryNamed[models.User]("select * from users where email = :email",map[string]any{
+//			"email":"email@mail.com",
+//	    })
+func (b *BuilderS[T]) QueryNamed(statement string, args map[string]any, unsafe ...bool) ([]T, error) {
+	if b.db == nil {
+		b.db = &databases[0]
+	}
+	if b.db.Conn == nil {
+		return nil, errors.New("no connection")
+	}
+	rgs := ""
+	for _, v := range args {
+		rgs += fmt.Sprint(v)
+	}
+	c := dbCache{
+		database:  b.db.Name,
+		statement: statement,
+		args:      rgs,
+	}
+	if useCache {
+		if v, ok := cacheQueryS.Get(c); ok {
+			return v.([]T), nil
+		}
+	}
+	var query string
+	var newargs []any
+	if len(unsafe) > 0 && unsafe[0] {
+		var err error
+		query, err = UnsafeNamedQuery(statement, args)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		var err error
+		query, newargs, err = AdaptNamedParams(b.db.Dialect, statement, args)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if b.tableName == "" {
+		b.tableName = getTableName[T]()
+	}
+	pk := ""
+	if b.tableName != "" {
+		for _, t := range b.db.Tables {
+			if t.Name == b.tableName {
+				pk = t.Pk
+			}
+		}
+	}
+	var rows *sql.Rows
+	var err error
+	if b.ctx != nil {
+		rows, err = b.db.Conn.QueryContext(b.ctx, query, newargs...)
+	} else {
+		rows, err = b.db.Conn.Query(query, newargs...)
+	}
+	if err == sql.ErrNoRows {
+		return nil, ErrNoData
+	} else if err != nil {
+		return nil, err
+	}
+
+	defer rows.Close()
+	var columns []string
+	if b.selected != "" && b.selected != "*" {
+		columns = strings.Split(b.selected, ",")
+	} else {
+		columns, err = rows.Columns()
+		if err != nil {
+			return nil, err
+		}
+	}
+	columns_ptr_to_values := make([]any, len(columns))
+	values := make([]any, len(columns))
+	res := make([]T, 0, 5)
+	var nested *T
+	index := 0
+	lastData := map[string]any{}
+	for rows.Next() {
+		for i := range values {
+			columns_ptr_to_values[i] = &values[i]
+		}
+
+		err := rows.Scan(columns_ptr_to_values...)
+		if err != nil {
+			klog.Printf("yl%s\n", statement)
+			return nil, err
+		}
+
+		m := map[string]any{}
+		for i, key := range columns {
+			if b.db.Dialect == MYSQL || b.db.Dialect == MARIA {
+				if v, ok := values[i].([]byte); ok {
+					values[i] = string(v)
+				}
+			}
+			m[key] = values[i]
+		}
+		if len(lastData) == 0 {
+			lastData = m
+			res = append(res, *new(T))
+			nested = &res[0]
+		}
+		if pk != "" && m[pk] == lastData[pk] {
+			lastData = m
+		} else if pk != "" && m[pk] != lastData[pk] {
+			lastData = m
+			index++
+			res = append(res, *new(T))
+			nested = &res[index]
+		}
+		err = kstrct.FillFromMap(nested, m)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if len(res) == 0 {
+		return nil, ErrNoData
+	}
+	if useCache {
+		_ = cacheQueryS.Set(c, res)
+	}
+	return res, nil
+}
+
+// Query query to struct
+func (b *BuilderS[T]) Query(statement string, args ...any) ([]T, error) {
+	if b.db == nil {
+		b.db = &databases[0]
+	}
+	if b.db.Conn == nil {
+		return nil, errors.New("no connection")
+	}
+	c := dbCache{
+		database:  b.db.Name,
+		statement: statement,
+		args:      fmt.Sprint(args...),
+	}
+	if useCache {
+		if v, ok := cacheQueryS.Get(c); ok {
+			return v.([]T), nil
+		}
+	}
+	adaptPlaceholdersToDialect(&statement, b.db.Dialect)
+	adaptTimeToUnixArgs(&args)
+	if b.tableName == "" {
+		b.tableName = getTableName[T]()
+	}
+	pk := ""
+	if b.tableName != "" {
+		for _, t := range b.db.Tables {
+			if t.Name == b.tableName {
+				pk = t.Pk
+			}
+		}
+	} else {
+		return nil, fmt.Errorf("model is not linked, try korm.LinkModel[models.Model](\"dbTableName\")")
+	}
+	var rows *sql.Rows
+	var err error
+	if b.ctx != nil {
+		rows, err = b.db.Conn.QueryContext(b.ctx, statement, args...)
+	} else {
+		rows, err = b.db.Conn.Query(statement, args...)
+	}
+	if err == sql.ErrNoRows {
+		return nil, ErrNoData
+	} else if err != nil {
+		return nil, err
+	}
+
+	defer rows.Close()
+	var columns []string
+	if b.selected != "" && b.selected != "*" {
+		columns = strings.Split(b.selected, ",")
+	} else {
+		columns, err = rows.Columns()
+		if err != nil {
+			return nil, err
+		}
+	}
+	columns_ptr_to_values := make([]any, len(columns))
+	values := make([]any, len(columns))
+	res := make([]T, 0, 7)
+	var nested *T
+	index := 0
+	lastData := make(map[string]any, len(columns))
+	for rows.Next() {
+		for i := range values {
+			columns_ptr_to_values[i] = &values[i]
+		}
+		err := rows.Scan(columns_ptr_to_values...)
+		if err != nil {
+			klog.Printf("yl%s\n", statement)
+			return nil, err
+		}
+
+		m := map[string]any{}
+		for i, key := range columns {
+			if b.db.Dialect == MYSQL || b.db.Dialect == MARIA {
+				if v, ok := values[i].([]byte); ok {
+					values[i] = string(v)
+				}
+			}
+			m[key] = values[i]
+		}
+		if len(lastData) == 0 {
+			lastData = m
+			res = append(res, *new(T))
+			nested = &res[0]
+		}
+		if pk != "" && m[pk] == lastData[pk] {
+			lastData = m
+		} else if pk != "" && m[pk] != lastData[pk] {
+			lastData = m
+			index++
+			res = append(res, *new(T))
+			nested = &res[index]
+		}
+		err = kstrct.FillFromMap(nested, m)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if len(res) == 0 {
+		return nil, ErrNoData
+	}
+	if useCache {
+		_ = cacheQueryS.Set(c, res)
+	}
+	return res, nil
+}
+
 // One get single row
 func (b *BuilderS[T]) One() (T, error) {
 	if b == nil || b.tableName == "" {
 		return *new(T), ErrTableNotFound
 	}
 	c := dbCache{
-		database:   b.database,
+		database:   b.db.Name,
 		table:      b.tableName,
 		selected:   b.selected,
 		statement:  b.statement,
@@ -1142,192 +1358,20 @@ func (b *BuilderS[T]) One() (T, error) {
 		b.statement += " " + b.orderBys
 	}
 
-	if b.limit > 0 {
-		i := strconv.Itoa(b.limit)
-		b.statement += " LIMIT " + i
-	} else {
-		b.statement += " LIMIT 1"
-	}
+	b.statement += " LIMIT 1"
 
 	if b.debug {
 		klog.Printf("statement:%s\n", b.statement)
 		klog.Printf("args:%v\n", b.args)
 	}
-
-	model, err := b.queryOneS(b.statement, b.args...)
+	model, err := b.Query(b.statement, b.args...)
 	if err != nil {
 		return *new(T), err
+	} else if len(model) == 0 {
+		return *new(T), ErrNoData
 	}
 	if useCache {
-		_ = cacheOneS.Set(c, model)
+		_ = cacheOneS.Set(c, model[0])
 	}
-	return model, nil
-}
-
-func (b *BuilderS[T]) queryS(query string, args ...any) ([]T, error) {
-	if b == nil || b.tableName == "" {
-		return nil, ErrTableNotFound
-	}
-	db, err := GetMemoryDatabase(b.database)
-	if klog.CheckError(err) {
-		return nil, err
-	}
-	if db.Conn == nil {
-		return nil, errors.New("no connection")
-	}
-	adaptPlaceholdersToDialect(&query, db.Dialect)
-	adaptTimeToUnixArgs(&args)
-	res := make([]T, 0)
-	var rows *sql.Rows
-	if b.ctx != nil {
-		rows, err = db.Conn.QueryContext(b.ctx, query, args...)
-	} else {
-		rows, err = db.Conn.Query(query, args...)
-	}
-
-	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("no data found")
-	} else if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var cols []string
-	if b.selected != "" && b.selected != "*" {
-		cols = strings.Split(b.selected, ",")
-	} else {
-		cols, err = rows.Columns()
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	columns_ptr_to_values := make([]any, len(cols))
-	values := make([]any, len(cols))
-	for rows.Next() {
-		for i := range values {
-			columns_ptr_to_values[i] = &values[i]
-		}
-
-		err := rows.Scan(columns_ptr_to_values...)
-		if err != nil {
-			return nil, err
-		}
-
-		row := new(T)
-
-		m := map[string]any{}
-		if b.selected != "" && b.selected != "*" {
-			for i, key := range strings.Split(b.selected, ",") {
-				if db.Dialect == MYSQL || db.Dialect == MARIA {
-					if v, ok := values[i].([]byte); ok {
-						values[i] = string(v)
-					}
-				}
-				m[key] = values[i]
-			}
-		} else {
-			for i, key := range cols {
-				if db.Dialect == MYSQL || db.Dialect == MARIA {
-					if v, ok := values[i].([]byte); ok {
-						values[i] = string(v)
-					}
-				}
-				m[key] = values[i]
-			}
-		}
-		err = kstrct.FillFromMap(row, m)
-		if err != nil {
-			return nil, err
-		}
-		res = append(res, *row)
-	}
-
-	if len(res) == 0 {
-		return nil, errors.New("no data found")
-	}
-	return res, nil
-}
-
-func (b *BuilderS[T]) queryOneS(query string, args ...any) (res T, err error) {
-	if b == nil || b.tableName == "" {
-		return res, ErrTableNotFound
-	}
-	db, err := GetMemoryDatabase(b.database)
-	if klog.CheckError(err) {
-		return res, err
-	}
-
-	adaptPlaceholdersToDialect(&query, db.Dialect)
-	adaptTimeToUnixArgs(&args)
-	if db.Conn == nil {
-		return res, errors.New("no connection")
-	}
-	var rows *sql.Rows
-	if b.ctx != nil {
-		rows, err = db.Conn.QueryContext(b.ctx, query, args...)
-	} else {
-		rows, err = db.Conn.Query(query, args...)
-	}
-
-	if err == sql.ErrNoRows {
-		return res, fmt.Errorf("no data found")
-	} else if err != nil {
-		return res, err
-	}
-	defer rows.Close()
-
-	var cols []string
-	if b.selected != "" && b.selected != "*" {
-		cols = strings.Split(b.selected, ",")
-	} else {
-		cols, err = rows.Columns()
-		if err != nil {
-			return res, err
-		}
-	}
-
-	columns_ptr_to_values := make([]any, len(cols))
-	values := make([]any, len(cols))
-	index := 0
-	for rows.Next() {
-		for i := range values {
-			columns_ptr_to_values[i] = &values[i]
-		}
-
-		err := rows.Scan(columns_ptr_to_values...)
-		if err != nil {
-			return res, err
-		}
-
-		m := map[string]any{}
-		if b.selected != "" && b.selected != "*" {
-			for i, key := range strings.Split(b.selected, ",") {
-				if db.Dialect == MYSQL || db.Dialect == MARIA {
-					if v, ok := values[i].([]byte); ok {
-						values[i] = string(v)
-					}
-				}
-				m[key] = values[i]
-			}
-		} else {
-			for i, key := range cols {
-				if db.Dialect == MYSQL || db.Dialect == MARIA {
-					if v, ok := values[i].([]byte); ok {
-						values[i] = string(v)
-					}
-				}
-				m[key] = values[i]
-			}
-		}
-		err = kstrct.FillFromMap(&res, m)
-		if err != nil {
-			return res, err
-		}
-		index++
-	}
-	if index == 0 {
-		return res, fmt.Errorf("no data")
-	}
-	return res, nil
+	return model[0], nil
 }

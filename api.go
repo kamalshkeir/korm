@@ -101,7 +101,7 @@ func RegisterTable[T any](table TableRegistration[T], gendocs ...bool) error {
 		}
 		rows, err := q.All()
 		if err != nil {
-			if err.Error() != "no data found" {
+			if err != ErrNoData {
 				c.Status(http.StatusBadRequest).Json(map[string]any{
 					"error": err.Error(),
 				})
@@ -131,7 +131,7 @@ func RegisterTable[T any](table TableRegistration[T], gendocs ...bool) error {
 		}
 		rows, err := q.One()
 		if err != nil {
-			if err.Error() != "no data found" {
+			if err != ErrNoData {
 				c.Status(http.StatusBadRequest).Json(map[string]any{
 					"error": err.Error(),
 				})

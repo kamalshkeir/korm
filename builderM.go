@@ -46,6 +46,12 @@ func Table(tableName string) *BuilderM {
 	}
 }
 
+func BuilderMap() *BuilderM {
+	return &BuilderM{
+		database: databases[0].Name,
+	}
+}
+
 // Database allow to choose database to execute query on
 func (b *BuilderM) Database(dbName string) *BuilderM {
 	if b == nil || b.tableName == "" {
@@ -246,7 +252,7 @@ func (b *BuilderM) All() ([]map[string]any, error) {
 		klog.Printf("statement:%s\n", b.statement)
 		klog.Printf("args:%v\n", b.args)
 	}
-	models, err := b.queryM(b.statement, b.args...)
+	models, err := b.Query(b.statement, b.args...)
 	if err != nil {
 		return nil, err
 	}
@@ -305,13 +311,13 @@ func (b *BuilderM) One() (map[string]any, error) {
 		klog.Printf("ylargs:%v\n", b.args)
 	}
 
-	models, err := b.queryM(b.statement, b.args...)
+	models, err := b.Query(b.statement, b.args...)
 	if err != nil {
 		return nil, err
 	}
 
 	if len(models) == 0 {
-		return nil, errors.New("no data")
+		return nil, ErrNoData
 	}
 	if useCache {
 		_ = cachesOneM.Set(c, models[0])
@@ -937,7 +943,7 @@ func (b *BuilderM) GetRelated(relatedTable string, dest *[]map[string]any) error
 		klog.Printf("args:%v\n", b.args)
 	}
 	var err error
-	*dest, err = Table(relationTableName).queryM(b.statement, b.args...)
+	*dest, err = Table(relationTableName).Query(b.statement, b.args...)
 	if err != nil {
 		return err
 	}
@@ -1007,7 +1013,7 @@ func (b *BuilderM) JoinRelated(relatedTable string, dest *[]map[string]any) erro
 		klog.Printf("args:%v\n", b.args)
 	}
 	var err error
-	*dest, err = Table(relationTableName).queryM(b.statement, b.args...)
+	*dest, err = Table(relationTableName).Query(b.statement, b.args...)
 	if err != nil {
 		return err
 	}
@@ -1091,27 +1097,42 @@ func (b *BuilderM) DeleteRelated(relatedTable string, whereRelatedTable string, 
 	return n, nil
 }
 
-func (b *BuilderM) queryM(statement string, args ...any) ([]map[string]any, error) {
-	if b == nil || b.tableName == "" {
-		return nil, ErrTableNotFound
-	}
-	db, err := GetMemoryDatabase(b.database)
-	if err != nil {
-		return nil, err
+// Query query sql and return result as slice maps
+func (b *BuilderM) Query(statement string, args ...any) ([]map[string]any, error) {
+	var db *DatabaseEntity
+	if b.database != "" {
+		var err error
+		db, err = GetMemoryDatabase(b.database)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		db = &databases[0]
 	}
 	if db.Conn == nil {
 		return nil, errors.New("no connection")
 	}
+	c := dbCache{
+		database:  db.Name,
+		statement: statement,
+		args:      fmt.Sprint(args...),
+	}
+	if useCache {
+		if v, ok := cacheQueryM.Get(c); ok {
+			return v.([]map[string]any), nil
+		}
+	}
 	adaptPlaceholdersToDialect(&statement, db.Dialect)
 	adaptTimeToUnixArgs(&args)
 	var rows *sql.Rows
+	var err error
 	if b.ctx != nil {
 		rows, err = db.Conn.QueryContext(b.ctx, statement, args...)
 	} else {
 		rows, err = db.Conn.Query(statement, args...)
 	}
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("no data found")
+		return nil, ErrNoData
 	} else if err != nil {
 		return nil, err
 	}
@@ -1142,29 +1163,131 @@ func (b *BuilderM) queryM(statement string, args ...any) ([]map[string]any, erro
 		}
 
 		m := map[string]any{}
-		if b.selected != "" && b.selected != "*" {
-			for i, key := range strings.Split(b.selected, ",") {
-				if db.Dialect == MYSQL || db.Dialect == MARIA {
-					if v, ok := modelsPtrs[i].([]byte); ok {
-						modelsPtrs[i] = string(v)
-					}
+		for i := range columns {
+			if db.Dialect == MYSQL || db.Dialect == MARIA {
+				if v, ok := modelsPtrs[i].([]byte); ok {
+					modelsPtrs[i] = string(v)
 				}
-				m[key] = modelsPtrs[i]
 			}
-		} else {
-			for i, key := range columns {
-				if db.Dialect == MYSQL || db.Dialect == MARIA {
-					if v, ok := modelsPtrs[i].([]byte); ok {
-						modelsPtrs[i] = string(v)
-					}
-				}
-				m[key] = modelsPtrs[i]
-			}
+			m[columns[i]] = modelsPtrs[i]
 		}
 		listMap = append(listMap, m)
 	}
 	if len(listMap) == 0 {
-		return nil, errors.New("no data found")
+		return nil, ErrNoData
+	}
+	if useCache {
+		_ = cacheQueryM.Set(c, listMap)
+	}
+	return listMap, nil
+}
+
+// QueryNamed query sql and return result as slice maps
+//
+// Example:
+//
+//		QueryNamed("select * from users where email = :email",map[string]any{
+//			"email":"email@mail.com",
+//	    })
+func (b *BuilderM) QueryNamed(statement string, args map[string]any, unsafe ...bool) ([]map[string]any, error) {
+	var db *DatabaseEntity
+	dbn := databases[0].Name
+	if b.database != "" {
+		var err error
+		dbn = b.database
+		db, err = GetMemoryDatabase(dbn)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		db = &databases[0]
+	}
+	if db.Conn == nil {
+		return nil, errors.New("no connection")
+	}
+	rgs := ""
+	for _, v := range args {
+		rgs += fmt.Sprint(v)
+	}
+	c := dbCache{
+		database:  dbn,
+		statement: statement,
+		args:      rgs,
+	}
+	if useCache {
+		if v, ok := cacheQueryM.Get(c); ok {
+			return v.([]map[string]any), nil
+		}
+	}
+	var query string
+	var newargs []any
+	if len(unsafe) > 0 && unsafe[0] {
+		var err error
+		query, err = UnsafeNamedQuery(statement, args)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		var err error
+		query, newargs, err = AdaptNamedParams(db.Dialect, statement, args)
+		if err != nil {
+			return nil, err
+		}
+	}
+	var rows *sql.Rows
+	var err error
+	if b.ctx != nil {
+		rows, err = db.Conn.QueryContext(b.ctx, query, newargs...)
+	} else {
+		rows, err = db.Conn.Query(query, newargs...)
+	}
+	if err == sql.ErrNoRows {
+		return nil, ErrNoData
+	} else if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var columns []string
+	if b.selected != "" && b.selected != "*" {
+		columns = strings.Split(b.selected, ",")
+	} else {
+		columns, err = rows.Columns()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	models := make([]any, len(columns))
+	modelsPtrs := make([]any, len(columns))
+
+	listMap := make([]map[string]any, 0)
+
+	for rows.Next() {
+		for i := range models {
+			models[i] = &modelsPtrs[i]
+		}
+
+		err := rows.Scan(models...)
+		if err != nil {
+			return nil, err
+		}
+
+		m := map[string]any{}
+		for i := range columns {
+			if db.Dialect == MYSQL || db.Dialect == MARIA {
+				if v, ok := modelsPtrs[i].([]byte); ok {
+					modelsPtrs[i] = string(v)
+				}
+			}
+			m[columns[i]] = modelsPtrs[i]
+		}
+		listMap = append(listMap, m)
+	}
+	if len(listMap) == 0 {
+		return nil, ErrNoData
+	}
+	if useCache {
+		_ = cacheQueryM.Set(c, listMap)
 	}
 	return listMap, nil
 }
@@ -1189,7 +1312,7 @@ func (b *BuilderM) queryS(ptrStrctSlice any, statement string, args ...any) erro
 		rows, err = db.Conn.Query(statement, args...)
 	}
 	if err == sql.ErrNoRows {
-		return fmt.Errorf("no data found")
+		return ErrNoData
 	} else if err != nil {
 		return err
 	}
