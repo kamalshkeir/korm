@@ -743,7 +743,7 @@ func (nb *Build[T]) To(dest *[]T, nested ...bool) *Build[T] {
 			isMap = true
 		}
 	}
-	if nb.ref.Kind() == reflect.Struct || (nb.ref.Kind() == reflect.Chan && nb.ref.Type().Elem().Kind() == reflect.Struct) || (nb.ref.Kind() == reflect.Ptr && nb.ref.Elem().Kind() == reflect.Struct) {
+	if isNested || strings.Contains(nb.typ, ".") || nb.ref.Kind() == reflect.Struct || (nb.ref.Kind() == reflect.Chan && nb.ref.Type().Elem().Kind() == reflect.Struct) {
 		isStrct = true
 	} else if nb.typ[:3] == "map" {
 		isMap = true
@@ -783,58 +783,65 @@ loop:
 		}
 		switch {
 		case isStrct && !isChan:
-			if isPtr {
-				nb.err = errors.Join(nb.err, fmt.Errorf("slice of pointer structs are not allowed"))
-				return nb
-			} else {
-				if !isNested {
+			if !isNested {
+				if isPtr {
+					t := reflect.TypeOf(*new(T)).Elem()
+					newElem := reflect.New(t).Interface().(T)
+					err := kstrct.FillFromKV(newElem, kv)
+					if klog.CheckError(err) {
+						nb.err = errors.Join(err, nb.err)
+						return nb
+					}
+					*dest = append(*dest, newElem)
+				} else {
 					err := kstrct.FillFromKV(temp, kv)
 					if klog.CheckError(err) {
 						nb.err = errors.Join(err, nb.err)
 						return nb
 					}
 					*dest = append(*dest, *temp)
-					continue loop
 				}
+				continue loop
+			}
 
-				if len(lastData) == 0 {
-					lastData = kv
-					*dest = append(*dest, *new(T))
-					temp = &(*dest)[0]
-				}
-				for _, kvv := range kv {
-					if kvv.Key == nb.cols[0] {
-						foundk := false
-						for _, ld := range lastData {
-							if ld.Key == nb.cols[0] && ld.Value == kvv.Value {
-								foundk = true
-								lastData = kv
-							}
-						}
-						if !foundk {
+			if len(lastData) == 0 {
+				lastData = kv
+				*dest = append(*dest, *new(T))
+				temp = &(*dest)[0]
+			}
+			for _, kvv := range kv {
+				if kvv.Key == nb.cols[0] {
+					foundk := false
+					for _, ld := range lastData {
+						if ld.Key == nb.cols[0] && ld.Value == kvv.Value {
+							foundk = true
 							lastData = kv
-							index++
-							*dest = append(*dest, *new(T))
-							temp = &(*dest)[index]
 						}
 					}
+					if !foundk {
+						lastData = kv
+						index++
+						*dest = append(*dest, *new(T))
+						temp = &(*dest)[index]
+					}
 				}
-				err := kstrct.FillFromKV(temp, kv)
-				if klog.CheckError(err) {
-					nb.err = errors.Join(err, nb.err)
-					return nb
-				}
+			}
+			err := kstrct.FillFromKV(temp, kv)
+			if klog.CheckError(err) {
+				nb.err = errors.Join(err, nb.err)
+				return nb
 			}
 			continue loop
 		case isMap && !isChan:
+			m := make(map[string]any, len(kv))
+			for _, kvv := range kv {
+				m[kvv.Key] = kvv.Value
+			}
 			if isPtr {
-				nb.err = errors.Join(nb.err, fmt.Errorf("slice of pointer to map are not allowed, use []map instead"))
-				return nb
-			} else {
-				m := make(map[string]any, len(kv))
-				for _, kvv := range kv {
-					m[kvv.Key] = kvv.Value
+				if v, ok := any(&m).(T); ok {
+					*dest = append(*dest, v)
 				}
+			} else {
 				if v, ok := any(m).(T); ok {
 					*dest = append(*dest, v)
 				}
@@ -922,9 +929,8 @@ loop:
 				}
 				if v, ok := any((*dest)[0]).(chan map[string]any); ok {
 					v <- m
-				} else {
-					nb.err = errors.Join(nb.err, fmt.Errorf("expected *[]chan map[string]any"))
-					return nb
+				} else if v, ok := any((*dest)[0]).(chan *map[string]any); ok {
+					v <- &m
 				}
 				continue loop
 			case isArith:
