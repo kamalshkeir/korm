@@ -115,6 +115,7 @@ func flushCache() {
 		cacheAllS.Flush()
 		cacheQueryS.Flush()
 		cacheQueryM.Flush()
+		cacheQ.Flush()
 		cachesOneM.Flush()
 		cacheOneS.Flush()
 		cacheAllTables.Flush()

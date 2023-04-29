@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -39,7 +40,7 @@ type BuilderS[T any] struct {
 }
 
 // BuilderStruct empty query to struct starter, default db first connected
-func BuilderStruct[T any]() *BuilderS[T] {
+func BuilderStruct[T any](model ...T) *BuilderS[T] {
 	return &BuilderS[T]{
 		db: &databases[0],
 	}
@@ -49,6 +50,20 @@ func BuilderStruct[T any]() *BuilderS[T] {
 func Model[T any](model ...T) *BuilderS[T] {
 	tName := getTableName[T]()
 	if tName == "" {
+		rs := reflect.ValueOf(*new(T))
+		if rs.Kind() == reflect.Chan {
+			chanType := reflect.New(rs.Type().Elem()).Elem()
+			mutexModelTablename.RLock()
+			for tname, mod := range mModelTablename {
+				if mod == chanType.Interface() {
+					return &BuilderS[T]{
+						tableName: tname,
+						db:        &databases[0],
+					}
+				}
+			}
+			mutexModelTablename.RUnlock()
+		}
 		return nil
 	}
 	return &BuilderS[T]{
@@ -1077,6 +1092,153 @@ func (b *BuilderS[T]) All() ([]T, error) {
 	return models, nil
 }
 
+func (b *BuilderS[T]) ToChan(ptrChan *chan T) ([]T, error) {
+	if b == nil || b.tableName == "" {
+		return nil, ErrTableNotFound
+	}
+	c := dbCache{
+		database:   b.db.Name,
+		table:      b.tableName,
+		selected:   b.selected,
+		statement:  b.statement,
+		orderBys:   b.orderBys,
+		whereQuery: b.whereQuery,
+		offset:     b.offset,
+		limit:      b.limit,
+		page:       b.page,
+		args:       fmt.Sprint(b.args...),
+	}
+	if useCache {
+		if v, ok := cacheAllS.Get(c); ok {
+			if vv, ok := v.([]T); ok {
+				for _, val := range vv {
+					*ptrChan <- val
+				}
+				return vv, nil
+			}
+		}
+	}
+	if b.selected != "" && b.selected != "*" {
+		b.statement = "select " + b.selected + " from " + b.tableName
+	} else {
+		b.statement = "select * from " + b.tableName
+	}
+
+	if b.whereQuery != "" {
+		b.statement += " WHERE " + b.whereQuery
+	}
+
+	if b.orderBys != "" {
+		b.statement += " " + b.orderBys
+	}
+
+	if b.limit > 0 {
+		i := strconv.Itoa(b.limit)
+		b.statement += " LIMIT " + i
+		if b.page > 0 {
+			o := strconv.Itoa((b.page - 1) * b.limit)
+			b.statement += " OFFSET " + o
+		}
+	}
+
+	if b.debug {
+		klog.Printf("statement:%s\n", b.statement)
+		klog.Printf("args:%v\n", b.args)
+	}
+	adaptPlaceholdersToDialect(&b.statement, b.db.Dialect)
+	adaptTimeToUnixArgs(&b.args)
+	pk := ""
+	if b.tableName != "" {
+		for _, t := range b.db.Tables {
+			if t.Name == b.tableName {
+				pk = t.Pk
+			}
+		}
+	}
+	var rows *sql.Rows
+	var err error
+	if b.ctx != nil {
+		rows, err = b.db.Conn.QueryContext(b.ctx, b.statement, b.args...)
+	} else {
+		rows, err = b.db.Conn.Query(b.statement, b.args...)
+	}
+	if err == sql.ErrNoRows {
+		return nil, ErrNoData
+	} else if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var columns []string
+	if b.selected != "" && b.selected != "*" {
+		columns = strings.Split(b.selected, ",")
+	} else {
+		columns, err = rows.Columns()
+		if err != nil {
+			return nil, err
+		}
+		if pk == "" {
+			pk = columns[0]
+		}
+	}
+	columns_ptr_to_values := make([]any, len(columns))
+	values := make([]any, len(columns))
+	res := make([]T, 0, 7)
+	var nested *T
+	index := 0
+	lastData := make(map[string]any, len(columns))
+	for rows.Next() {
+		for i := range values {
+			columns_ptr_to_values[i] = &values[i]
+		}
+		err := rows.Scan(columns_ptr_to_values...)
+		if err != nil {
+			klog.Printf("yl%s, err: %v\n", b.statement, err)
+			return res, err
+		}
+
+		m := make(map[string]any, len(columns))
+		for i, key := range columns {
+			if b.db.Dialect == MYSQL || b.db.Dialect == MARIA {
+				if v, ok := values[i].([]byte); ok {
+					values[i] = string(v)
+				}
+			}
+			m[key] = values[i]
+		}
+		toAppend := false
+		if len(lastData) == 0 {
+			toAppend = true
+			lastData = m
+			res = append(res, *new(T))
+			nested = &res[0]
+		}
+
+		if pk != "" && m[pk] == lastData[pk] {
+			lastData = m
+		} else if pk != "" && m[pk] != lastData[pk] {
+			toAppend = true
+			lastData = m
+			index++
+			res = append(res, *new(T))
+			nested = &res[index]
+		}
+		err = kstrct.FillFromMap(nested, m)
+		if err != nil {
+			return res, err
+		}
+		if toAppend {
+			*ptrChan <- *nested
+		}
+	}
+	if len(res) == 0 {
+		return res, ErrNoData
+	}
+	if useCache {
+		_ = cacheAllS.Set(c, res)
+	}
+	return res, nil
+}
+
 // QueryNamedS query sql and return result as slice of structs T
 //
 // Example:
@@ -1232,9 +1394,6 @@ func (b *BuilderS[T]) Query(statement string, args ...any) ([]T, error) {
 	}
 	adaptPlaceholdersToDialect(&statement, b.db.Dialect)
 	adaptTimeToUnixArgs(&args)
-	if b.tableName == "" {
-		b.tableName = getTableName[T]()
-	}
 	pk := ""
 	if b.tableName != "" {
 		for _, t := range b.db.Tables {

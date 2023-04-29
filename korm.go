@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 
@@ -36,6 +37,7 @@ var (
 	serverBus           *ksbus.Server
 	cacheQueryS         = kmap.New[dbCache, any](false, cacheMaxMemoryMb)
 	cacheQueryM         = kmap.New[dbCache, any](false, cacheMaxMemoryMb)
+	cacheQ              = kmap.New[string, any](false, cacheMaxMemoryMb)
 	ErrTableNotFound    = errors.New("unable to find tableName")
 	ErrBigData          = kmap.ErrLargeData
 	logQueries          = false
@@ -630,6 +632,339 @@ func ExecContextNamed(ctx context.Context, query string, args map[string]any, db
 	return nil
 }
 
+type Build[T any] struct {
+	dest    T
+	rows    *sql.Rows
+	ref     reflect.Value
+	stat    string
+	typ     string
+	dialect string
+	err     error
+	cols    []string
+	res     []T
+}
+
+func Q[T any](statement string, args ...any) *Build[T] {
+	var db *DatabaseEntity
+	if len(databases) == 1 {
+		db = &databases[0]
+	} else if len(args) > 0 {
+		if v, ok := args[len(args)-1].(string); ok {
+			if strings.HasPrefix(v, "db:") {
+				db, _ = GetMemoryDatabase(strings.TrimSpace(v[3:]))
+			}
+		}
+		if db == nil {
+			db = &databases[0]
+		}
+	} else if len(databases) > 1 {
+		db = &databases[0]
+	} else {
+		builder := &Build[T]{
+			err: fmt.Errorf("db not found"),
+		}
+		return builder
+	}
+	if useCache {
+		stt := db.Name + statement + fmt.Sprint(args...)
+		if v, ok := cacheQ.Get(stt); ok {
+			if vv, ok := v.([]T); ok {
+				return &Build[T]{
+					res:  vv,
+					stat: stt,
+				}
+			}
+		}
+	}
+
+	builder := &Build[T]{
+		dialect: db.Dialect,
+		dest:    *new(T),
+		stat:    db.Name + statement + fmt.Sprint(args...),
+	}
+	builder.typ = fmt.Sprintf("%T", builder.dest)
+	builder.ref = reflect.ValueOf(builder.dest)
+	if builder.typ[1] == '[' {
+		builder.err = fmt.Errorf("type param cannot be slice")
+		return builder
+	}
+	if db.Conn == nil {
+		builder.err = fmt.Errorf("no connection")
+		return builder
+	}
+	adaptPlaceholdersToDialect(&statement, db.Dialect)
+	adaptTimeToUnixArgs(&args)
+	rows, err := db.Conn.Query(statement, args...)
+	if err != nil {
+		builder.err = err
+		return builder
+	}
+	columns, err := rows.Columns()
+	if err != nil {
+		builder.err = err
+		return builder
+	}
+	builder.rows = rows
+	builder.cols = columns
+	return builder
+}
+
+func (nb *Build[T]) Error() error {
+	return nb.err
+}
+
+func (nb *Build[T]) To(dest *[]T, nested ...bool) *Build[T] {
+	if useCache && len(nb.res) > 0 {
+		if len(nb.typ) >= 4 && nb.typ[:4] == "chan" {
+			for _, r := range nb.res {
+				kk := (*dest)[0]
+				if dd, ok := any(kk).(chan T); ok {
+					dd <- r
+				}
+			}
+			return nb
+		} else {
+			*dest = nb.res
+			return nb
+		}
+	}
+	if nb.err != nil || nb.rows == nil {
+		return nb
+	}
+	isMap, isChan, isStrct, isArith, isPtr := false, false, false, false, false
+	isNested := len(nested) > 0 && nested[0]
+	if nb.typ[0] == '*' {
+		isPtr = true
+		nb.typ = nb.typ[1:]
+	}
+	if len(nb.typ) >= 4 && nb.typ[:4] == "chan" {
+		isChan = true
+		if strings.Contains(nb.typ, "map") {
+			isMap = true
+		}
+	}
+	if nb.ref.Kind() == reflect.Struct {
+		isStrct = true
+	} else if nb.typ[:3] == "map" {
+		isMap = true
+	} else {
+		isArith = true
+	}
+	var (
+		columns_ptr_to_values = make([]any, len(nb.cols))
+		temp                  = new(T)
+		lastData              []kstrct.KV
+		values                = make([]any, len(nb.cols))
+	)
+	if isNested {
+		lastData = make([]kstrct.KV, 0, len(nb.cols))
+	}
+	index := 0
+	kv := make([]kstrct.KV, 0, len(nb.cols))
+	defer nb.rows.Close()
+loop:
+	for nb.rows.Next() {
+		kv = kv[:]
+		for i := range values {
+			columns_ptr_to_values[i] = &values[i]
+		}
+		err := nb.rows.Scan(columns_ptr_to_values...)
+		if err != nil {
+			nb.err = errors.Join(err, nb.err)
+			return nb
+		}
+		for i, key := range nb.cols {
+			if nb.dialect == MYSQL {
+				if v, ok := values[i].([]byte); ok {
+					values[i] = string(v)
+				}
+			}
+			kv = append(kv, kstrct.KV{Key: key, Value: values[i]})
+		}
+		switch {
+		case isStrct && !isChan:
+			if isPtr {
+				nb.err = errors.Join(nb.err, fmt.Errorf("slice of pointer structs are not allowed"))
+				return nb
+			} else {
+				if !isNested {
+					err := kstrct.FillFromKV(temp, kv)
+					if klog.CheckError(err) {
+						nb.err = errors.Join(err, nb.err)
+						return nb
+					}
+					*dest = append(*dest, *temp)
+					continue loop
+				}
+
+				if len(lastData) == 0 {
+					lastData = kv
+					*dest = append(*dest, *new(T))
+					temp = &(*dest)[0]
+				}
+				for _, kvv := range kv {
+					if kvv.Key == nb.cols[0] {
+						foundk := false
+						for _, ld := range lastData {
+							if ld.Key == nb.cols[0] && ld.Value == kvv.Value {
+								foundk = true
+								lastData = kv
+							}
+						}
+						if !foundk {
+							lastData = kv
+							index++
+							*dest = append(*dest, *new(T))
+							temp = &(*dest)[index]
+						}
+					}
+				}
+				err := kstrct.FillFromKV(temp, kv)
+				if klog.CheckError(err) {
+					nb.err = errors.Join(err, nb.err)
+					return nb
+				}
+			}
+			continue loop
+		case isMap && !isChan:
+			if isPtr {
+				nb.err = errors.Join(nb.err, fmt.Errorf("slice of pointer to map are not allowed, use []map instead"))
+				return nb
+			} else {
+				m := make(map[string]any, len(kv))
+				for _, kvv := range kv {
+					m[kvv.Key] = kvv.Value
+				}
+				if v, ok := any(m).(T); ok {
+					*dest = append(*dest, v)
+				}
+			}
+			continue loop
+		case isArith && !isChan:
+			if len(kv) == 1 {
+				for _, vKV := range kv {
+					vv := vKV.Value
+					if isPtr {
+						if vok, ok := any(&vv).(T); ok {
+							*dest = append(*dest, vok)
+						} else {
+							elem := reflect.New(nb.ref.Type()).Elem()
+							err := kstrct.SetReflectFieldValue(elem, vKV.Value)
+							if err != nil {
+								nb.err = errors.Join(nb.err, err)
+								return nb
+							}
+							*dest = append(*dest, elem.Interface().(T))
+						}
+					} else {
+						if vok, ok := any(vv).(T); ok {
+							*dest = append(*dest, vok)
+						} else {
+							elem := reflect.New(nb.ref.Type()).Elem()
+							err := kstrct.SetReflectFieldValue(elem, vKV.Value)
+							if err != nil {
+								nb.err = errors.Join(nb.err, err)
+								return nb
+							}
+							inter := elem.Interface()
+							*dest = append(*dest, inter.(T))
+						}
+					}
+				}
+				continue loop
+			}
+		case isChan:
+			switch {
+			case isStrct:
+				if !isNested {
+					err := kstrct.FillFromKV((*dest)[0], kv)
+					if klog.CheckError(err) {
+						nb.err = errors.Join(err, nb.err)
+						return nb
+					}
+					continue loop
+				}
+				update := false
+				if len(lastData) == 0 {
+					update = true
+				}
+				for _, kvv := range kv {
+					if kvv.Key == nb.cols[0] {
+						foundk := false
+						for _, ld := range lastData {
+							if ld.Key == nb.cols[0] && ld.Value == kvv.Value {
+								foundk = true
+							}
+						}
+						if !foundk {
+							update = true
+							temp = new(T)
+						}
+					}
+				}
+				lastData = kv
+				if update {
+					chanType := reflect.New(nb.ref.Type().Elem()).Elem()
+					for _, vKv := range kv {
+						err := kstrct.SetReflectFieldValue(chanType, vKv.Value)
+						if klog.CheckError(err) {
+							nb.err = errors.Join(nb.err, err)
+							return nb
+						}
+						reflect.ValueOf((*dest)[0]).Send(chanType)
+					}
+					continue loop
+				}
+			case isMap:
+				m := make(map[string]any, len(kv))
+				for _, vkv := range kv {
+					m[vkv.Key] = vkv.Value
+				}
+				if v, ok := any((*dest)[0]).(chan map[string]any); ok {
+					v <- m
+				} else {
+					nb.err = errors.Join(nb.err, fmt.Errorf("expected *[]chan map[string]any"))
+					return nb
+				}
+				continue loop
+			case isArith:
+
+				chanType := reflect.New(nb.ref.Type().Elem()).Elem()
+				for _, vKv := range kv {
+					if chanType.Kind() == reflect.Struct || chanType.Elem().Kind() == reflect.Struct {
+						m := make(map[string]any, len(kv))
+						for _, vkv := range kv {
+							m[vkv.Key] = vkv.Value
+						}
+						err := kstrct.SetReflectFieldValue(chanType, m)
+						if klog.CheckError(err) {
+							nb.err = errors.Join(nb.err, err)
+							return nb
+						}
+					} else {
+						err := kstrct.SetReflectFieldValue(chanType, vKv.Value)
+						if klog.CheckError(err) {
+							nb.err = errors.Join(nb.err, err)
+							return nb
+						}
+					}
+					reflect.ValueOf((*dest)[0]).Send(chanType)
+				}
+			default:
+				nb.err = errors.Join(nb.err, fmt.Errorf("channel case not handled"))
+				return nb
+			}
+		default:
+			nb.err = errors.Join(nb.err, fmt.Errorf("default triggered, case not handled"))
+			return nb
+		}
+	}
+	if useCache && !isChan && len(*dest) > 0 {
+		cacheQ.Set(nb.stat, *dest)
+	}
+	return nb
+}
+
 func getTableName[T any]() string {
 	mutexModelTablename.RLock()
 	defer mutexModelTablename.RUnlock()
@@ -646,109 +981,4 @@ func getTableName[T any]() string {
 // LogQueries enable logging sql statements with time tooked
 func LogQueries() {
 	logQueries = true
-}
-
-// Q query to struct, if multiple db, expect last arg as string 'db:dbName'
-func Q[T any](statement string, args ...any) ([]T, error) {
-	var db *DatabaseEntity
-	if len(databases) == 1 {
-		db = &databases[0]
-	} else if len(args) > 0 {
-		if v, ok := args[len(args)-1].(string); ok {
-			if strings.HasPrefix(v, "db:") {
-				db, _ = GetMemoryDatabase(strings.TrimSpace(v[3:]))
-			}
-		}
-	} else if len(databases) > 1 {
-		db = &databases[0]
-	}
-	if db.Conn == nil {
-		return nil, errors.New("no connection")
-	}
-	c := dbCache{
-		database:  db.Name,
-		statement: statement,
-		args:      fmt.Sprint(args...),
-	}
-	if useCache {
-		if v, ok := cacheQueryS.Get(c); ok {
-			return v.([]T), nil
-		}
-	}
-	adaptPlaceholdersToDialect(&statement, db.Dialect)
-	adaptTimeToUnixArgs(&args)
-	tbName := getTableName[T]()
-	pk := ""
-	if tbName != "" {
-		for _, t := range db.Tables {
-			if t.Name == tbName {
-				pk = t.Pk
-			}
-		}
-	}
-	rows, err := db.Conn.Query(statement, args...)
-	if err == sql.ErrNoRows {
-		return nil, ErrNoData
-	} else if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	columns, err := rows.Columns()
-	if err != nil {
-		return nil, err
-	}
-	if pk == "" {
-		pk = columns[0]
-	}
-	columns_ptr_to_values := make([]any, len(columns))
-	values := make([]any, len(columns))
-	res := make([]T, 0, 7)
-	var nested *T
-	index := 0
-	lastData := make(map[string]any, len(columns))
-	for rows.Next() {
-		for i := range values {
-			columns_ptr_to_values[i] = &values[i]
-		}
-		err := rows.Scan(columns_ptr_to_values...)
-		if err != nil {
-			klog.Printf("yl%s\n", statement)
-			return nil, err
-		}
-
-		m := make(map[string]any, len(columns))
-		for i, key := range columns {
-			if db.Dialect == MYSQL || db.Dialect == MARIA {
-				if v, ok := values[i].([]byte); ok {
-					values[i] = string(v)
-				}
-			}
-			m[key] = values[i]
-		}
-		if len(lastData) == 0 {
-			lastData = m
-			res = append(res, *new(T))
-			nested = &res[0]
-		}
-		if pk != "" && m[pk] == lastData[pk] {
-			lastData = m
-		} else if pk != "" && m[pk] != lastData[pk] {
-			lastData = m
-			index++
-			res = append(res, *new(T))
-			nested = &res[index]
-		}
-		err = kstrct.FillFromMap(nested, m)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if len(res) == 0 {
-		return nil, ErrNoData
-	}
-	if useCache {
-		_ = cacheQueryS.Set(c, res)
-	}
-	return res, nil
 }
