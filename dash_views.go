@@ -376,7 +376,7 @@ var SingleModelGet = func(c *kmux.Context) {
 			spTo := strings.Split(fkey.ToTableField, ".")
 			if len(spTo) == 2 {
 				q := "select " + spTo[1] + " from " + spTo[0] + " order by " + spTo[1]
-				mm, err := Table(spTo[0]).Query(defaultDB, q)
+				mm, err := Table(spTo[0]).Query(q)
 				if !klog.CheckError(err) {
 					ress := []any{}
 					for _, res := range mm {
