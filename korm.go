@@ -764,7 +764,7 @@ func (nb *Build[T]) To(dest *[]T, nested ...bool) *Build[T] {
 	defer nb.rows.Close()
 loop:
 	for nb.rows.Next() {
-		kv = kv[:]
+		kv = kv[:0]
 		for i := range values {
 			columns_ptr_to_values[i] = &values[i]
 		}
