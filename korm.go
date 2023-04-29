@@ -743,7 +743,7 @@ func (nb *Build[T]) To(dest *[]T, nested ...bool) *Build[T] {
 			isMap = true
 		}
 	}
-	if nb.ref.Kind() == reflect.Struct || nb.ref.Type().Elem().Kind() == reflect.Struct {
+	if nb.ref.Kind() == reflect.Struct || (nb.ref.Kind() == reflect.Chan && nb.ref.Type().Elem().Kind() == reflect.Struct) || (nb.ref.Kind() == reflect.Ptr && nb.ref.Elem().Kind() == reflect.Struct) {
 		isStrct = true
 	} else if nb.typ[:3] == "map" {
 		isMap = true
