@@ -743,7 +743,7 @@ func (nb *Build[T]) To(dest *[]T, nested ...bool) *Build[T] {
 			isMap = true
 		}
 	}
-	if nb.ref.Kind() == reflect.Struct {
+	if nb.ref.Kind() == reflect.Struct || nb.ref.Type().Elem().Kind() == reflect.Struct {
 		isStrct = true
 	} else if nb.typ[:3] == "map" {
 		isMap = true
@@ -928,10 +928,9 @@ loop:
 				}
 				continue loop
 			case isArith:
-
 				chanType := reflect.New(nb.ref.Type().Elem()).Elem()
 				for _, vKv := range kv {
-					if chanType.Kind() == reflect.Struct || chanType.Elem().Kind() == reflect.Struct {
+					if chanType.Kind() == reflect.Struct || (chanType.Kind() == reflect.Ptr && chanType.Elem().Kind() == reflect.Struct) {
 						m := make(map[string]any, len(kv))
 						for _, vkv := range kv {
 							m[vkv.Key] = vkv.Value
