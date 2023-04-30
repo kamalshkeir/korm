@@ -1222,7 +1222,7 @@ func (b *BuilderS[T]) ToChan(ptrChan *chan T) ([]T, error) {
 			res = append(res, *new(T))
 			nested = &res[index]
 		}
-		err = kstrct.FillFromMap(nested, m)
+		err = kstrct.FillFromMap(nested, m, true)
 		if err != nil {
 			return res, err
 		}
@@ -1351,6 +1351,7 @@ func (b *BuilderS[T]) QueryNamed(statement string, args map[string]any, unsafe .
 			res = append(res, *new(T))
 			nested = &res[0]
 		}
+
 		if pk != "" && m[pk] == lastData[pk] {
 			lastData = m
 		} else if pk != "" && m[pk] != lastData[pk] {
@@ -1359,7 +1360,7 @@ func (b *BuilderS[T]) QueryNamed(statement string, args map[string]any, unsafe .
 			res = append(res, *new(T))
 			nested = &res[index]
 		}
-		err = kstrct.FillFromMap(nested, m)
+		err = kstrct.FillFromMap(nested, m, true)
 		if err != nil {
 			return nil, err
 		}
@@ -1466,7 +1467,7 @@ func (b *BuilderS[T]) Query(statement string, args ...any) ([]T, error) {
 			res = append(res, *new(T))
 			nested = &res[index]
 		}
-		err = kstrct.FillFromMap(nested, m)
+		err = kstrct.FillFromMap(nested, m, true)
 		if err != nil {
 			return nil, err
 		}

@@ -826,7 +826,7 @@ loop:
 				}
 			}
 
-			err := kstrct.FillFromKV(temp, kv)
+			err := kstrct.FillFromKV(temp, kv, true)
 			if klog.CheckError(err) {
 				nb.err = errors.Join(err, nb.err)
 				return nb
@@ -919,7 +919,7 @@ loop:
 						nb.err = errors.Join(nb.err, fmt.Errorf("chan of pointers not handled"))
 						return nb
 					}
-					err := kstrct.FillFromKV(chanType.Addr().Interface(), kv)
+					err := kstrct.FillFromKV(chanType.Addr().Interface(), kv, true)
 					if klog.CheckError(err) {
 						nb.err = errors.Join(nb.err, err)
 						return nb
