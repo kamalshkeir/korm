@@ -756,11 +756,8 @@ func (nb *Build[T]) To(dest *[]T, nested ...bool) *Build[T] {
 		lastData              []kstrct.KV
 		values                = make([]any, len(nb.cols))
 	)
-	if isNested {
-		lastData = make([]kstrct.KV, 0, len(nb.cols))
-	}
-	index := 0
 	kv := make([]kstrct.KV, 0, len(nb.cols))
+	index := 0
 	defer nb.rows.Close()
 loop:
 	for nb.rows.Next() {
@@ -803,29 +800,32 @@ loop:
 				}
 				continue loop
 			}
-
 			if len(lastData) == 0 {
-				lastData = kv
+				lastData = make([]kstrct.KV, len(kv))
+				copy(lastData, kv)
 				*dest = append(*dest, *new(T))
 				temp = &(*dest)[0]
-			}
-			for _, kvv := range kv {
-				if kvv.Key == nb.cols[0] {
-					foundk := false
-					for _, ld := range lastData {
-						if ld.Key == nb.cols[0] && ld.Value == kvv.Value {
-							foundk = true
-							lastData = kv
+			} else {
+				for _, kvv := range kv {
+					if kvv.Key == nb.cols[0] {
+						foundk := false
+						for _, ld := range lastData {
+							if ld.Key == nb.cols[0] && ld.Value == kvv.Value {
+								foundk = true
+								break
+							}
 						}
-					}
-					if !foundk {
-						lastData = kv
-						index++
-						*dest = append(*dest, *new(T))
-						temp = &(*dest)[index]
+						if !foundk {
+							lastData = append(lastData, kvv)
+							index++
+							*dest = append(*dest, *new(T))
+							temp = &(*dest)[index]
+						}
+						break
 					}
 				}
 			}
+
 			err := kstrct.FillFromKV(temp, kv)
 			if klog.CheckError(err) {
 				nb.err = errors.Join(err, nb.err)
@@ -901,25 +901,30 @@ loop:
 						for _, ld := range lastData {
 							if ld.Key == nb.cols[0] && ld.Value == kvv.Value {
 								foundk = true
+								break
 							}
 						}
 						if !foundk {
 							update = true
 							temp = new(T)
 						}
+						break
 					}
 				}
-				lastData = kv
 				if update {
+					lastData = lastData[:0]
+					copy(lastData, kv)
 					chanType := reflect.New(nb.ref.Type().Elem()).Elem()
-					for _, vKv := range kv {
-						err := kstrct.SetReflectFieldValue(chanType, vKv.Value)
-						if klog.CheckError(err) {
-							nb.err = errors.Join(nb.err, err)
-							return nb
-						}
-						reflect.ValueOf((*dest)[0]).Send(chanType)
+					if chanType.Kind() == reflect.Ptr {
+						nb.err = errors.Join(nb.err, fmt.Errorf("chan of pointers not handled"))
+						return nb
 					}
+					err := kstrct.FillFromKV(chanType.Addr().Interface(), kv)
+					if klog.CheckError(err) {
+						nb.err = errors.Join(nb.err, err)
+						return nb
+					}
+					reflect.ValueOf((*dest)[0]).Send(chanType)
 					continue loop
 				}
 			case isMap:
