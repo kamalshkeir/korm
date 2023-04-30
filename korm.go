@@ -826,10 +826,22 @@ loop:
 				}
 			}
 
-			err := kstrct.FillFromKV(temp, kv, true)
-			if klog.CheckError(err) {
-				nb.err = errors.Join(err, nb.err)
-				return nb
+			if isPtr {
+				t := reflect.TypeOf(*new(T)).Elem()
+				newElem := reflect.New(t).Interface().(T)
+				err := kstrct.FillFromKV(newElem, kv, true)
+				if klog.CheckError(err) {
+					nb.err = errors.Join(err, nb.err)
+					return nb
+				}
+				*dest = append(*dest, newElem)
+			} else {
+				err := kstrct.FillFromKV(temp, kv, true)
+				if klog.CheckError(err) {
+					nb.err = errors.Join(err, nb.err)
+					return nb
+				}
+				*dest = append(*dest, *temp)
 			}
 			continue loop
 		case isMap && !isChan:
@@ -883,6 +895,10 @@ loop:
 		case isChan:
 			switch {
 			case isStrct:
+				if isPtr {
+					nb.err = errors.Join(err, fmt.Errorf("channel of pointers not allowed in case of structs"))
+					return nb
+				}
 				if !isNested {
 					err := kstrct.FillFromKV((*dest)[0], kv)
 					if klog.CheckError(err) {
@@ -915,10 +931,6 @@ loop:
 					lastData = lastData[:0]
 					copy(lastData, kv)
 					chanType := reflect.New(nb.ref.Type().Elem()).Elem()
-					if chanType.Kind() == reflect.Ptr {
-						nb.err = errors.Join(nb.err, fmt.Errorf("chan of pointers not handled"))
-						return nb
-					}
 					err := kstrct.FillFromKV(chanType.Addr().Interface(), kv, true)
 					if klog.CheckError(err) {
 						nb.err = errors.Join(nb.err, err)
