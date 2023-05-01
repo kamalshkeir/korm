@@ -732,29 +732,33 @@ func (nb *Build[T]) To(dest *[]T, nested ...bool) *Build[T] {
 		return nb
 	}
 	isMap, isChan, isStrct, isArith, isPtr := false, false, false, false, false
-	isNested := len(nested) > 0 && nested[0]
 	if nb.typ[0] == '*' {
 		isPtr = true
 		nb.typ = nb.typ[1:]
 	}
+	isNested := len(nested) > 0 && nested[0]
 	if len(nb.typ) >= 4 && nb.typ[:4] == "chan" {
 		isChan = true
 		if strings.Contains(nb.typ, "map") {
 			isMap = true
 		}
 	}
-	if isNested || strings.Contains(nb.typ, ".") || nb.ref.Kind() == reflect.Struct || (nb.ref.Kind() == reflect.Chan && nb.ref.Type().Elem().Kind() == reflect.Struct) {
-		isStrct = true
-	} else if nb.typ[:3] == "map" {
+	if nb.typ[:3] == "map" {
 		isMap = true
+	} else if isNested || strings.Contains(nb.typ, ".") || nb.ref.Kind() == reflect.Struct || (nb.ref.Kind() == reflect.Chan && nb.ref.Type().Elem().Kind() == reflect.Struct) {
+		if strings.HasSuffix(nb.typ, "Time") {
+			isArith = true
+		} else {
+			isStrct = true
+		}
 	} else {
 		isArith = true
 	}
 	var (
 		columns_ptr_to_values = make([]any, len(nb.cols))
+		values                = make([]any, len(nb.cols))
 		temp                  = new(T)
 		lastData              []kstrct.KV
-		values                = make([]any, len(nb.cols))
 	)
 	kv := make([]kstrct.KV, 0, len(nb.cols))
 	index := 0
@@ -767,7 +771,7 @@ loop:
 		}
 		err := nb.rows.Scan(columns_ptr_to_values...)
 		if err != nil {
-			nb.err = errors.Join(err, nb.err)
+			nb.err = errors.Join(nb.err, err)
 			return nb
 		}
 		for i, key := range nb.cols {
@@ -782,7 +786,7 @@ loop:
 		case isStrct && !isChan:
 			if !isNested {
 				if isPtr {
-					t := reflect.TypeOf(*new(T)).Elem()
+					t := nb.ref.Type().Elem()
 					newElem := reflect.New(t).Interface().(T)
 					err := kstrct.FillFromKV(newElem, kv)
 					if klog.CheckError(err) {
@@ -803,8 +807,25 @@ loop:
 			if len(lastData) == 0 {
 				lastData = make([]kstrct.KV, len(kv))
 				copy(lastData, kv)
-				*dest = append(*dest, *new(T))
-				temp = &(*dest)[0]
+				if isPtr {
+					t := reflect.TypeOf(*new(T)).Elem()
+					newElem := reflect.New(t).Interface().(T)
+					*dest = append(*dest, newElem)
+					temp = &(*dest)[0]
+					err := kstrct.FillFromKV(*temp, kv, true)
+					if klog.CheckError(err) {
+						nb.err = errors.Join(err, nb.err)
+						return nb
+					}
+				} else {
+					*dest = append(*dest, *new(T))
+					temp = &(*dest)[0]
+					err := kstrct.FillFromKV(temp, kv, true)
+					if klog.CheckError(err) {
+						nb.err = errors.Join(err, nb.err)
+						return nb
+					}
+				}
 			} else {
 				for _, kvv := range kv {
 					if kvv.Key == nb.cols[0] {
@@ -818,33 +839,52 @@ loop:
 						if !foundk {
 							lastData = append(lastData, kvv)
 							index++
-							*dest = append(*dest, *new(T))
-							temp = &(*dest)[index]
+							if isPtr {
+								t := reflect.TypeOf(*new(T)).Elem()
+								newElem := reflect.New(t).Interface().(T)
+								*dest = append(*dest, newElem)
+								temp = &(*dest)[index]
+								err := kstrct.FillFromKV(*temp, kv, true)
+								if klog.CheckError(err) {
+									nb.err = errors.Join(err, nb.err)
+									return nb
+								}
+							} else {
+								*dest = append(*dest, *new(T))
+								temp = &(*dest)[index]
+								err := kstrct.FillFromKV(temp, kv, true)
+								if klog.CheckError(err) {
+									nb.err = errors.Join(err, nb.err)
+									return nb
+								}
+							}
+						} else {
+							lastData = append(lastData, kvv)
+							if !isPtr {
+								err := kstrct.FillFromKV(&(*dest)[index], kv, true)
+								if klog.CheckError(err) {
+									nb.err = errors.Join(err, nb.err)
+									return nb
+								}
+							} else {
+								err := kstrct.FillFromKV((*dest)[index], kv, true)
+								if klog.CheckError(err) {
+									nb.err = errors.Join(err, nb.err)
+									return nb
+								}
+							}
+
 						}
 						break
 					}
 				}
 			}
-
-			if isPtr {
-				t := reflect.TypeOf(*new(T)).Elem()
-				newElem := reflect.New(t).Interface().(T)
-				err := kstrct.FillFromKV(newElem, kv, true)
-				if klog.CheckError(err) {
-					nb.err = errors.Join(err, nb.err)
-					return nb
-				}
-				*dest = append(*dest, newElem)
-			} else {
-				err := kstrct.FillFromKV(temp, kv, true)
-				if klog.CheckError(err) {
-					nb.err = errors.Join(err, nb.err)
-					return nb
-				}
-				*dest = append(*dest, *temp)
-			}
 			continue loop
 		case isMap && !isChan:
+			if isNested {
+				nb.err = errors.Join(nb.err, fmt.Errorf("map is not nested struct"))
+				return nb
+			}
 			m := make(map[string]any, len(kv))
 			for _, kvv := range kv {
 				m[kvv.Key] = kvv.Value
@@ -860,6 +900,10 @@ loop:
 			}
 			continue loop
 		case isArith && !isChan:
+			if isNested {
+				nb.err = errors.Join(nb.err, fmt.Errorf("this type cannot be nested"))
+				return nb
+			}
 			if len(kv) == 1 {
 				for _, vKV := range kv {
 					vv := vKV.Value
@@ -900,46 +944,26 @@ loop:
 					return nb
 				}
 				if !isNested {
-					err := kstrct.FillFromKV((*dest)[0], kv)
+					m := make(map[string]any, len(kv))
+					for _, vkv := range kv {
+						m[vkv.Key] = vkv.Value
+					}
+					err := kstrct.FillFromMap((*dest)[0], m)
 					if klog.CheckError(err) {
 						nb.err = errors.Join(err, nb.err)
 						return nb
 					}
 					continue loop
+				} else {
+					nb.err = errors.Join(err, fmt.Errorf("nested chan structs not supported"))
+					return nb
 				}
-				update := false
-				if len(lastData) == 0 {
-					update = true
-				}
-				for _, kvv := range kv {
-					if kvv.Key == nb.cols[0] {
-						foundk := false
-						for _, ld := range lastData {
-							if ld.Key == nb.cols[0] && ld.Value == kvv.Value {
-								foundk = true
-								break
-							}
-						}
-						if !foundk {
-							update = true
-							temp = new(T)
-						}
-						break
-					}
-				}
-				if update {
-					lastData = lastData[:0]
-					copy(lastData, kv)
-					chanType := reflect.New(nb.ref.Type().Elem()).Elem()
-					err := kstrct.FillFromKV(chanType.Addr().Interface(), kv, true)
-					if klog.CheckError(err) {
-						nb.err = errors.Join(nb.err, err)
-						return nb
-					}
-					reflect.ValueOf((*dest)[0]).Send(chanType)
-					continue loop
-				}
+
 			case isMap:
+				if isNested {
+					nb.err = errors.Join(nb.err, fmt.Errorf("map cannot be nested"))
+					return nb
+				}
 				m := make(map[string]any, len(kv))
 				for _, vkv := range kv {
 					m[vkv.Key] = vkv.Value
@@ -951,6 +975,10 @@ loop:
 				}
 				continue loop
 			case isArith:
+				if isNested {
+					nb.err = errors.Join(nb.err, fmt.Errorf("type cannot be nested"))
+					return nb
+				}
 				chanType := reflect.New(nb.ref.Type().Elem()).Elem()
 				for _, vKv := range kv {
 					if chanType.Kind() == reflect.Struct || (chanType.Kind() == reflect.Ptr && chanType.Elem().Kind() == reflect.Struct) {
