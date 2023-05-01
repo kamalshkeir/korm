@@ -153,6 +153,38 @@ func BenchmarkQueryS(b *testing.B) {
 	}
 }
 
+func BenchmarkTo(b *testing.B) {
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		a := []TestTable{}
+		err := korm.To(&a).Query("select * from test_table where is_admin = ?", true)
+		if err != nil {
+			b.Error("error BenchmarkTo:", err)
+		}
+		if len(a) != NumberOfModel || a[0].Email != "test-0@example.com" {
+			b.Error("Failed:", len(a), a[0].Email)
+		}
+	}
+}
+
+func BenchmarkToNamed(b *testing.B) {
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		a := []TestTable{}
+		err := korm.To(&a).Named("select * from test_table where is_admin = :ad", map[string]any{
+			"ad": true,
+		})
+		if err != nil {
+			b.Error("error BenchmarkToNamed:", err)
+		}
+		if len(a) != NumberOfModel || a[0].Email != "test-0@example.com" {
+			b.Error("Failed:", len(a), a[0].Email)
+		}
+	}
+}
+
 func BenchmarkQueryNamedS(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()

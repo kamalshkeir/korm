@@ -120,7 +120,7 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@latest // v1.9.5
+go get -u github.com/kamalshkeir/korm@latest // v1.9.6
 ```
 
 # Drivers moved outside this package to not get them all in your go.mod file
@@ -156,8 +156,6 @@ err := korm.New(korm.POSTGRES,"dbName", pgdriver.Use(), "user:password@localhost
 // mysql, maria
 // go get github.com/kamalshkeir/mysqldriver
 err := korm.New(korm.MYSQL,"dbName", mysqldriver.Use(), "user:password@localhost:3306") // Connect
-// mongodb
-err := kormongo.New("dbmongo", "localhost:27017")
 
 korm.Shutdown(databasesName ...string) error
 ```
@@ -168,25 +166,25 @@ korm.Shutdown(databasesName ...string) error
 package main
 
 import (
+	"fmt"
 	"time"
 
-	"github.com/kamalshkeir/argon"
 	"github.com/kamalshkeir/klog"
 	"github.com/kamalshkeir/korm"
 	"github.com/kamalshkeir/sqlitedriver"
 )
 
-type Profile struct {
-	Id        int       `korm:"pk"` // AUTO Increment ID primary key
-	Name      string    // VARCHAR(40)
-	Email     string    `korm:"size:50;iunique"` // VARCHAR(50) insensitive unique constraint
-	Password  string    `korm:"size:150"`        // VARCHAR(150)
-	IsAdmin   bool      `korm:"default:false"`   // NOT NULL CHECK is_admin IN (0,1) DEFAULT 0
-	CreatedAt time.Time `korm:"now"`             // auto now
-	UpdatedAt time.Time `korm:"update"`          // auto update
-	Age       int
-	LenEmailTwice  int `korm:"generated:len(email)*2"`
-	//Role string `korm:"default:'worker'"`
+type Class struct {
+	Id       uint `korm:"pk"`
+	Name     string
+	Students []Student
+}
+
+type Student struct {
+	Id      uint `korm:"pk"`
+	Name    string
+	Class   uint `korm:"fk:classes.id:cascade:cascade"`
+	Classes Class
 }
 
 func main() {
@@ -194,70 +192,108 @@ func main() {
 	if klog.CheckError(err) {
 		return
 	}
+	defer korm.Shutdown()
 
-	err = korm.AutoMigrate[Profile]("profiles")
-	if klog.CheckError(err) {
-		return
-	}
+	server := korm.WithDashboard()
+	korm.WithShell()
 
-	//srv := korm.WithDashboard()
-	//app := srv.App
-
-	defer func() {
-		err := korm.Shutdown("db")
-		klog.CheckError(err)
-	}()
-
-	password := "123456"
-	hashedPass, _ := argon.Hash(password)
-
-	// Insert return the inserted PK
-	insertedId, err := korm.Model[Profile]().Insert(&Profile{
-		Name:     "test",
-		Email:    "test@example.com",
-		Password: hashedPass,
-		IsAdmin:  false,
-		Age:      20,
-		//CreatedAt: time.Now(), // not needed because it's auto new
-	})
-	if klog.CheckError(err) {
-		return
-	}
-	klog.Printf("inserted profile id : %d \n", insertedId)
-
-	// InsertR return the inserted model , here it's User
-	insertedProfile, err := korm.Model[Profile]().InsertR(&Profile{
-		Name:     "test1",
-		Email:    "test1@example.com",
-		Password: hashedPass,
-		IsAdmin:  !true,
-		Age:      20,
-	})
-	if klog.CheckError(err) {
-		return
-	}
-
-	insertedProfile3, err := korm.Model[Profile]().InsertR(&Profile{
-		Name:     "test3",
-		Email:    "test3@example.com",
-		Password: hashedPass,
-		IsAdmin:  true,
-		Age:      40,
-	})
-	if klog.CheckError(err) {
-		return
-	}
-
-	klog.Printf("inserted userd name returned : %s \n", insertedProfile.Name)  // should be "ali"
-	klog.Printf("inserted userd name returned : %s \n", insertedProfile3.Name) // should be "sarra"
-
-	// profiles, err := korm.Model[Profile]().Select("email", "uuid").OrderBy("-id").Limit(10).Page(1).All()
-	profiles, err := korm.Model[Profile]().All()
+	err = korm.AutoMigrate[Class]("classes")
 	klog.CheckError(err)
 
-	klog.Printf("all users: %v\n", profiles)
-	//srv.Run(":9313")
+	err = korm.AutoMigrate[Student]("students")
+	klog.CheckError(err)
+
+	// go run main.go shell to createsuperuser
+	// connect to admin and create some data to query
+
+	// nested structs with joins, scan the result to the channel directly after each row
+	// so instead of receiving a slice, you will receive data on the channel[0] of the passed slice
+	studentsChan := []chan Student{make(chan Student)}
+	go func() {
+		for s := range studentsChan[0] {
+			fmt.Println("chan students:", s)
+		}
+	}()
+	err = korm.To(&studentsChan).Query("select students.*,classes.id as 'classes.id',classes.name as 'classes.name'  from students join classes where classes.id = students.class")
+	klog.CheckError(err)
+	fmt.Println()
+
+	// Named with nested (second argument of 'To') filled automatically from join, support nested slices and structs
+	classes := []Class{}
+	query := "select classes.*, students.id as 'students.id',students.name as 'students.name' from classes join students on students.class = classes.id order by :order_here"
+	err = korm.To(&classes, true).Named(query,map[string]any{
+		"order_here": "classes.id",
+	})
+	klog.CheckError(err)
+	for _, s := range classes {
+		fmt.Println("class:", s)
+	}
+	fmt.Println()
+
+	// // not nested, only remove second arg true from 'To' method
+	students := []Student{}
+	err = korm.To(&students, true).Query("select students.*,classes.id as 'classes.id',classes.name as 'classes.name'  from students join classes where classes.id = students.class")
+	klog.CheckError(err)
+	for _, s := range students {
+		fmt.Println("student:", s)
+	}
+	fmt.Println()
+
+	maps := []map[string]any{}
+	err = korm.To(&maps).Query("select * from students")
+	klog.CheckError(err)
+	fmt.Println("maps =", maps)
+	fmt.Println()
+
+	names := []*string{}
+	err = korm.To(&names).Query("select name from students")
+	klog.CheckError(err)
+	fmt.Println("names =", names)
+	fmt.Println()
+
+	ids := []int{}
+	err = korm.To(&ids).Query("select id from students")
+	klog.CheckError(err)
+	fmt.Println("ids =", ids)
+	fmt.Println()
+
+	bools := []bool{}
+	err = korm.To(&bools).Query("select is_admin from users")
+	klog.CheckError(err)
+	fmt.Println("bools =", bools)
+	fmt.Println()
+
+	times := []time.Time{}
+	err = korm.To(&times).Query("select created_at from users")
+	klog.CheckError(err)
+	fmt.Println("times =", times)
+
+	server.Run(":9313")
 }
+
+// OUTPUT
+// chan students: {1 student-1 1 {1 Math []}}
+// chan students: {2 student-2 2 {2 French []}}
+// chan students: {3 student-3 1 {1 Math []}}
+// chan students: {4 student-4 2 {2 French []}}
+
+// class: {1 Math [{1 student-1 0 {0  []}} {3 student-3 0 {0  []}}]}
+// class: {2 French [{2 student-2 0 {0  []}} {4 student-4 0 {0  []}}]}
+
+// student: &{1 student-1 1 {1 Math []}}
+// student: &{2 student-2 2 {2 French []}}
+// student: &{3 student-3 1 {1 Math []}}
+// student: &{4 student-4 2 {2 French []}}
+
+// maps = [map[class:1 id:1 name:student-1] map[class:2 id:2 name:student-2] map[class:1 id:3 name:student-3] map[class:2 id:4 name:student-4]]
+
+// names = [student-1 student-2 student-3 student-4]
+
+// ids = [1 2 3 4]
+
+// bools = [true]
+
+// times = [2023-04-30 19:19:32 +0200 CEST]
 ```
 
 
@@ -308,6 +344,10 @@ all, _ := korm.Model[User]()
 korm.New(dbType Dialect, dbName string, dbDriver driver.Driver, dbDSN ...string) error
 korm.LogQueries()
 korm.GetConnection(dbName ...string) *sql.DB
+korm.To[T any](dest *[]T, nestedSlice ...bool) *Selector[T] // scan query to any type slice, even channels and slices with nested structs and joins
+(sl *Selector[T]) Ctx(ct context.Context) *Selector[T]
+(sl *Selector[T]) Query(statement string, args ...any) error
+(sl *Selector[T]) Named(statement string, args map[string]any, unsafe ...bool) error
 korm.WithBus(bus *ksbus.Server) *ksbus.Server // Usage: WithBus(ksbus.NewServer()) or share an existing one
 korm.WithDashboard(staticAndTemplatesEmbeded ...embed.FS) *ksbus.Server
 korm.WithShell()
@@ -1249,34 +1289,24 @@ package main
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/kamalshkeir/klog"
 	"github.com/kamalshkeir/korm"
 	"github.com/kamalshkeir/sqlitedriver"
 )
 
-// korm now able to handle filling structs directly from joins data
-// on both nested structs and nested slice of structs
-
-type Group struct {
-	Id            uint `korm:"pk"`
-	Name          string
-	GroupProfiles []Profile // this field name is used in the mapping
-	// from queries as you will notice below 'group_profiles.id' ...
+type Class struct {
+	Id       uint `korm:"pk"`
+	Name     string
+	Students []Student
 }
 
-type GroupSingleProfile struct { 
-	Id            uint `korm:"pk"`
-	Name          string
-	GroupProfiles Profile
-}
-
-type Profile struct {
+type Student struct {
 	Id      uint `korm:"pk"`
 	Name    string
-	GroupId uint `korm:"fk:groups.id:cascade:cascade"` // fk tag not mandatory
-	// this wil only avoid manual delete of profiles related 
-	// to groups or other handling methods
+	Class   uint `korm:"fk:classes.id:cascade:cascade"`
+	Classes Class
 }
 
 func main() {
@@ -1285,60 +1315,106 @@ func main() {
 		return
 	}
 	defer korm.Shutdown()
-	srv := korm.WithDashboard()
+
+	server := korm.WithDashboard()
 	korm.WithShell()
-	err = korm.AutoMigrate[Group]("groups")
-	klog.CheckError(err)
-	err = korm.AutoMigrate[Profile]("profiles")
+
+	err = korm.AutoMigrate[Class]("classes")
 	klog.CheckError(err)
 
-	query := `
-	select groups.*,
-		   profiles.id as 'group_profiles.id',
-		   profiles.name as 'group_profiles.name',
-		   profiles.group_id as 'group_profiles.group_id'
-	from groups 
-	join profiles on profiles.group_id = groups.id
-	where profile.name = ?;
-	`
-	groups, err := korm.Model[Group]().Query(query,"bob")
-	if klog.CheckError(err) {
-		return
-	}
-	for _, g := range groups {
-		fmt.Println(g)
-	}
+	err = korm.AutoMigrate[Student]("students")
+	klog.CheckError(err)
 
-	srv.Run(":9313")
+	// go run main.go shell to createsuperuser
+	// connect to admin and create some data to query
+
+	// nested structs with joins, scan the result to the channel directly after each row
+	// so instead of receiving a slice, you will receive data on the channel[0] of the passed slice
+	studentsChan := []chan Student{make(chan Student)}
+	go func() {
+		for s := range studentsChan[0] {
+			fmt.Println("chan students:", s)
+		}
+	}()
+	err = korm.To(&studentsChan).Query("select students.*,classes.id as 'classes.id',classes.name as 'classes.name'  from students join classes where classes.id = students.class")
+	klog.CheckError(err)
+	fmt.Println()
+
+	// nested (second argument of 'Scan') filled automatically from join, support nested slices and structs
+	classes := []Class{}
+	err = korm.To(&classes, true).Query("select classes.*, students.id as 'students.id',students.name as 'students.name' from classes join students on students.class = classes.id order by classes.id")
+	klog.CheckError(err)
+	for _, s := range classes {
+		fmt.Println("class:", s)
+	}
+	fmt.Println()
+
+	// // not nested, only remove second arg true from Scan method
+	students := []Student{}
+	err = korm.To(&students, true).Query("select students.*,classes.id as 'classes.id',classes.name as 'classes.name'  from students join classes where classes.id = students.class")
+	klog.CheckError(err)
+	for _, s := range students {
+		fmt.Println("student:", s)
+	}
+	fmt.Println()
+
+	maps := []map[string]any{}
+	err = korm.To(&maps).Query("select * from students")
+	klog.CheckError(err)
+	fmt.Println("maps =", maps)
+	fmt.Println()
+
+	names := []*string{}
+	err = korm.To(&names).Query("select name from students")
+	klog.CheckError(err)
+	fmt.Println("names =", names)
+	fmt.Println()
+
+	ids := []int{}
+	err = korm.To(&ids).Query("select id from students")
+	klog.CheckError(err)
+	fmt.Println("ids =", ids)
+	fmt.Println()
+
+	bools := []bool{}
+	err = korm.To(&bools).Query("select is_admin from users")
+	klog.CheckError(err)
+	fmt.Println("bools =", bools)
+	fmt.Println()
+
+	times := []time.Time{}
+	err = korm.To(&times).Query("select created_at from users")
+	klog.CheckError(err)
+	fmt.Println("times =", times)
+
+	server.Run(":9313")
 }
 
+// OUTPUT
+// chan students: {1 student-1 1 {1 Math []}}
+// chan students: {2 student-2 2 {2 French []}}
+// chan students: {3 student-3 1 {1 Math []}}
+// chan students: {4 student-4 2 {2 French []}}
+
+// class: {1 Math [{1 student-1 0 {0  []}} {3 student-3 0 {0  []}}]}
+// class: {2 French [{2 student-2 0 {0  []}} {4 student-4 0 {0  []}}]}
+
+// student: &{1 student-1 1 {1 Math []}}
+// student: &{2 student-2 2 {2 French []}}
+// student: &{3 student-3 1 {1 Math []}}
+// student: &{4 student-4 2 {2 French []}}
+
+// maps = [map[class:1 id:1 name:student-1] map[class:2 id:2 name:student-2] map[class:1 id:3 name:student-3] map[class:2 id:4 name:student-4]]
+
+// names = [student-1 student-2 student-3 student-4]
+
+// ids = [1 2 3 4]
+
+// bools = [true]
+
+// times = [2023-04-30 19:19:32 +0200 CEST]
+
 ```
-
-# [Kormongo](https://github.com/kamalshkeir/kormongo)
-```go
-type FirstTable struct {
-	Id      primitive.ObjectID `bson:"_id"`
-	Num     uint
-	Item1   string
-	Item2   string
-	Bool1   bool
-	Created time.Time
-}
-
-err = korm.AutoMigrate[FirstTable]("first_table")
-klog.CheckError(err)
-
-id,_ := primitive.ObjectIDFromHex("636d4c7bcfde1f5b625f12a4")
-all, _ := korm.Model[FirstTable]()
-                   .Where("_id",id) 
-                   .Select("item1","item2")
-                   .OrderBy("created")
-				   .Limit(8)
-				   .Page(2)
-                   .All()
-```
-
-
 
 
 # Benchmark vs Tarantool, Pgx, Gorm
