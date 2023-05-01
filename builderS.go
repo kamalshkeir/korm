@@ -1082,7 +1082,7 @@ func (b *BuilderS[T]) All() ([]T, error) {
 		klog.Printf("args:%v\n", b.args)
 	}
 
-	models, err := b.Query(b.statement, b.args...)
+	models, err := b.QueryS(b.statement, b.args...)
 	if err != nil {
 		return nil, err
 	}
@@ -1243,10 +1243,10 @@ func (b *BuilderS[T]) ToChan(ptrChan *chan T) ([]T, error) {
 //
 // Example:
 //
-//		QueryNamed[models.User]("select * from users where email = :email",map[string]any{
+//		QuerySNamed[models.User]("select * from users where email = :email",map[string]any{
 //			"email":"email@mail.com",
 //	    })
-func (b *BuilderS[T]) QueryNamed(statement string, args map[string]any, unsafe ...bool) ([]T, error) {
+func (b *BuilderS[T]) QuerySNamed(statement string, args map[string]any, unsafe ...bool) ([]T, error) {
 	if b.db == nil {
 		b.db = &databases[0]
 	}
@@ -1375,8 +1375,8 @@ func (b *BuilderS[T]) QueryNamed(statement string, args map[string]any, unsafe .
 	return res, nil
 }
 
-// Query query to struct
-func (b *BuilderS[T]) Query(statement string, args ...any) ([]T, error) {
+// QueryS query to struct
+func (b *BuilderS[T]) QueryS(statement string, args ...any) ([]T, error) {
 	if b.db == nil {
 		b.db = &databases[0]
 	}
@@ -1528,7 +1528,7 @@ func (b *BuilderS[T]) One() (T, error) {
 		klog.Printf("statement:%s\n", b.statement)
 		klog.Printf("args:%v\n", b.args)
 	}
-	model, err := b.Query(b.statement, b.args...)
+	model, err := b.QueryS(b.statement, b.args...)
 	if err != nil {
 		return *new(T), err
 	} else if len(model) == 0 {

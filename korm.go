@@ -14,6 +14,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/kamalshkeir/klog"
 	"github.com/kamalshkeir/kmap"
@@ -644,7 +645,7 @@ type Build[T any] struct {
 	res     []T
 }
 
-func Q[T any](statement string, args ...any) *Build[T] {
+func Query[T any](statement string, args ...any) *Build[T] {
 	var db *DatabaseEntity
 	if len(databases) == 1 {
 		db = &databases[0]
@@ -652,6 +653,7 @@ func Q[T any](statement string, args ...any) *Build[T] {
 		if v, ok := args[len(args)-1].(string); ok {
 			if strings.HasPrefix(v, "db:") {
 				db, _ = GetMemoryDatabase(strings.TrimSpace(v[3:]))
+				args = args[:len(args)-1]
 			}
 		}
 		if db == nil {
@@ -709,11 +711,167 @@ func Q[T any](statement string, args ...any) *Build[T] {
 	return builder
 }
 
+func QueryContext[T any](ctx context.Context, statement string, args ...any) *Build[T] {
+	var db *DatabaseEntity
+	if len(databases) == 1 {
+		db = &databases[0]
+	} else if len(args) > 0 {
+		if v, ok := args[len(args)-1].(string); ok {
+			if strings.HasPrefix(v, "db:") {
+				db, _ = GetMemoryDatabase(strings.TrimSpace(v[3:]))
+				args = args[:len(args)-1]
+			}
+		}
+		if db == nil {
+			db = &databases[0]
+		}
+	} else if len(databases) > 1 {
+		db = &databases[0]
+	} else {
+		builder := &Build[T]{
+			err: fmt.Errorf("db not found"),
+		}
+		return builder
+	}
+	if useCache {
+		stt := db.Name + statement + fmt.Sprint(args...)
+		if v, ok := cacheQ.Get(stt); ok {
+			if vv, ok := v.([]T); ok {
+				return &Build[T]{
+					res:  vv,
+					stat: stt,
+				}
+			}
+		}
+	}
+
+	builder := &Build[T]{
+		dialect: db.Dialect,
+		dest:    *new(T),
+		stat:    db.Name + statement + fmt.Sprint(args...),
+	}
+	builder.typ = fmt.Sprintf("%T", builder.dest)
+	builder.ref = reflect.ValueOf(builder.dest)
+	if builder.typ[1] == '[' {
+		builder.err = fmt.Errorf("type param cannot be slice")
+		return builder
+	}
+	if db.Conn == nil {
+		builder.err = fmt.Errorf("no connection")
+		return builder
+	}
+	adaptPlaceholdersToDialect(&statement, db.Dialect)
+	adaptTimeToUnixArgs(&args)
+	rows, err := db.Conn.QueryContext(ctx, statement, args...)
+	if err != nil {
+		builder.err = err
+		return builder
+	}
+	columns, err := rows.Columns()
+	if err != nil {
+		builder.err = err
+		return builder
+	}
+	builder.rows = rows
+	builder.cols = columns
+	return builder
+}
+
+func Named[T any](statement string, args map[string]any, unsafe ...bool) *Build[T] {
+	var db *DatabaseEntity
+	if len(databases) == 1 {
+		db = &databases[0]
+	} else if len(args) > 0 {
+		if v, ok := args["db"]; ok {
+			if vv, ok := v.(string); ok {
+				db, _ = GetMemoryDatabase(vv)
+			}
+			delete(args, "db")
+		}
+		if db == nil {
+			db = &databases[0]
+		}
+	} else if len(databases) > 1 {
+		db = &databases[0]
+	} else {
+		builder := &Build[T]{
+			err: fmt.Errorf("db not found"),
+		}
+		return builder
+	}
+	if useCache {
+		stt := db.Name + statement + fmt.Sprint(args)
+		if v, ok := cacheQ.Get(stt); ok {
+			if vv, ok := v.([]T); ok {
+				return &Build[T]{
+					res:  vv,
+					stat: stt,
+				}
+			}
+		}
+	}
+
+	builder := &Build[T]{
+		dialect: db.Dialect,
+		dest:    *new(T),
+		stat:    db.Name + statement + fmt.Sprint(args),
+	}
+	builder.typ = fmt.Sprintf("%T", builder.dest)
+	builder.ref = reflect.ValueOf(builder.dest)
+	if builder.typ[1] == '[' {
+		builder.err = fmt.Errorf("type param cannot be slice")
+		return builder
+	}
+	if db.Conn == nil {
+		builder.err = fmt.Errorf("no connection")
+		return builder
+	}
+	adaptPlaceholdersToDialect(&statement, db.Dialect)
+	for k := range args {
+		switch v := args[k].(type) {
+		case time.Time:
+			args[k] = v.Unix()
+		case *time.Time:
+			args[k] = v.Unix()
+		}
+	}
+	var query string
+	var newargs []any
+	if len(unsafe) > 0 && unsafe[0] {
+		var err error
+		query, err = UnsafeNamedQuery(statement, args)
+		if err != nil {
+			builder.err = err
+			return builder
+		}
+	} else {
+		var err error
+		query, newargs, err = AdaptNamedParams(db.Dialect, statement, args)
+		if err != nil {
+			builder.err = err
+			return builder
+		}
+	}
+	rows, err := db.Conn.Query(query, newargs...)
+	if err != nil {
+		builder.err = err
+		return builder
+	}
+	columns, err := rows.Columns()
+	if err != nil {
+		builder.err = err
+		return builder
+	}
+	builder.rows = rows
+	builder.cols = columns
+	return builder
+}
+
 func (nb *Build[T]) Error() error {
 	return nb.err
 }
 
-func (nb *Build[T]) To(dest *[]T, nested ...bool) *Build[T] {
+func (nb *Build[T]) Scan(dest *[]T, nested ...bool) *Build[T] {
 	if useCache && len(nb.res) > 0 {
 		if len(nb.typ) >= 4 && nb.typ[:4] == "chan" {
 			for _, r := range nb.res {

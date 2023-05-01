@@ -123,7 +123,7 @@ func StorageSize(dbName string) float64 {
 		return -1
 	}
 
-	m, err := Model[sizeDb]().Database(db.Name).Query(statement)
+	m, err := Model[sizeDb]().Database(db.Name).QueryS(statement)
 	if klog.CheckError(err) {
 		return -1
 	}

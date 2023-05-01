@@ -252,7 +252,7 @@ func (b *BuilderM) All() ([]map[string]any, error) {
 		klog.Printf("statement:%s\n", b.statement)
 		klog.Printf("args:%v\n", b.args)
 	}
-	models, err := b.Query(b.statement, b.args...)
+	models, err := b.QueryM(b.statement, b.args...)
 	if err != nil {
 		return nil, err
 	}
@@ -311,7 +311,7 @@ func (b *BuilderM) One() (map[string]any, error) {
 		klog.Printf("ylargs:%v\n", b.args)
 	}
 
-	models, err := b.Query(b.statement, b.args...)
+	models, err := b.QueryM(b.statement, b.args...)
 	if err != nil {
 		return nil, err
 	}
@@ -943,7 +943,7 @@ func (b *BuilderM) GetRelated(relatedTable string, dest *[]map[string]any) error
 		klog.Printf("args:%v\n", b.args)
 	}
 	var err error
-	*dest, err = Table(relationTableName).Query(b.statement, b.args...)
+	*dest, err = Table(relationTableName).QueryM(b.statement, b.args...)
 	if err != nil {
 		return err
 	}
@@ -1013,7 +1013,7 @@ func (b *BuilderM) JoinRelated(relatedTable string, dest *[]map[string]any) erro
 		klog.Printf("args:%v\n", b.args)
 	}
 	var err error
-	*dest, err = Table(relationTableName).Query(b.statement, b.args...)
+	*dest, err = Table(relationTableName).QueryM(b.statement, b.args...)
 	if err != nil {
 		return err
 	}
@@ -1097,8 +1097,8 @@ func (b *BuilderM) DeleteRelated(relatedTable string, whereRelatedTable string, 
 	return n, nil
 }
 
-// Query query sql and return result as slice maps
-func (b *BuilderM) Query(statement string, args ...any) ([]map[string]any, error) {
+// QueryM query sql and return result as slice maps
+func (b *BuilderM) QueryM(statement string, args ...any) ([]map[string]any, error) {
 	var db *DatabaseEntity
 	if b.database != "" {
 		var err error
@@ -1182,14 +1182,14 @@ func (b *BuilderM) Query(statement string, args ...any) ([]map[string]any, error
 	return listMap, nil
 }
 
-// QueryNamed query sql and return result as slice maps
+// QueryMNamed query sql and return result as slice maps
 //
 // Example:
 //
-//		QueryNamed("select * from users where email = :email",map[string]any{
+//		QueryMNamed("select * from users where email = :email",map[string]any{
 //			"email":"email@mail.com",
 //	    })
-func (b *BuilderM) QueryNamed(statement string, args map[string]any, unsafe ...bool) ([]map[string]any, error) {
+func (b *BuilderM) QueryMNamed(statement string, args map[string]any, unsafe ...bool) ([]map[string]any, error) {
 	var db *DatabaseEntity
 	dbn := databases[0].Name
 	if b.database != "" {

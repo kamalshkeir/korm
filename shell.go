@@ -266,7 +266,7 @@ func query(queryStatement string) {
 	if queryStatement == "" {
 		queryStatement = kinput.Input(kinput.Blue, "Query: ")
 	}
-	data, err := BuilderMap().Query(queryStatement)
+	data, err := BuilderMap().QueryM(queryStatement)
 	if err == nil {
 		d, _ := json.MarshalIndent(data, "", "    ")
 		fmt.Printf(green, string(d))

@@ -126,7 +126,7 @@ var AllModelsGet = func(c *kmux.Context) {
 			if len(spTo) == 2 {
 				q := "select " + spTo[1] + " from " + spTo[0] + " order by " + spTo[1]
 				var mm []map[string]any
-				err := Q[map[string]any](q).To(&mm).Error()
+				err := Query[map[string]any](q).Scan(&mm).Error()
 				if !klog.CheckError(err) {
 					ress := []any{}
 					for _, res := range mm {
@@ -376,7 +376,7 @@ var SingleModelGet = func(c *kmux.Context) {
 			spTo := strings.Split(fkey.ToTableField, ".")
 			if len(spTo) == 2 {
 				q := "select " + spTo[1] + " from " + spTo[0] + " order by " + spTo[1]
-				mm, err := Table(spTo[0]).Query(q)
+				mm, err := Table(spTo[0]).QueryM(q)
 				if !klog.CheckError(err) {
 					ress := []any{}
 					for _, res := range mm {

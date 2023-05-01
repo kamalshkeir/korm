@@ -143,7 +143,7 @@ func BenchmarkQueryS(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		a, err := korm.Model[TestTable]().Query("select * from test_table where is_admin =?", true)
+		a, err := korm.Model[TestTable]().QueryS("select * from test_table where is_admin =?", true)
 		if err != nil {
 			b.Error("error BenchmarkQueryS:", err)
 		}
@@ -157,7 +157,7 @@ func BenchmarkQueryNamedS(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		a, err := korm.Model[TestTable]().QueryNamed("select * from test_table where is_admin = :ad", map[string]any{
+		a, err := korm.Model[TestTable]().QuerySNamed("select * from test_table where is_admin = :ad", map[string]any{
 			"ad": true,
 		})
 		if err != nil {
@@ -173,7 +173,7 @@ func BenchmarkQueryM(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		a, err := korm.Table("test_table").Query("select * from test_table where is_admin =?", true)
+		a, err := korm.Table("test_table").QueryM("select * from test_table where is_admin =?", true)
 		if err != nil {
 			b.Error("error BenchmarkQueryM:", err)
 		}
@@ -187,7 +187,7 @@ func BenchmarkQueryNamedM(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		a, err := korm.Table("test_table").QueryNamed("select * from test_table where is_admin =:ad", map[string]any{
+		a, err := korm.Table("test_table").QueryMNamed("select * from test_table where is_admin =:ad", map[string]any{
 			"ad": true,
 		})
 		if err != nil {
