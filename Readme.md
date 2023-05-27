@@ -120,7 +120,7 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@latest // v1.9.6
+go get -u github.com/kamalshkeir/korm@latest // v1.9.7
 ```
 
 # Drivers moved outside this package to not get them all in your go.mod file
@@ -348,7 +348,7 @@ korm.To[T any](dest *[]T, nestedSlice ...bool) *Selector[T] // scan query to any
 (sl *Selector[T]) Ctx(ct context.Context) *Selector[T]
 (sl *Selector[T]) Query(statement string, args ...any) error
 (sl *Selector[T]) Named(statement string, args map[string]any, unsafe ...bool) error
-korm.WithBus(bus *ksbus.Server) *ksbus.Server // Usage: WithBus(ksbus.NewServer()) or share an existing one
+korm.WithBus() *ksbus.Server // Usage: WithBus() or share an existing one
 korm.WithDashboard(staticAndTemplatesEmbeded ...embed.FS) *ksbus.Server
 korm.WithShell()
 korm.WithDocs(generateJsonDocs bool, outJsonDocs string, handlerMiddlewares ...func(handler kmux.Handler) kmux.Handler) *ksbus.Server
@@ -370,7 +370,7 @@ korm.GetMemoryDatabases() []DatabaseEntity
 korm.GetMemoryDatabase(dbName string) (*DatabaseEntity, error)
 korm.Shutdown(databasesName ...string) error
 korm.FlushCache()
-korm.DisableCache() // Korm Only, disable struct check on change to add or remove column
+korm.DisableCache() 
 korm.ManyToMany(table1, table2 string, dbName ...string) error // add table relation m2m 
 ```
 #### Builder `Struct`:

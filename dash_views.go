@@ -654,7 +654,7 @@ var ImportView = func(c *kmux.Context) {
 	if len(modelsOld) > 0 {
 		modelsOldBytes, err := json.Marshal(modelsOld)
 		if !klog.CheckError(err) {
-			_ = os.MkdirAll(MediaDir+"/backup/", 0664)
+			_ = os.MkdirAll(MediaDir+"/backup/", 0770)
 			dst, err := os.Create(MediaDir + "/backup/" + table + "-" + time.Now().Format("2006-01-02") + ".json")
 			klog.CheckError(err)
 			defer dst.Close()
