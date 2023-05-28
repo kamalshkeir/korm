@@ -56,6 +56,7 @@
 - Additionally, its caching system uses goroutines and channels to efficiently to clean the cache when rows or tables are created, updated, deleted, or dropped
 
 ### It Has :
+- <strong>New:</strong>  Automatic check your structs (schema) against database tables, prompt you with changes, and so it can add or remove columns by adding or removing fields to the struct, it is Enabled by default, use `korm.DisableCheck()` to disable it
 
 - <strong>New:</strong>  [Handle Nested or Embeded structs](#example-nested-or-embeded-structs) and slice of structs through joins, like sqlx, but sqlx doesn't handle slice of structs
 
@@ -120,7 +121,7 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@latest // v1.9.7
+go get -u github.com/kamalshkeir/korm@latest // v1.9.8
 ```
 
 # Drivers moved outside this package to not get them all in your go.mod file

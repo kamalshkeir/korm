@@ -882,7 +882,7 @@ func (b *BuilderS[T]) Drop() (int, error) {
 		}
 	}
 
-	b.statement = "DROP TABLE " + b.tableName
+	b.statement = "DROP TABLE IF EXISTS " + b.tableName
 	var (
 		res sql.Result
 		err error

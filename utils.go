@@ -220,27 +220,6 @@ func DownloadFile(filepath string, url string) error {
 	return err
 }
 
-// var swagFound bool
-
-// func checkAndGenerateDocs(dirPath string) {
-
-//if _, err := exec.LookPath("swag"); err != nil {
-// 			cmd := exec.Command("go", "install", "github.com/swaggo/swag/cmd/swag@latest")
-// 			err := cmd.Run()
-// 			if klog.CheckError(err) {
-// 				klog.Printfs("rdinstalling github.com/swaggo/swag/cmd/swag@latest : %v\n", err)
-// 				return
-// 			}
-// 		}
-
-// 	cmd := exec.Command("swag", "init", "-o", dirPath, "--outputTypes", "json")
-// 	err := cmd.Run()
-// 	if err != nil {
-// 		klog.Printfs("executing : swag init -o %s --outputTypes json\n", dirPath)
-// 		klog.Printfs("rdcould not generate swagger.json")
-// 	}
-// }
-
 // getStructInfos very useful to access all struct fields data using reflect package
 func getStructInfos[T any](strctt *T, ignoreZeroValues ...bool) (fields []string, fValues map[string]any, fTypes map[string]string, fTags map[string][]string) {
 	fields = []string{}

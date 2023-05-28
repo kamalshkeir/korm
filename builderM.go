@@ -761,7 +761,7 @@ func (b *BuilderM) Drop() (int, error) {
 		return 0, err
 	}
 
-	b.statement = "DROP TABLE " + b.tableName
+	b.statement = "DROP TABLE IF EXISTS " + b.tableName
 	var res sql.Result
 	if b.ctx != nil {
 		res, err = db.Conn.ExecContext(b.ctx, b.statement)

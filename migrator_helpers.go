@@ -1,11 +1,21 @@
 package korm
 
 import (
+	"fmt"
 	"strings"
+	"unicode"
 
+	"github.com/kamalshkeir/kinput"
 	"github.com/kamalshkeir/klog"
 	"github.com/kamalshkeir/kstrct"
 )
+
+var checkEnabled = true
+
+// DisableCheck disable struct changes check
+func DisableCheck() {
+	checkEnabled = false
+}
 
 type kormFkey struct {
 	FromTableField string
@@ -25,7 +35,10 @@ func LinkModel[T any](to_table_name string, dbName ...string) {
 		}
 		db = dbb
 	}
-	fields, _, ftypes, ftags := getStructInfos(new(T))
+	infos := kstrct.GetInfos(new(T), "korm")
+	fields := infos.Fields
+	ftypes := infos.Types
+	ftags := infos.Tags
 	// get columns from db
 	colsNameType := GetAllColumnsTypes(to_table_name, db.Name)
 
@@ -76,7 +89,8 @@ tagsLoop:
 					}
 				}
 			}
-			if strings.HasPrefix(v, "[]") {
+
+			if v == "" {
 				for i := range fields {
 					if fields[i] == k {
 						fields = append(fields[:i], fields[i+1:]...)
@@ -85,7 +99,7 @@ tagsLoop:
 				delete(ftags, k)
 				delete(ftypes, k)
 				delete(colsNameType, k)
-			} else if strings.Contains(v, ".") && !strings.HasSuffix(v, "Time") {
+			} else if (unicode.IsUpper(rune(v[0])) || strings.Contains(v, ".")) && !strings.HasSuffix(v, "Time") {
 				// if struct
 				for i := range fields {
 					if fields[i] == k {
@@ -97,7 +111,7 @@ tagsLoop:
 				delete(colsNameType, k)
 			}
 		}
-		db.Tables = append(db.Tables, TableEntity{
+		te := TableEntity{
 			Fkeys:      kfkeys,
 			Name:       to_table_name,
 			Columns:    fields,
@@ -105,7 +119,114 @@ tagsLoop:
 			Types:      colsNameType,
 			Tags:       ftags,
 			Pk:         pk,
-		})
+		}
+		db.Tables = append(db.Tables, te)
+		// sync model
+		if checkEnabled {
+			if len(te.Types) > len(te.Columns) {
+				removedCols := []string{}
+				colss := []string{}
+				for dbcol := range te.Types {
+					found := false
+					for _, fname := range te.Columns {
+						if fname == dbcol {
+							found = true
+						}
+					}
+					if !found {
+						// remove dbcol from db
+						klog.Printfs("rd⚠️ field '%s' has been removed from '%T'\n", dbcol, *new(T))
+						removedCols = append(removedCols, dbcol)
+					} else {
+						colss = append(colss, dbcol)
+					}
+				}
+				if len(removedCols) > 0 {
+					choice, err := kinput.String(kinput.Yellow, "> do we remove extra columns ? (Y/n): ")
+					klog.CheckError(err)
+					switch choice {
+					case "y", "Y":
+						temp := te.Name + "_temp"
+						tempQuery, err := autoMigrate(new(T), db, temp, true)
+						if klog.CheckError(err) {
+							return
+						}
+						if Debug {
+							fmt.Println("DEBUG:SYNC:", tempQuery)
+						}
+						cls := strings.Join(colss, ",")
+						_, err = db.Conn.Exec("INSERT INTO " + temp + " (" + cls + ") SELECT " + cls + " FROM " + te.Name)
+						if klog.CheckError(err) {
+							return
+						}
+						_, err = Table(te.Name + "_old").Database(db.Name).Drop()
+						if klog.CheckError(err) {
+							return
+						}
+						_, err = db.Conn.Exec("ALTER TABLE " + te.Name + " RENAME TO " + te.Name + "_old")
+						if klog.CheckError(err) {
+							return
+						}
+						_, err = db.Conn.Exec("ALTER TABLE " + temp + " RENAME TO " + te.Name)
+						if klog.CheckError(err) {
+							return
+						}
+						klog.Printfs("grDone, you can still find your old table with the same data %s\n", te.Name+"_old")
+					default:
+						return
+					}
+				}
+			} else if len(te.Types) < len(te.Columns) {
+				addedFields := []string{}
+				for _, fname := range te.Columns {
+					if _, ok := te.Types[fname]; !ok {
+						klog.Printfs("rd⚠️ column '%s' is missing from table '%s'\n", fname, to_table_name)
+						addedFields = append(addedFields, fname)
+					}
+				}
+				if len(addedFields) > 0 {
+					choice, err := kinput.String(kinput.Yellow, "> do we add missing columns ? (Y/n): ")
+					klog.CheckError(err)
+					switch choice {
+					case "y", "Y":
+						temp := te.Name + "_temp"
+						tempQuery, err := autoMigrate(new(T), db, temp, true)
+						if klog.CheckError(err) {
+							return
+						}
+						if Debug {
+							fmt.Println("DEBUG:SYNC:", tempQuery)
+						}
+						var colss []string
+
+						for k := range te.Types {
+							colss = append(colss, k)
+						}
+						cls := strings.Join(colss, ",")
+						_, err = db.Conn.Exec("INSERT INTO " + temp + " (" + cls + ") SELECT " + cls + " FROM " + te.Name)
+						if klog.CheckError(err) {
+							return
+						}
+						_, err = Table(te.Name + "_old").Database(db.Name).Drop()
+						if klog.CheckError(err) {
+							return
+						}
+						_, err = db.Conn.Exec("ALTER TABLE " + te.Name + " RENAME TO " + te.Name + "_old")
+						if klog.CheckError(err) {
+							return
+						}
+						_, err = db.Conn.Exec("ALTER TABLE " + temp + " RENAME TO " + te.Name)
+						if klog.CheckError(err) {
+							return
+						}
+						klog.Printfs("grDone, you can still find your old table with the same data %s\n", te.Name+"_old")
+					default:
+						return
+					}
+				}
+			}
+		}
+
 	}
 }
 
