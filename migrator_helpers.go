@@ -35,10 +35,8 @@ func LinkModel[T any](to_table_name string, dbName ...string) {
 		}
 		db = dbb
 	}
-	infos := kstrct.GetInfos(new(T), "korm")
-	fields := infos.Fields
-	ftypes := infos.Types
-	ftags := infos.Tags
+
+	fields, _, ftypes, ftags := getStructInfos(new(T))
 	// get columns from db
 	colsNameType := GetAllColumnsTypes(to_table_name, db.Name)
 

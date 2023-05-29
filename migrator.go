@@ -300,18 +300,13 @@ func AutoMigrate[T any](tableName string, dbName ...string) error {
 		}
 	}
 
-	tbFoundLocal := false
-	if len(db.Tables) == 0 {
-		for _, t := range db.Tables {
-			if t.Name == tableName {
-				tbFoundLocal = true
-			}
+	for _, t := range db.Tables {
+		if t.Name == tableName {
+			return nil
 		}
 	}
 
-	if !tbFoundLocal {
-		LinkModel[T](tableName, db.Name)
-	}
+	LinkModel[T](tableName, db.Name)
 
 	return nil
 }
