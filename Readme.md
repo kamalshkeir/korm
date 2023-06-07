@@ -121,7 +121,7 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@latest // v1.9.9
+go get -u github.com/kamalshkeir/korm@latest // v1.10.0
 ```
 
 # Drivers moved outside this package to not get them all in your go.mod file

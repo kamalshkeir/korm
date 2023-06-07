@@ -89,7 +89,7 @@ tagsLoop:
 			}
 
 			if v == "" {
-				for i := range fields {
+				for i := len(fields) - 1; i >= 0; i-- {
 					if fields[i] == k {
 						fields = append(fields[:i], fields[i+1:]...)
 					}
@@ -99,7 +99,7 @@ tagsLoop:
 				delete(colsNameType, k)
 			} else if (unicode.IsUpper(rune(v[0])) || strings.Contains(v, ".")) && !strings.HasSuffix(v, "Time") {
 				// if struct
-				for i := range fields {
+				for i := len(fields) - 1; i >= 0; i-- {
 					if fields[i] == k {
 						fields = append(fields[:i], fields[i+1:]...)
 					}
