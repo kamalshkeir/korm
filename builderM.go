@@ -71,7 +71,7 @@ func (b *BuilderM) Select(columns ...string) *BuilderM {
 	return b
 }
 
-// Where can be like: Where("id > ?",1) or Where("id",1) = Where("id = ?",1)
+// Where can be like: Where("id > ?",1) or Where("id = ?",1)
 func (b *BuilderM) Where(query string, args ...any) *BuilderM {
 	if b == nil || b.tableName == "" {
 		return nil
@@ -85,7 +85,6 @@ func (b *BuilderM) Where(query string, args ...any) *BuilderM {
 			b.database = db.Name
 		}
 	}
-	adaptWhereQuery(&query, b.tableName)
 	adaptTimeToUnixArgs(&args)
 	b.whereQuery = query
 	b.args = append(b.args, args...)
@@ -818,7 +817,6 @@ func (b *BuilderM) AddRelated(relatedTable string, whereRelatedTable string, whe
 	ids := make([]any, 4)
 	adaptTimeToUnixArgs(&whereRelatedArgs)
 	whereRelatedTable = adaptConcatAndLen(whereRelatedTable, db.Dialect)
-	adaptWhereQuery(&whereRelatedTable, relatedTable)
 	data, err := Table(relatedTable).Where(whereRelatedTable, whereRelatedArgs...).One()
 	if err != nil {
 		return 0, err
@@ -1063,7 +1061,6 @@ func (b *BuilderM) DeleteRelated(relatedTable string, whereRelatedTable string, 
 		}
 	}
 
-	adaptWhereQuery(&whereRelatedTable, relatedTable)
 	data, err := Table(relatedTable).Where(whereRelatedTable, whereRelatedArgs...).One()
 	if err != nil {
 		return 0, err

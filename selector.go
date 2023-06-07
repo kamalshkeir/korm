@@ -239,7 +239,7 @@ loop:
 			continue loop
 		case isArith && !isChan:
 			if isNested {
-				return fmt.Errorf("this type cannot be nested")
+				return fmt.Errorf("arithmetic types cannot be nested")
 			}
 			if len(kv) == 1 {
 				for _, vKV := range kv {

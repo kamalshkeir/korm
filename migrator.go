@@ -106,13 +106,16 @@ func autoMigrate[T any](model *T, db *DatabaseEntity, tableName string, execute 
 				mindexes: &mindexes,
 				uindexes: &uindexes,
 			}
+
 			switch ty {
 			case "int", "uint", "int64", "uint64", "int32", "uint32", "*int", "*uint", "*int64", "*uint64", "*int32", "*uint32":
 				handleMigrationInt(mi)
 			case "bool", "*bool":
 				handleMigrationBool(mi)
-			case "string", "*string":
+			case "string", "*string", "[]string", "[]int", "[]int64", "[]float64", "[]any":
 				handleMigrationString(mi)
+			case "[]uint8", "[]byte":
+				handleMigrationSliceByte(mi)
 			case "float64", "float32", "*float64", "*float32":
 				handleMigrationFloat(mi)
 			case "time.Time", "*time.Time":
@@ -693,6 +696,159 @@ func handleMigrationString(mi *migrationInput) {
 			(*mi.res)[mi.fName] = "VARCHAR(" + size + ")"
 		} else {
 			(*mi.res)[mi.fName] = "VARCHAR(255)"
+		}
+	}
+
+	if unique != "" && pk == "" {
+		(*mi.res)[mi.fName] += unique
+	}
+	if notnull != "" && pk == "" {
+		(*mi.res)[mi.fName] += notnull
+	}
+	if pk != "" {
+		(*mi.res)[mi.fName] += pk
+	}
+	if defaultt != "" {
+		if genas == "" {
+			(*mi.res)[mi.fName] += defaultt
+		} else {
+			(*mi.res)[mi.fName] += genas
+		}
+	} else if genas != "" {
+		(*mi.res)[mi.fName] += genas
+	}
+	if len(checks) > 0 {
+		joined := strings.TrimSpace(strings.Join(checks, " AND "))
+		(*mi.res)[mi.fName] += " CHECK(" + joined + ")"
+	}
+}
+
+func handleMigrationSliceByte(mi *migrationInput) {
+	unique, notnull, defaultt, genas, size, pk, checks := "", "", "", "", "", "", []string{}
+	tags := (*mi.fTags)[mi.fName]
+	if len(tags) == 1 && tags[0] == "-" {
+		(*mi.res)[mi.fName] = ""
+		return
+	}
+	for _, tag := range tags {
+		if !strings.Contains(tag, ":") {
+			switch tag {
+			case "notnull":
+				notnull = " NOT NULL"
+			case "index", "+index", "index+":
+				*mi.indexes = append(*mi.indexes, mi.fName)
+			case "-index", "index-":
+				*mi.indexes = append(*mi.indexes, mi.fName+" DESC")
+			case "unique":
+				unique = " UNIQUE"
+			case "iunique":
+				unique = " UNIQUE"
+				s := ""
+				if mi.dialect != "mysql" {
+					s = "I"
+				}
+				(*mi.uindexes)[mi.fName] = s + mi.fName
+			case "default":
+				defaultt = " DEFAULT ''"
+			default:
+				klog.Printf(tag, "not handled for migration string")
+			}
+		} else {
+			sp := strings.Split(tag, ":")
+			switch sp[0] {
+			case "default":
+				defaultt = " DEFAULT " + sp[1]
+			case "generated":
+				sp[1] = adaptConcatAndLen(sp[1], mi.dialect)
+				genas = " GENERATED ALWAYS AS (" + sp[1] + ") STORED "
+			case "mindex":
+				if v, ok := (*mi.mindexes)[mi.fName]; ok {
+					if v == "" {
+						(*mi.mindexes)[mi.fName] = sp[1]
+					} else if strings.Contains(sp[1], ",") {
+						(*mi.mindexes)[mi.fName] += "," + sp[1]
+					} else {
+						klog.Printf("mindex not working for %s %s \n", mi.fName, sp[1])
+					}
+				} else {
+					(*mi.mindexes)[mi.fName] = sp[1]
+				}
+			case "uindex":
+				if v, ok := (*mi.uindexes)[mi.fName]; ok {
+					if v == "" {
+						(*mi.uindexes)[mi.fName] = sp[1]
+					} else if strings.Contains(sp[1], ",") {
+						(*mi.uindexes)[mi.fName] += "," + sp[1]
+					} else {
+						klog.Printf("mindex not working for %s %s \n", mi.fName, sp[1])
+					}
+				} else {
+					(*mi.uindexes)[mi.fName] = sp[1]
+				}
+			case "fk":
+				ref := strings.Split(sp[1], ".")
+				if len(ref) == 2 {
+					fkey := "FOREIGN KEY(" + mi.fName + ") REFERENCES " + ref[0] + "(" + ref[1] + ")"
+					if len(sp) > 2 {
+						switch sp[2] {
+						case "cascade":
+							fkey += " ON DELETE CASCADE"
+						case "donothing", "noaction":
+							fkey += " ON DELETE NO ACTION"
+						case "setnull", "null":
+							fkey += " ON DELETE SET NULL"
+						case "setdefault", "default":
+							fkey += " ON DELETE SET DEFAULT"
+						default:
+							klog.Printf("rdfk %s not handled\n", sp[2])
+						}
+						if len(sp) > 3 {
+							switch sp[3] {
+							case "cascade":
+								fkey += " ON UPDATE CASCADE"
+							case "donothing", "noaction":
+								fkey += " ON UPDATE NO ACTION"
+							case "setnull", "null":
+								fkey += " ON UPDATE SET NULL"
+							case "setdefault", "default":
+								fkey += " ON UPDATE SET DEFAULT"
+							default:
+								klog.Printf("rdfk %s not handled\n", sp[3])
+							}
+						}
+					}
+					*mi.fKeys = append(*mi.fKeys, fkey)
+				} else {
+					klog.Printf("foreign key should be like fk:table.column:[cascade/donothing]:[cascade/donothing]\n")
+				}
+			case "size":
+				sp := strings.Split(tag, ":")
+				if sp[0] == "size" {
+					size = sp[1]
+				}
+			case "check":
+				sp[1] = adaptConcatAndLen(sp[1], mi.dialect)
+				checks = append(checks, strings.TrimSpace(sp[1]))
+			default:
+				klog.Printf("MIGRATION STRING: not handled %s for %s , field: %s \n", sp[0], tag, mi.fName)
+			}
+		}
+	}
+
+	if size == "" {
+		if mi.dialect == "postgres" || mi.dialect == "pg" {
+			(*mi.res)[mi.fName] = "BYTEA"
+		} else {
+			(*mi.res)[mi.fName] = "BLOB"
+		}
+	} else {
+		switch mi.dialect {
+		case "mysql":
+			(*mi.res)[mi.fName] = "VARBINARY(" + size + ")"
+		case "postgres", "pg":
+			(*mi.res)[mi.fName] = "BIT VARYING(" + size + ")"
+		default:
+			(*mi.res)[mi.fName] = "BLOB"
 		}
 	}
 

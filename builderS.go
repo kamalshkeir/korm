@@ -126,12 +126,151 @@ func (b *BuilderS[T]) Insert(model *T) (int, error) {
 			} else if v == false {
 				v = 0
 			}
-			if vvv, ok := mTypes[name]; ok && strings.HasSuffix(vvv, "Time") {
-				switch tyV := v.(type) {
-				case time.Time:
-					v = tyV.Unix()
-				case string:
-					v = strings.ReplaceAll(tyV, "T", " ")
+			if vvv, ok := mTypes[name]; ok {
+				if strings.HasSuffix(vvv, "Time") {
+					switch tyV := v.(type) {
+					case time.Time:
+						v = tyV.Unix()
+					case string:
+						v = strings.ReplaceAll(tyV, "T", " ")
+					}
+				} else if vvv[0] == '[' && !strings.Contains(vvv, ".") {
+					switch vvv {
+					case "[]string":
+						if vSlice, ok := v.([]string); ok {
+							v = strings.Join(vSlice, ",")
+						} else if pvSlice, ok := v.(*[]string); ok {
+							dst := make([]string, 0, len(*pvSlice))
+							dst = append(dst, *pvSlice...)
+							v = strings.Join(dst, ",")
+						}
+					case "[]bool":
+						if vSlice, ok := v.([]bool); ok {
+							v := ""
+							for _, vs := range vSlice {
+								if v != "" {
+									v += ","
+								}
+								v += strconv.FormatBool(vs)
+							}
+						} else if pvSlice, ok := v.(*[]bool); ok {
+							v := ""
+							for _, vs := range *pvSlice {
+								if v != "" {
+									v += ","
+								}
+								v += strconv.FormatBool(vs)
+							}
+						}
+					case "[]int":
+						if vSlice, ok := v.([]int); ok {
+							v := ""
+							for _, vs := range vSlice {
+								if v != "" {
+									v += ","
+								}
+								v += strconv.Itoa(vs)
+							}
+						} else if pvSlice, ok := v.(*[]int); ok {
+							v := ""
+							for _, vs := range *pvSlice {
+								if v != "" {
+									v += ","
+								}
+								v += strconv.Itoa(vs)
+							}
+						}
+					case "[]uint":
+						if vSlice, ok := v.([]uint); ok {
+							v := ""
+							for _, vs := range vSlice {
+								if v != "" {
+									v += ","
+								}
+								v += strconv.Itoa(int(vs))
+							}
+						} else if pvSlice, ok := v.(*[]uint); ok {
+							v := ""
+							for _, vs := range *pvSlice {
+								if v != "" {
+									v += ","
+								}
+								v += strconv.Itoa(int(vs))
+							}
+						}
+					case "[]int64":
+						if vSlice, ok := v.([]int64); ok {
+							v := ""
+							for _, vs := range vSlice {
+								if v != "" {
+									v += ","
+								}
+								v += strconv.Itoa(int(vs))
+							}
+						} else if pvSlice, ok := v.(*[]int64); ok {
+							v := ""
+							for _, vs := range *pvSlice {
+								if v != "" {
+									v += ","
+								}
+								v += strconv.Itoa(int(vs))
+							}
+						}
+					case "[]float64":
+						if vSlice, ok := v.([]float64); ok {
+							v := ""
+							for _, vs := range vSlice {
+								if v != "" {
+									v += ","
+								}
+								v += strconv.FormatFloat(vs, 'E', -1, 64)
+							}
+						} else if pvSlice, ok := v.(*[]float64); ok {
+							v := ""
+							for _, vs := range *pvSlice {
+								if v != "" {
+									v += ","
+								}
+								v += strconv.FormatFloat(vs, 'E', -1, 64)
+							}
+						}
+					case "[]float32":
+						if vSlice, ok := v.([]float64); ok {
+							v := ""
+							for _, vs := range vSlice {
+								if v != "" {
+									v += ","
+								}
+								v += strconv.FormatFloat(vs, 'E', -1, 32)
+							}
+						} else if pvSlice, ok := v.(*[]float64); ok {
+							v := ""
+							for _, vs := range *pvSlice {
+								if v != "" {
+									v += ","
+								}
+								v += strconv.FormatFloat(vs, 'E', -1, 32)
+							}
+						}
+					case "[]any":
+						if vSlice, ok := v.([]any); ok {
+							v := ""
+							for _, vs := range vSlice {
+								if v != "" {
+									v += ","
+								}
+								v += fmt.Sprint(vs)
+							}
+						} else if pvSlice, ok := v.(*[]any); ok {
+							v := ""
+							for _, vs := range *pvSlice {
+								if v != "" {
+									v += ","
+								}
+								v += fmt.Sprint(vs)
+							}
+						}
+					}
 				}
 			}
 			values = append(values, v)
@@ -244,18 +383,157 @@ func (b *BuilderS[T]) InsertR(model *T) (T, error) {
 			} else if v == false {
 				v = 0
 			}
-			if vvv, ok := mTypes[name]; ok && strings.HasSuffix(vvv, "Time") {
-				switch tyV := v.(type) {
-				case time.Time:
-					v = tyV.Unix()
-				case string:
-					v = strings.ReplaceAll(tyV, "T", " ")
+			if vvv, ok := mTypes[name]; ok {
+				if strings.HasSuffix(vvv, "Time") {
+					switch tyV := v.(type) {
+					case time.Time:
+						v = tyV.Unix()
+					case string:
+						v = strings.ReplaceAll(tyV, "T", " ")
+					}
+				} else if vvv[0] == '[' && !strings.Contains(vvv, ".") {
+					switch vvv {
+					case "[]string":
+						if vSlice, ok := v.([]string); ok {
+							v = strings.Join(vSlice, ",")
+						} else if pvSlice, ok := v.(*[]string); ok {
+							dst := make([]string, 0, len(*pvSlice))
+							dst = append(dst, *pvSlice...)
+							v = strings.Join(dst, ",")
+						}
+					case "[]bool":
+						if vSlice, ok := v.([]bool); ok {
+							v := ""
+							for _, vs := range vSlice {
+								if v != "" {
+									v += ","
+								}
+								v += strconv.FormatBool(vs)
+							}
+						} else if pvSlice, ok := v.(*[]bool); ok {
+							v := ""
+							for _, vs := range *pvSlice {
+								if v != "" {
+									v += ","
+								}
+								v += strconv.FormatBool(vs)
+							}
+						}
+					case "[]int":
+						if vSlice, ok := v.([]int); ok {
+							v := ""
+							for _, vs := range vSlice {
+								if v != "" {
+									v += ","
+								}
+								v += strconv.Itoa(vs)
+							}
+						} else if pvSlice, ok := v.(*[]int); ok {
+							v := ""
+							for _, vs := range *pvSlice {
+								if v != "" {
+									v += ","
+								}
+								v += strconv.Itoa(vs)
+							}
+						}
+					case "[]uint":
+						if vSlice, ok := v.([]uint); ok {
+							v := ""
+							for _, vs := range vSlice {
+								if v != "" {
+									v += ","
+								}
+								v += strconv.Itoa(int(vs))
+							}
+						} else if pvSlice, ok := v.(*[]uint); ok {
+							v := ""
+							for _, vs := range *pvSlice {
+								if v != "" {
+									v += ","
+								}
+								v += strconv.Itoa(int(vs))
+							}
+						}
+					case "[]int64":
+						if vSlice, ok := v.([]int64); ok {
+							v := ""
+							for _, vs := range vSlice {
+								if v != "" {
+									v += ","
+								}
+								v += strconv.Itoa(int(vs))
+							}
+						} else if pvSlice, ok := v.(*[]int64); ok {
+							v := ""
+							for _, vs := range *pvSlice {
+								if v != "" {
+									v += ","
+								}
+								v += strconv.Itoa(int(vs))
+							}
+						}
+					case "[]float64":
+						if vSlice, ok := v.([]float64); ok {
+							v := ""
+							for _, vs := range vSlice {
+								if v != "" {
+									v += ","
+								}
+								v += strconv.FormatFloat(vs, 'E', -1, 64)
+							}
+						} else if pvSlice, ok := v.(*[]float64); ok {
+							v := ""
+							for _, vs := range *pvSlice {
+								if v != "" {
+									v += ","
+								}
+								v += strconv.FormatFloat(vs, 'E', -1, 64)
+							}
+						}
+					case "[]float32":
+						if vSlice, ok := v.([]float64); ok {
+							v := ""
+							for _, vs := range vSlice {
+								if v != "" {
+									v += ","
+								}
+								v += strconv.FormatFloat(vs, 'E', -1, 32)
+							}
+						} else if pvSlice, ok := v.(*[]float64); ok {
+							v := ""
+							for _, vs := range *pvSlice {
+								if v != "" {
+									v += ","
+								}
+								v += strconv.FormatFloat(vs, 'E', -1, 32)
+							}
+						}
+					case "[]any":
+						if vSlice, ok := v.([]any); ok {
+							v := ""
+							for _, vs := range vSlice {
+								if v != "" {
+									v += ","
+								}
+								v += fmt.Sprint(vs)
+							}
+						} else if pvSlice, ok := v.(*[]any); ok {
+							v := ""
+							for _, vs := range *pvSlice {
+								if v != "" {
+									v += ","
+								}
+								v += fmt.Sprint(vs)
+							}
+						}
+					}
 				}
 			}
 			values = append(values, v)
 		} else {
 			klog.Printf("rd%vnot found in fields\n")
-			return *new(T), errors.New("field not found")
+			return *model, fmt.Errorf("field not found")
 		}
 
 		if tags, ok := mtags[name]; ok {
@@ -502,7 +780,6 @@ func (b *BuilderS[T]) AddRelated(relatedTable string, whereRelatedTable string, 
 
 	adaptTimeToUnixArgs(&whereRelatedArgs)
 	whereRelatedTable = adaptConcatAndLen(whereRelatedTable, b.db.Dialect)
-	adaptWhereQuery(&whereRelatedTable, relatedTable)
 	data, err := Table(relatedTable).Where(whereRelatedTable, whereRelatedArgs...).One()
 	if err != nil {
 		return 0, err
@@ -603,7 +880,6 @@ func (b *BuilderS[T]) DeleteRelated(relatedTable string, whereRelatedTable strin
 	} else if b.db != nil {
 		whereRelatedTable = adaptConcatAndLen(whereRelatedTable, b.db.Dialect)
 	}
-	adaptWhereQuery(&whereRelatedTable, relatedTable)
 	data, err := Table(relatedTable).Where(whereRelatedTable, whereRelatedArgs...).One()
 	if err != nil {
 		return 0, err
@@ -777,6 +1053,9 @@ func (b *BuilderS[T]) Set(query string, args ...any) (int, error) {
 	if b == nil || b.tableName == "" {
 		return 0, ErrTableNotFound
 	}
+	if b.whereQuery == "" {
+		return 0, fmt.Errorf("you should use Where before Update")
+	}
 	if onSet != nil {
 		mToSet := map[string]any{}
 		sp := strings.Split(query, ",")
@@ -795,14 +1074,9 @@ func (b *BuilderS[T]) Set(query string, args ...any) (int, error) {
 			return 0, err
 		}
 	}
-
-	if b.whereQuery == "" {
-		return 0, errors.New("you should use Where before Update")
-	}
 	adaptSetQuery(&query)
-	b.statement = "UPDATE " + b.tableName + " SET " + query + " WHERE " + b.whereQuery
 	adaptTimeToUnixArgs(&args)
-
+	b.statement = "UPDATE " + b.tableName + " SET " + query + " WHERE " + b.whereQuery
 	adaptPlaceholdersToDialect(&b.statement, b.db.Dialect)
 	args = append(args, b.args...)
 	if b.debug {
@@ -922,7 +1196,6 @@ func (b *BuilderS[T]) Where(query string, args ...any) *BuilderS[T] {
 	} else if b.db != nil {
 		query = adaptConcatAndLen(query, b.db.Dialect)
 	}
-	adaptWhereQuery(&query, b.tableName)
 	adaptTimeToUnixArgs(&args)
 	b.whereQuery = query
 	b.args = append(b.args, args...)
