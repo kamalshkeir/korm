@@ -20,6 +20,24 @@ import (
 	"github.com/kamalshkeir/kmux"
 )
 
+func reverseSlice[T any](slice []T) []T {
+	new := make([]T, 0, len(slice))
+	for i := len(slice) - 1; i >= 0; i-- {
+		new = append(new, slice[i])
+	}
+	return new
+}
+
+var LogsView = func(c *kmux.Context) {
+	d := map[string]any{
+		"static_pf": StaticUrl,
+	}
+	if v := klog.GetLogs(); v != nil {
+		d["logs"] = reverseSlice[string](v.Slice)
+	}
+	c.Html("admin/logs.html", d)
+}
+
 var IndexView = func(c *kmux.Context) {
 	allTables := GetAllTables()
 	c.Html("admin/admin_index.html", map[string]any{

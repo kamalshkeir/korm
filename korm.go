@@ -256,6 +256,7 @@ func WithDashboard(staticAndTemplatesEmbeded ...embed.FS) *ksbus.Server {
 	if serverBus == nil {
 		serverBus = WithBus()
 	}
+	klog.UsePublisher(serverBus, "klog:logs")
 	cloneAndMigrateDashboard(true, staticAndTemplatesEmbeded...)
 	initAdminUrlPatterns(serverBus.App)
 	var razor = `

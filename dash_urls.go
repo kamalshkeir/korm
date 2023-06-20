@@ -36,6 +36,7 @@ func initAdminUrlPatterns(r *kmux.Router) {
 	adminGroup.Get("/login", Auth(LoginView))
 	adminGroup.Post("/login", Auth(LoginPOSTView))
 	adminGroup.Get("/logout", LogoutView)
+	adminGroup.Get("/logs", Admin(LogsView))
 	adminGroup.Post("/delete/row", Admin(DeleteRowPost))
 	adminGroup.Post("/update/row", Admin(UpdateRowPost))
 	adminGroup.Post("/create/row", Admin(CreateModelView))
