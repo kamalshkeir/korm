@@ -3,7 +3,7 @@ module github.com/kamalshkeir/korm
 go 1.19
 
 require (
-	github.com/kamalshkeir/aes v1.0.1
+	github.com/kamalshkeir/aes v1.1.1
 	github.com/kamalshkeir/argon v1.0.1
 	github.com/kamalshkeir/kinput v0.1.0
 	github.com/kamalshkeir/klog v1.1.4

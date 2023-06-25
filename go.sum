@@ -1,5 +1,5 @@
-github.com/kamalshkeir/aes v1.0.1 h1:dbYXXlJp1niM3jULtRQPsqeiJwD17NWkAKcffdlZ85g=
-github.com/kamalshkeir/aes v1.0.1/go.mod h1:lA188RkfQ9/1bG19+lh/Zs2/By66j8VDLTDpyBcRhDs=
+github.com/kamalshkeir/aes v1.1.1 h1:yJVPUQX7ImIq6Y5lMRHJHv4qrNiR9sn9i2TD75ctJCk=
+github.com/kamalshkeir/aes v1.1.1/go.mod h1:2rVePNivOuSZ2UGYhO3mKLzVYWhflOLbcsj6ZynJV1Q=
 github.com/kamalshkeir/argon v1.0.1 h1:8KET6+qoytHVSIg47N8Wefy0PWdUszyIxe9S748zsIU=
 github.com/kamalshkeir/argon v1.0.1/go.mod h1:1yzi4VtpOY6S10rfO5gZ19iachH9CSO2THcu4HIsJHQ=
 github.com/kamalshkeir/kasm v0.0.1/go.mod h1:aB7Vg8R+kx104qe7Nz5nPPGKCvNYKFQsioinlTY1V1Q=
