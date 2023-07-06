@@ -31,6 +31,7 @@ var (
 	mModelTablename     = map[string]any{}
 	cacheAllTables      = kmap.New[string, []string](false)
 	cacheAllCols        = kmap.New[string, map[string]string](false)
+	cacheAllColsOrdered = kmap.New[string, []string](false)
 	relationsMap        = kmap.New[string, struct{}](false)
 	onceDone            = false
 	serverBus           *ksbus.Server
@@ -94,7 +95,6 @@ func New(dbType Dialect, dbName string, dbDriver driver.Driver, dbDSN ...string)
 			dsn += "?" + options
 		}
 	case SQLITE:
-		dbType = "sqlite3"
 		if dsn == "" {
 			dsn = "db.sqlite3"
 		}
@@ -126,6 +126,7 @@ func New(dbType Dialect, dbName string, dbDriver driver.Driver, dbDSN ...string)
 		sql.Register("korm", Wrap(dbDriver, &myLogAndCacheHook{}))
 		cstm = "korm"
 	}
+
 	conn, err := sql.Open(cstm, dsn)
 	if klog.CheckError(err) {
 		return err
@@ -135,6 +136,11 @@ func New(dbType Dialect, dbName string, dbDriver driver.Driver, dbDSN ...string)
 		klog.Printf("check if env is loaded %s \n", dsn)
 		return err
 	}
+	if dbType == SQLITE {
+		conn.SetMaxOpenConns(1)
+	} else {
+		conn.SetMaxOpenConns(MaxOpenConns)
+	}
 	dbFound := false
 	for _, dbb := range databases {
 		if dbb.Name == dbName {
@@ -142,7 +148,6 @@ func New(dbType Dialect, dbName string, dbDriver driver.Driver, dbDSN ...string)
 		}
 	}
 
-	conn.SetMaxOpenConns(MaxOpenConns)
 	conn.SetMaxIdleConns(MaxIdleConns)
 	conn.SetConnMaxLifetime(MaxLifetime)
 	conn.SetConnMaxIdleTime(MaxIdleTime)
@@ -471,23 +476,26 @@ func GetAllTables(dbName ...string) []string {
 }
 
 // GetAllColumnsTypes get columns and types from the database
-func GetAllColumnsTypes(table string, dbName ...string) map[string]string {
+func GetAllColumnsTypes(table string, dbName ...string) (map[string]string, []string) {
 	dName := databases[0].Name
 	if len(dbName) > 0 {
 		dName = dbName[0]
 	}
 	if useCache {
 		if v, ok := cacheAllCols.Get(dName + table); ok {
-			return v
+			if vv, ok := cacheAllColsOrdered.Get(dName + table); ok {
+				return v, vv
+			}
 		}
 	}
 
 	db, err := GetMemoryDatabase(dName)
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 
 	var statement string
+	colsSlice := []string{}
 	columns := map[string]string{}
 	switch db.Dialect {
 	case POSTGRES:
@@ -498,7 +506,7 @@ func GetAllColumnsTypes(table string, dbName ...string) map[string]string {
 		statement = "pragma table_info(" + table + ");"
 		row, err := db.Conn.Query(statement)
 		if klog.CheckError(err) {
-			return nil
+			return nil, nil
 		}
 		defer row.Close()
 		var num int
@@ -510,20 +518,21 @@ func GetAllColumnsTypes(table string, dbName ...string) map[string]string {
 		for row.Next() {
 			err := row.Scan(&num, &singleColName, &singleColType, &fake1, &fake2, &fake3)
 			if klog.CheckError(err) {
-				return nil
+				return nil, nil
 			}
 			columns[singleColName] = singleColType
+			colsSlice = append(colsSlice, singleColName)
 		}
 		if useCache {
 			cacheAllCols.Set(dName+table, columns)
 		}
-		return columns
+		return columns, colsSlice
 	}
 
 	row, err := db.Conn.Query(statement)
 
 	if klog.CheckError(err) {
-		return nil
+		return nil, nil
 	}
 	defer row.Close()
 	var singleColName string
@@ -531,14 +540,15 @@ func GetAllColumnsTypes(table string, dbName ...string) map[string]string {
 	for row.Next() {
 		err := row.Scan(&singleColName, &singleColType)
 		if klog.CheckError(err) {
-			return nil
+			return nil, nil
 		}
 		columns[singleColName] = singleColType
 	}
 	if useCache {
 		cacheAllCols.Set(dName+table, columns)
+		cacheAllColsOrdered.Set(dName+table, colsSlice)
 	}
-	return columns
+	return columns, colsSlice
 }
 
 // Shutdown shutdown many database

@@ -2,6 +2,7 @@ package korm
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"unicode"
 
@@ -38,7 +39,7 @@ func LinkModel[T any](to_table_name string, dbName ...string) {
 
 	fields, _, ftypes, ftags := getStructInfos(new(T))
 	// get columns from db
-	colsNameType := GetAllColumnsTypes(to_table_name, db.Name)
+	colsNameType, _ := GetAllColumnsTypes(to_table_name, db.Name)
 
 	pk := ""
 tagsLoop:
@@ -170,6 +171,7 @@ tagsLoop:
 							return
 						}
 						klog.Printfs("grDone, you can still find your old table with the same data %s\n", te.Name+"_old")
+						os.Exit(0)
 					default:
 						return
 					}
@@ -218,6 +220,7 @@ tagsLoop:
 							return
 						}
 						klog.Printfs("grDone, you can still find your old table with the same data %s\n", te.Name+"_old")
+						os.Exit(0)
 					default:
 						return
 					}

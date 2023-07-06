@@ -136,41 +136,51 @@ var AllModelsGet = func(c *kmux.Context) {
 			}
 		}
 	}
+	dbCols, cols := GetAllColumnsTypes(model)
 	mmfkeys := map[string][]any{}
-	for _, fkey := range t.Fkeys {
-		spFrom := strings.Split(fkey.FromTableField, ".")
-		if len(spFrom) == 2 {
-			spTo := strings.Split(fkey.ToTableField, ".")
-			if len(spTo) == 2 {
-				q := "select " + spTo[1] + " from " + spTo[0] + " order by " + spTo[1]
-				mm := []map[string]any{}
-				err := To(&mm).Query(q)
-				if !klog.CheckError(err) {
-					ress := []any{}
-					for _, res := range mm {
-						ress = append(ress, res[spTo[1]])
+	if t != nil {
+		for _, fkey := range t.Fkeys {
+			spFrom := strings.Split(fkey.FromTableField, ".")
+			if len(spFrom) == 2 {
+				spTo := strings.Split(fkey.ToTableField, ".")
+				if len(spTo) == 2 {
+					q := "select " + spTo[1] + " from " + spTo[0] + " order by " + spTo[1]
+					mm := []map[string]any{}
+					err := To(&mm).Query(q)
+					if !klog.CheckError(err) {
+						ress := []any{}
+						for _, res := range mm {
+							ress = append(ress, res[spTo[1]])
+						}
+						if len(ress) > 0 {
+							mmfkeys[spFrom[1]] = ress
+						}
+					} else {
+						klog.Printf("rd%s %v\n", q, spTo)
 					}
-					if len(ress) > 0 {
-						mmfkeys[spFrom[1]] = ress
-					}
-				} else {
-					klog.Printf("rd%s %v\n", q, spTo)
 				}
 			}
 		}
+	} else {
+		idString = cols[0]
 	}
-	dbCols := GetAllColumnsTypes(model)
+
 	if dbMem != nil {
-		c.Html("admin/admin_all_models.html", map[string]any{
+		data := map[string]any{
 			"dbType":         dbMem.Dialect,
 			"model_name":     model,
 			"rows":           rows,
-			"columns":        t.ModelTypes,
 			"dbcolumns":      dbCols,
 			"pk":             idString,
 			"fkeys":          mmfkeys,
-			"columnsOrdered": t.Columns,
-		})
+			"columnsOrdered": cols,
+		}
+		if t != nil {
+			data["columns"] = t.ModelTypes
+		} else {
+			data["columns"] = dbCols
+		}
+		c.Html("admin/admin_all_models.html", data)
 	} else {
 		klog.Printf("rdtable %s not found\n", model)
 		c.TextHtml("<h1>Unable to find this model</h1>")
@@ -203,7 +213,13 @@ var AllModelsSearch = func(c *kmux.Context) {
 	}
 
 	oB := ""
-	t, _ := GetMemoryTable(model)
+	t, err := GetMemoryTable(model)
+	if klog.CheckError(err) {
+		c.Json(map[string]any{
+			"error": err,
+		})
+		return
+	}
 	if orderby, ok := body["orderby"]; ok {
 		if v, ok := orderby.(string); ok && v != "" {
 			oB = v
@@ -386,7 +402,7 @@ var SingleModelGet = func(c *kmux.Context) {
 		})
 		return
 	}
-	dbCols := GetAllColumnsTypes(model)
+	dbCols, _ := GetAllColumnsTypes(model)
 	mmfkeys := map[string][]any{}
 	for _, fkey := range t.Fkeys {
 		spFrom := strings.Split(fkey.FromTableField, ".")

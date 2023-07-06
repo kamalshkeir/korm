@@ -415,7 +415,7 @@ func BenchmarkGetAllColumns(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		c := korm.GetAllColumnsTypes("test_table")
+		c, _ := korm.GetAllColumnsTypes("test_table")
 		if len(c) == 0 {
 			b.Error("error BenchmarkGetAllColumns: no data")
 		}

@@ -161,7 +161,7 @@ func InitShell() bool {
 				if tb == "" {
 					fmt.Printf(red, "you should specify a table that exist !")
 				}
-				mcols := GetAllColumnsTypes(tb, usedDB.Name)
+				mcols, _ := GetAllColumnsTypes(tb, usedDB.Name)
 				cols := []string{}
 				for k := range mcols {
 					cols = append(cols, k)
