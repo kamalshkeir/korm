@@ -21,9 +21,9 @@ var (
 	onDrop   func(database, table string) error
 )
 
-type myLogAndCacheHook struct{}
+type logAndCacheHook struct{}
 
-func (h *myLogAndCacheHook) Before(ctx context.Context, query string, args ...interface{}) (context.Context, error) {
+func (h *logAndCacheHook) Before(ctx context.Context, query string, args ...interface{}) (context.Context, error) {
 	if useCache && len(query) > 6 {
 		if !onceDone {
 			go RunEvery(FlushCacheEvery, func(cancelChan chan struct{}) {
@@ -46,7 +46,7 @@ func (h *myLogAndCacheHook) Before(ctx context.Context, query string, args ...in
 	return context.Background(), nil
 }
 
-func (h *myLogAndCacheHook) After(ctx context.Context, query string, args ...interface{}) (context.Context, error) {
+func (h *logAndCacheHook) After(ctx context.Context, query string, args ...interface{}) (context.Context, error) {
 	if logQueries {
 		begin := ctx.Value(kmux.ContextKey("begin")).(time.Time)
 		klog.Printfs("yl, took: %v\n", time.Since(begin))

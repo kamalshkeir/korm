@@ -47,6 +47,7 @@ var (
 //
 //	Example:
 //	  korm.New(korm.SQLITE, "db", sqlitedriver.Use())
+//	  korm.New(korm.MYSQL,"dbName", mysqldriver.Use(), "user:password@localhost:3333")
 //	  korm.New(korm.POSTGRES,"dbName", pgdriver.Use(), "user:password@localhost:5432")
 func New(dbType Dialect, dbName string, dbDriver driver.Driver, dbDSN ...string) error {
 	var dsn string
@@ -123,7 +124,7 @@ func New(dbType Dialect, dbName string, dbDriver driver.Driver, dbDSN ...string)
 	}
 	cstm := dbType
 	if useCache {
-		sql.Register("korm", Wrap(dbDriver, &myLogAndCacheHook{}))
+		sql.Register("korm", Wrap(dbDriver, &logAndCacheHook{}))
 		cstm = "korm"
 	}
 
