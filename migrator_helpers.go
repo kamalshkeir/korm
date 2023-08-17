@@ -205,6 +205,7 @@ tagsLoop:
 						cls := strings.Join(colss, ",")
 						_, err = db.Conn.Exec("INSERT INTO " + temp + " (" + cls + ") SELECT " + cls + " FROM " + te.Name)
 						if klog.CheckError(err) {
+							klog.Printfs("query: %s\n", "INSERT INTO "+temp+" ("+cls+") SELECT "+cls+" FROM "+te.Name)
 							return
 						}
 						_, err = Table(te.Name + "_old").Database(db.Name).Drop()

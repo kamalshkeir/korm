@@ -484,7 +484,7 @@ func handleMigrationBool(mi *migrationInput) {
 		(*mi.res)[mi.fName] = ""
 		return
 	} else if len(tags) == 0 {
-		(*mi.res)[mi.fName] = "INTEGER NOT NULL CHECK (" + mi.fName + " IN (0, 1))"
+		(*mi.res)[mi.fName] = "INTEGER DEFAULT 0 CHECK (" + mi.fName + " IN (0, 1))"
 		return
 	}
 	for _, tag := range tags {
@@ -568,10 +568,10 @@ func handleMigrationBool(mi *migrationInput) {
 		}
 	}
 	if defaultt != "" {
-		(*mi.res)[mi.fName] = "INTEGER NOT NULL" + defaultt + " CHECK (" + mi.fName + " IN (0, 1))"
+		(*mi.res)[mi.fName] = "INTEGER" + defaultt + " CHECK (" + mi.fName + " IN (0, 1))"
 	}
 	if (*mi.res)[mi.fName] == "" {
-		(*mi.res)[mi.fName] = "INTEGER NOT NULL CHECK (" + mi.fName + " IN (0, 1))"
+		(*mi.res)[mi.fName] = "INTEGER DEFAULT 0 CHECK (" + mi.fName + " IN (0, 1))"
 	}
 }
 
