@@ -15,6 +15,8 @@ github.com/kamalshkeir/kmap v1.1.2 h1:P89SXps9LN8JYQWDPkfhDsp5pF6tsV7O8OCuxtV8g8
 github.com/kamalshkeir/kmap v1.1.2/go.mod h1:SLSllMqrhSTJtgYd14nXeFZ/shp9AY4t20YGCtlcziI=
 github.com/kamalshkeir/kmux v1.91.7 h1:AMAS45fuFy+S+tVKyEs5o4A3YMMvcJfb519yhg+huC8=
 github.com/kamalshkeir/kmux v1.91.7/go.mod h1:Dt2MCRZtXVcnn70D4cXoXIIqymGvSL8UOL5FlIglKRA=
+github.com/kamalshkeir/kmux v1.91.20 h1:j67sxa4QIWHxGJ1CB0MUHd34yMsnfzyhFcAPQskeQMY=
+github.com/kamalshkeir/kmux v1.91.20/go.mod h1:Dt2MCRZtXVcnn70D4cXoXIIqymGvSL8UOL5FlIglKRA=
 github.com/kamalshkeir/ksbus v1.1.4 h1:rVXcQZNmBUr30dqJ0qsEXiLb2h6BBQN2ipGfgPikcxE=
 github.com/kamalshkeir/ksbus v1.1.4/go.mod h1:qRMHoZ+zTDv0R57/DueWAUKpGikL5OhzDyLD15veoDI=
 github.com/kamalshkeir/kstrct v1.8.0 h1:EOJkWU0g8uGQg1xXb1PBw7Z/8/LZQkALf2G40KXezXI=

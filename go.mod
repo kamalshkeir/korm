@@ -10,7 +10,7 @@ require (
 	github.com/kamalshkeir/kinput v0.1.0
 	github.com/kamalshkeir/klog v1.1.4
 	github.com/kamalshkeir/kmap v1.1.2
-	github.com/kamalshkeir/kmux v1.91.7
+	github.com/kamalshkeir/kmux v1.91.20
 	github.com/kamalshkeir/ksbus v1.1.4
 	github.com/kamalshkeir/kstrct v1.8.0
 )
