@@ -53,11 +53,13 @@ func AdaptNamedParams(dialect, statement string, variables map[string]any, unsaf
 			value = vt.Unix()
 		case *time.Time:
 			value = vt.Unix()
+		case string:
+			value = "'" + vt + "'"
 		}
 		buf.WriteString(statement[lastIndex:start])
 		if len(unsafe) > 0 && unsafe[0] {
 			if v, ok := value.(string); ok {
-				_, err := buf.WriteString("'" + v + "'")
+				_, err := buf.WriteString(v)
 				klog.CheckError(err)
 			} else {
 				_, err := buf.WriteString(fmt.Sprint(value))
@@ -71,7 +73,7 @@ func AdaptNamedParams(dialect, statement string, variables map[string]any, unsaf
 	}
 	buf.WriteString(statement[lastIndex:])
 	res := buf.String()
-	if len(unsafe) == 0 {
+	if len(unsafe) == 0 || !unsafe[0] {
 		adaptPlaceholdersToDialect(&res, dialect)
 	}
 	return res, anys, nil
