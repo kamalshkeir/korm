@@ -57,7 +57,7 @@ func AdaptNamedParams(dialect, statement string, variables map[string]any, unsaf
 		buf.WriteString(statement[lastIndex:start])
 		if len(unsafe) > 0 && unsafe[0] {
 			if v, ok := value.(string); ok {
-				_, err := buf.WriteString(v)
+				_, err := buf.WriteString("'" + v + "'")
 				klog.CheckError(err)
 			} else {
 				_, err := buf.WriteString(fmt.Sprint(value))

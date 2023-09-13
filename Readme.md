@@ -123,7 +123,7 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@latest // v1.91.7
+go get -u github.com/kamalshkeir/korm@latest // v1.91.8
 ```
 
 # Drivers moved outside this package to not get them all in your go.mod file
@@ -152,7 +152,7 @@ MaxIdleTime = 15 * time.Minute
 ```go
 // sqlite
 // go get github.com/kamalshkeir/sqlitedriver
-err := korm.New(korm.SQLITE, "db", sqlitedriver.Use()) // Connect
+err := korm.New(korm.SQLITE, "dbName", sqlitedriver.Use()) // Connect
 // postgres, cockroach
 // go get github.com/kamalshkeir/pgdriver
 err := korm.New(korm.POSTGRES,"dbName", pgdriver.Use(), "user:password@localhost:5432") // Connect
