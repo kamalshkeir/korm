@@ -12,7 +12,7 @@ require (
 	github.com/kamalshkeir/kmap v1.1.2
 	github.com/kamalshkeir/kmux v1.91.91
 	github.com/kamalshkeir/ksbus v1.1.5
-	github.com/kamalshkeir/kstrct v1.8.1
+	github.com/kamalshkeir/kstrct v1.8.2
 )
 
 require (
