@@ -13,7 +13,9 @@ import (
 )
 
 type Selector[T any] struct {
+	dbName string
 	nested bool
+	debug  bool
 	ctx    context.Context
 	dest   *[]T
 }
@@ -32,14 +34,33 @@ func To[T any](dest *[]T, nestedSlice ...bool) *Selector[T] {
 	}
 }
 
+func (sl *Selector[T]) Database(dbName string) *Selector[T] {
+	sl.dbName = dbName
+	return sl
+}
+
 func (sl *Selector[T]) Ctx(ct context.Context) *Selector[T] {
 	sl.ctx = ct
+	return sl
+}
+
+func (sl *Selector[T]) Debug() *Selector[T] {
+	sl.debug = true
 	return sl
 }
 
 func (sl *Selector[T]) Query(statement string, args ...any) error {
 	var db *DatabaseEntity
 	var stt string
+	if sl.dbName != "" {
+		var err error
+		db, err = GetMemoryDatabase(sl.dbName)
+		if err != nil {
+			return err
+		}
+	} else {
+		db = &databases[0]
+	}
 	if useCache {
 		stt = statement + fmt.Sprint(args...)
 		if v, ok := cacheQ.Get(stt); ok {
@@ -49,18 +70,6 @@ func (sl *Selector[T]) Query(statement string, args ...any) error {
 			}
 		}
 	}
-	if len(args) > 0 {
-		if v, ok := args[len(args)-1].(string); ok {
-			if strings.HasPrefix(v, "db:") {
-				db, _ = GetMemoryDatabase(strings.TrimSpace(v[3:]))
-				args = args[:len(args)-1]
-			}
-		}
-	}
-
-	if db == nil {
-		db = &databases[0]
-	}
 
 	typ := fmt.Sprintf("%T", *new(T))
 	ref := reflect.ValueOf(*new(T))
@@ -69,6 +78,9 @@ func (sl *Selector[T]) Query(statement string, args ...any) error {
 	adaptTimeToUnixArgs(&args)
 	var rows *sql.Rows
 	var err error
+	if sl.debug {
+		klog.Printfs("yl%s , args: %v", statement, args)
+	}
 	if sl.ctx != nil {
 		rows, err = db.Conn.QueryContext(sl.ctx, statement, args...)
 	} else {
@@ -343,6 +355,15 @@ loop:
 func (sl *Selector[T]) Named(statement string, args map[string]any, unsafe ...bool) error {
 	var db *DatabaseEntity
 	var stt string
+	if sl.dbName != "" {
+		var err error
+		db, err = GetMemoryDatabase(sl.dbName)
+		if err != nil {
+			return err
+		}
+	} else {
+		db = &databases[0]
+	}
 	if useCache {
 		stt = statement + fmt.Sprint(args)
 		if v, ok := cacheQ.Get(stt); ok {
@@ -351,13 +372,6 @@ func (sl *Selector[T]) Named(statement string, args map[string]any, unsafe ...bo
 				return nil
 			}
 		}
-	}
-	if v, ok := args["db"]; ok {
-		db, _ = GetMemoryDatabase(v.(string))
-		delete(args, "db")
-	}
-	if db == nil {
-		db = &databases[0]
 	}
 
 	typ := fmt.Sprintf("%T", *new(T))
@@ -388,6 +402,9 @@ func (sl *Selector[T]) Named(statement string, args map[string]any, unsafe ...bo
 	}
 	var rows *sql.Rows
 	var err error
+	if sl.debug {
+		klog.Printfs("yl%s , args: %v", query, newargs)
+	}
 	if sl.ctx != nil {
 		rows, err = db.Conn.QueryContext(sl.ctx, query, newargs...)
 	} else {
