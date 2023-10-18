@@ -122,10 +122,12 @@ func New(dbType Dialect, dbName string, dbDriver driver.Driver, dbDSN ...string)
 			dsn += "?_foreign_keys=true"
 		}
 	}
-	cstm := dbType
+
+	cstm := GenerateUUID()
 	if useCache {
-		sql.Register("korm", Wrap(dbDriver, &logAndCacheHook{}))
-		cstm = "korm"
+		sql.Register(cstm, Wrap(dbDriver, &logAndCacheHook{}))
+	} else {
+		sql.Register(cstm, dbDriver)
 	}
 
 	conn, err := sql.Open(cstm, dsn)
