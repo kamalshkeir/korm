@@ -31,7 +31,7 @@ func initAdminUrlPatterns(r *kmux.Router) {
 	r.Get("/manifest.webmanifest", ManifestView)
 	r.Get("/sw.js", ServiceWorkerView)
 	r.Get("/robots.txt", RobotsTxtView)
-	adminGroup := r.Group(AdminPathNameGroup)
+	adminGroup := r.Group(adminPathNameGroup)
 	adminGroup.Get("/", Admin(IndexView))
 	adminGroup.Get("/login", Auth(LoginView))
 	adminGroup.Post("/login", Auth(LoginPOSTView))

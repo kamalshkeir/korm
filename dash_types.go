@@ -2,6 +2,7 @@ package korm
 
 import (
 	"path"
+	"strings"
 	"time"
 )
 
@@ -18,7 +19,7 @@ var (
 	TemplatesDir       = path.Join(AssetsDir, "/", "templates")
 	RepoUser           = "kamalshkeir"
 	RepoName           = "korm-dashboard"
-	AdminPathNameGroup = "/admin"
+	adminPathNameGroup = "/admin"
 	// Debug when true show extra useful logs for queries executed for migrations and queries statements
 	Debug = false
 	// FlushCacheEvery execute korm.FlushCache() every 10 min by default, you should not worry about it, but useful that you can change it
@@ -41,4 +42,13 @@ type User struct {
 	IsAdmin   bool      `json:"is_admin,omitempty" korm:"default:false"`
 	Image     string    `json:"image,omitempty" korm:"size:100;default:''"`
 	CreatedAt time.Time `json:"created_at,omitempty" korm:"now"`
+}
+
+// SetAdminPath set admin path, default '/admin'
+func SetAdminPath(path string) {
+	if !strings.HasPrefix(path, "/") {
+		adminPathNameGroup = "/" + path
+	} else {
+		adminPathNameGroup = path
+	}
 }

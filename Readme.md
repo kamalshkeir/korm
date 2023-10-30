@@ -123,7 +123,7 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@latest // v1.91.91
+go get -u github.com/kamalshkeir/korm@latest // v1.91.92
 ```
 
 # Drivers moved outside this package to not get them all in your go.mod file
@@ -551,7 +551,7 @@ korm.StaticDir          = path.Join(AssetsDir, "/", "static")
 korm.TemplatesDir       = path.Join(AssetsDir, "/", "templates")
 korm.RepoUser           = "kamalshkeir"
 korm.RepoName           = "korm-dashboard"
-korm.AdminPathNameGroup = "/admin"
+korm.adminPathNameGroup = "/admin" // korm.SetAdminPath("/another")
 // so you can create a custom dashboard, upload it to your repos and change like like above korm.RepoUser and korm.RepoName
 ```
 
@@ -659,12 +659,12 @@ func main() {
         </li>
 
         <li>
-          <a {{if contains .Request.URL.Path "/admin" }}class="active"{{end}} href="/admin">Admin</a>
+          <a {{if contains .Request.URL.Path .admin_path }}class="active"{{end}} href="{{.admin_path}}">Admin</a>
         </li>
 
         {{if .IsAuthenticated}}
             <li>
-              <a href="/admin/logout">Logout</a>
+              <a href="{{.admin_path}}/logout">Logout</a>
             </li>
             
             {{if .User.Email}}
@@ -738,19 +738,19 @@ var Admin = func(handler kmux.Handler) kmux.Handler {
 		if err != nil || session == "" {
 			// NOT AUTHENTICATED
 			c.DeleteCookie("session")
-			c.Status(http.StatusTemporaryRedirect).Redirect("/admin/login")
+			c.Status(http.StatusTemporaryRedirect).Redirect(admin"/login")
 			return
 		}
 		session, err = aes.Decrypt(session)
 		if err != nil {
-			c.Status(http.StatusTemporaryRedirect).Redirect("/admin/login")
+			c.Status(http.StatusTemporaryRedirect).Redirect(admin"/login")
 			return
 		}
 		user, err := Model[User]().Where("uuid = ?", session).One()
 
 		if err != nil {
 			// AUTHENTICATED BUT NOT FOUND IN DB
-			c.Status(http.StatusTemporaryRedirect).Redirect("/admin/login")
+			c.Status(http.StatusTemporaryRedirect).Redirect(admin"/login")
 			return
 		}
 

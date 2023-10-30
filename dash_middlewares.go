@@ -54,19 +54,19 @@ var Admin = func(handler kmux.Handler) kmux.Handler {
 		if err != nil || session == "" {
 			// NOT AUTHENTICATED
 			c.DeleteCookie("session")
-			c.Status(http.StatusTemporaryRedirect).Redirect("/admin/login")
+			c.Status(http.StatusTemporaryRedirect).Redirect(adminPathNameGroup + "/login")
 			return
 		}
 		session, err = aes.Decrypt(session)
 		if err != nil {
-			c.Status(http.StatusTemporaryRedirect).Redirect("/admin/login")
+			c.Status(http.StatusTemporaryRedirect).Redirect(adminPathNameGroup + "/login")
 			return
 		}
 		user, err := Model[User]().Where("uuid = ?", session).One()
 
 		if err != nil {
 			// AUTHENTICATED BUT NOT FOUND IN DB
-			c.Status(http.StatusTemporaryRedirect).Redirect("/admin/login")
+			c.Status(http.StatusTemporaryRedirect).Redirect(adminPathNameGroup + "/login")
 			return
 		}
 

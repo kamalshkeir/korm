@@ -32,9 +32,10 @@ var ApiIndexHandler = func(c *kmux.Context) {
 		return
 	}
 	c.Html("admin/api.html", map[string]any{
-		"tables":    registeredTables,
-		"tbMem":     m,
-		"tbMethods": tableMethods,
+		"admin_path": adminPathNameGroup,
+		"tables":     registeredTables,
+		"tbMem":      m,
+		"tbMethods":  tableMethods,
 		"EndWithSlash": func(str string) bool {
 			q := []rune(str)
 			return q[len(q)-1] == '/'

@@ -30,7 +30,8 @@ func reverseSlice[T any](slice []T) []T {
 
 var LogsView = func(c *kmux.Context) {
 	d := map[string]any{
-		"static_pf": StaticUrl,
+		"admin_path": adminPathNameGroup,
+		"static_pf":  StaticUrl,
 	}
 	if v := klog.GetLogs(); v != nil {
 		d["logs"] = reverseSlice[string](v.Slice)
@@ -41,12 +42,15 @@ var LogsView = func(c *kmux.Context) {
 var IndexView = func(c *kmux.Context) {
 	allTables := GetAllTables()
 	c.Html("admin/admin_index.html", map[string]any{
-		"tables": allTables,
+		"admin_path": adminPathNameGroup,
+		"tables":     allTables,
 	})
 }
 
 var LoginView = func(c *kmux.Context) {
-	c.Html("admin/admin_login.html", nil)
+	c.Html("admin/admin_login.html", map[string]any{
+		"admin_path": adminPathNameGroup,
+	})
 }
 
 var LoginPOSTView = func(c *kmux.Context) {
@@ -180,6 +184,7 @@ var AllModelsGet = func(c *kmux.Context) {
 		} else {
 			data["columns"] = dbCols
 		}
+		data["admin_path"] = adminPathNameGroup
 		c.Html("admin/admin_all_models.html", data)
 	} else {
 		klog.Printf("rdtable %s not found\n", model)
@@ -424,6 +429,7 @@ var SingleModelGet = func(c *kmux.Context) {
 		}
 	}
 	c.Html("admin/admin_single_model.html", map[string]any{
+		"admin_path": adminPathNameGroup,
 		"model":      modelRow,
 		"model_name": model,
 		"id":         id,
