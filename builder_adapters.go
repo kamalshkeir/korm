@@ -125,41 +125,45 @@ func adaptSetQuery(query *string) {
 }
 
 func adaptConcatAndLen(str string, dialect Dialect) string {
-	str = strings.ToLower(str)
-	if dialect == SQLITE {
-		strt := strings.Replace(str, "len(", "length(", -1)
-		if str != strt {
-			str = strt
+	if strings.Contains(str, "len(") || strings.Contains(str, "concat") {
+		if dialect == SQLITE {
+			strt := strings.Replace(str, "len(", "length(", -1)
+			if str != strt {
+				str = strt
+			} else {
+				str = strings.Replace(str, "len (", "length (", -1)
+			}
 		} else {
-			str = strings.Replace(str, "len (", "length (", -1)
+			strt := strings.Replace(str, "len(", "char_length(", -1)
+			if str != strt {
+				str = strt
+			} else {
+				str = strings.Replace(str, "len (", "char_length (", -1)
+			}
 		}
-	} else {
-		strt := strings.Replace(str, "len(", "char_length(", -1)
-		if str != strt {
-			str = strt
-		} else {
-			str = strings.Replace(str, "len (", "char_length (", -1)
-		}
-	}
 
-	start := strings.Index(str, "concat")
-	if start == -1 || (dialect != SQLITE && dialect != "") {
+		start := strings.Index(str, "concat")
+		if start == -1 || (dialect != SQLITE && dialect != "") {
+			return str
+		}
+		// only for sqlite3
+		parenthesis1 := strings.Index(str[start:], "(")
+		parenthesis2 := strings.Index(str[start:], ")")
+		inside := str[start+parenthesis1+1 : start+parenthesis2]
+		sp := strings.Split(inside, ",")
+		var result string
+		for i, val := range sp {
+			val = strings.TrimSpace(val)
+			if i == 0 {
+				result = val
+			} else {
+				result += " || " + val
+			}
+		}
+		res := str[:start] + result + str[start+parenthesis2+1:]
+		return res
+	} else {
 		return str
 	}
-	// only for sqlite3
-	parenthesis1 := strings.Index(str[start:], "(")
-	parenthesis2 := strings.Index(str[start:], ")")
-	inside := str[start+parenthesis1+1 : start+parenthesis2]
-	sp := strings.Split(inside, ",")
-	var result string
-	for i, val := range sp {
-		val = strings.TrimSpace(val)
-		if i == 0 {
-			result = val
-		} else {
-			result += " || " + val
-		}
-	}
-	res := str[:start] + result + str[start+parenthesis2+1:]
-	return res
+
 }
