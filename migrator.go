@@ -1130,7 +1130,7 @@ func prepareCreateStatement(tbName string, fields map[string]string, fkeys, cols
 	strBuilder.WriteString("CREATE TABLE IF NOT EXISTS ")
 	strBuilder.WriteString(tbName + " (")
 	for i, col := range cols {
-		fName := col
+		fName := "`" + col + "`"
 		fType := fields[col]
 		if fType == "" {
 			continue

@@ -300,6 +300,10 @@ func (b *BuilderS[T]) Insert(model *T) (int, error) {
 		} else {
 			placeholdersSlice = append(placeholdersSlice, "?")
 		}
+		if !strings.HasPrefix(names[i], "`") && !strings.HasPrefix(names[i], "'") {
+			names[i] = "`" + names[i] + "`"
+		}
+
 	}
 	cum := 0
 	for _, ign := range ignored {
@@ -313,7 +317,7 @@ func (b *BuilderS[T]) Insert(model *T) (int, error) {
 	fields_comma_separated := strings.Join(names, ",")
 
 	stat := strings.Builder{}
-	stat.WriteString("INSERT INTO " + b.tableName + " (")
+	stat.WriteString("INSERT INTO `" + b.tableName + "` (")
 	stat.WriteString(fields_comma_separated)
 	stat.WriteString(") VALUES (")
 	stat.WriteString(placeholders)
@@ -557,6 +561,9 @@ func (b *BuilderS[T]) InsertR(model *T) (T, error) {
 		} else {
 			placeholdersSlice = append(placeholdersSlice, "?")
 		}
+		if !strings.HasPrefix(names[i], "`") && !strings.HasPrefix(names[i], "'") {
+			names[i] = "`" + names[i] + "`"
+		}
 	}
 
 	cum := 0
@@ -571,7 +578,7 @@ func (b *BuilderS[T]) InsertR(model *T) (T, error) {
 	fields_comma_separated := strings.Join(names, ",")
 
 	stat := strings.Builder{}
-	stat.WriteString("INSERT INTO " + b.tableName + " (")
+	stat.WriteString("INSERT INTO `" + b.tableName + "` (")
 	stat.WriteString(fields_comma_separated)
 	stat.WriteString(") VALUES (")
 	stat.WriteString(placeholders)
@@ -1180,6 +1187,11 @@ func (b *BuilderS[T]) Drop() (int, error) {
 func (b *BuilderS[T]) Select(columns ...string) *BuilderS[T] {
 	if b == nil || b.tableName == "" {
 		return nil
+	}
+	for i := range columns {
+		if !strings.HasPrefix(columns[i], "`") && !strings.HasPrefix(columns[i], "'") {
+			columns[i] = "`" + columns[i] + "`"
+		}
 	}
 	b.selected = strings.Join(columns, ",")
 	b.order = append(b.order, "select")

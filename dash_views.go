@@ -474,7 +474,7 @@ var UpdateRowPost = func(c *kmux.Context) {
 				// no changes for bool
 				continue
 			}
-			toUpdate[key] = val[0]
+			toUpdate["`"+key+"`"] = val[0]
 		}
 	}
 
@@ -536,12 +536,11 @@ func handleFilesUpload(files map[string][]*multipart.FileHeader, model string, i
 			if err != nil {
 				return err
 			}
-			database_image := row[key]
-
+			database_image, okDB := row[key]
 			if database_image == uploadedImage {
 				return errors.New("uploadedImage is the same")
 			} else {
-				if v, ok := database_image.(string); ok {
+				if v, ok := database_image.(string); ok || okDB {
 					err := c.DeleteFile(v)
 					if err != nil {
 						//le fichier existe pas

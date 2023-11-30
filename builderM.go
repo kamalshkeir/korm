@@ -66,6 +66,11 @@ func (b *BuilderM) Select(columns ...string) *BuilderM {
 	if b == nil || b.tableName == "" {
 		return nil
 	}
+	for i := range columns {
+		if !strings.HasPrefix(columns[i], "`") && !strings.HasPrefix(columns[i], "'") {
+			columns[i] = "`" + columns[i] + "`"
+		}
+	}
 	b.selected = strings.Join(columns, ",")
 	b.order = append(b.order, "select")
 	return b
@@ -366,7 +371,11 @@ func (b *BuilderM) Insert(rowData map[string]any) (int, error) {
 		default:
 			return 0, errors.New("database is neither sqlite3, postgres or mysql")
 		}
-		keys = append(keys, k)
+		if !strings.HasPrefix(k, "`") && !strings.HasPrefix(k, "'") {
+			keys = append(keys, "`"+k+"`")
+		} else {
+			keys = append(keys, k)
+		}
 		if v == true {
 			v = 1
 		} else if v == false {
@@ -387,7 +396,7 @@ func (b *BuilderM) Insert(rowData map[string]any) (int, error) {
 	}
 	placeholders := strings.Join(placeholdersSlice, ",")
 	stat := strings.Builder{}
-	stat.WriteString("INSERT INTO " + b.tableName + " (")
+	stat.WriteString("INSERT INTO `" + b.tableName + "` (")
 	stat.WriteString(strings.Join(keys, ","))
 	stat.WriteString(") VALUES (")
 	stat.WriteString(placeholders)
@@ -468,7 +477,12 @@ func (b *BuilderM) InsertR(rowData map[string]any) (map[string]any, error) {
 		default:
 			return nil, errors.New("database is neither sqlite3, postgres or mysql")
 		}
-		keys = append(keys, k)
+		if !strings.HasPrefix(k, "`") && !strings.HasPrefix(k, "'") {
+			keys = append(keys, "`"+k+"`")
+		} else {
+			keys = append(keys, k)
+		}
+
 		if v == true {
 			v = 1
 		} else if v == false {
@@ -489,7 +503,7 @@ func (b *BuilderM) InsertR(rowData map[string]any) (map[string]any, error) {
 	}
 	placeholders := strings.Join(placeholdersSlice, ",")
 	stat := strings.Builder{}
-	stat.WriteString("INSERT INTO " + b.tableName + " (")
+	stat.WriteString("INSERT INTO `" + b.tableName + "` (")
 	stat.WriteString(strings.Join(keys, ","))
 	stat.WriteString(") VALUES (")
 	stat.WriteString(placeholders)
