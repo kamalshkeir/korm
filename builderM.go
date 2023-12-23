@@ -23,6 +23,7 @@ var (
 
 // BuilderM is query builder map string any
 type BuilderM struct {
+	nocache    bool
 	debug      bool
 	limit      int
 	page       int
@@ -205,6 +206,11 @@ func (b *BuilderM) Debug() *BuilderM {
 	return b
 }
 
+func (b *BuilderM) NoCache() *BuilderM {
+	b.nocache = true
+	return b
+}
+
 // All get all data
 func (b *BuilderM) All() ([]map[string]any, error) {
 	if b == nil || b.tableName == "" {
@@ -223,7 +229,7 @@ func (b *BuilderM) All() ([]map[string]any, error) {
 		page:       b.page,
 		args:       fmt.Sprint(b.args...),
 	}
-	if useCache {
+	if useCache && !b.nocache {
 		if v, ok := cacheAllM.Get(c); ok {
 			return v, nil
 		}
@@ -260,7 +266,7 @@ func (b *BuilderM) All() ([]map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if useCache {
+	if useCache && !b.nocache {
 		_ = cacheAllM.Set(c, models)
 	}
 	return models, nil
@@ -283,7 +289,7 @@ func (b *BuilderM) One() (map[string]any, error) {
 		page:       b.page,
 		args:       fmt.Sprint(b.args...),
 	}
-	if useCache {
+	if useCache && !b.nocache {
 		if v, ok := cachesOneM.Get(c); ok {
 			return v, nil
 		}
@@ -323,7 +329,7 @@ func (b *BuilderM) One() (map[string]any, error) {
 	if len(models) == 0 {
 		return nil, ErrNoData
 	}
-	if useCache {
+	if useCache && !b.nocache {
 		_ = cachesOneM.Set(c, models[0])
 	}
 
@@ -1128,7 +1134,7 @@ func (b *BuilderM) QueryM(statement string, args ...any) ([]map[string]any, erro
 		statement: statement,
 		args:      fmt.Sprint(args...),
 	}
-	if useCache {
+	if useCache && !b.nocache {
 		if v, ok := cacheQueryM.Get(c); ok {
 			return v.([]map[string]any), nil
 		}
@@ -1187,7 +1193,7 @@ func (b *BuilderM) QueryM(statement string, args ...any) ([]map[string]any, erro
 	if len(listMap) == 0 {
 		return nil, ErrNoData
 	}
-	if useCache {
+	if useCache && !b.nocache {
 		_ = cacheQueryM.Set(c, listMap)
 	}
 	return listMap, nil
@@ -1225,7 +1231,7 @@ func (b *BuilderM) QueryMNamed(statement string, args map[string]any, unsafe ...
 		statement: statement,
 		args:      rgs,
 	}
-	if useCache {
+	if useCache && !b.nocache {
 		if v, ok := cacheQueryM.Get(c); ok {
 			return v.([]map[string]any), nil
 		}
@@ -1297,7 +1303,7 @@ func (b *BuilderM) QueryMNamed(statement string, args map[string]any, unsafe ...
 	if len(listMap) == 0 {
 		return nil, ErrNoData
 	}
-	if useCache {
+	if useCache && !b.nocache {
 		_ = cacheQueryM.Set(c, listMap)
 	}
 	return listMap, nil

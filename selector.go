@@ -13,11 +13,12 @@ import (
 )
 
 type Selector[T any] struct {
-	dbName string
-	nested bool
-	debug  bool
-	ctx    context.Context
-	dest   *[]T
+	dbName  string
+	nested  bool
+	debug   bool
+	ctx     context.Context
+	dest    *[]T
+	nocache bool
 }
 
 func To[T any](dest *[]T, nestedSlice ...bool) *Selector[T] {
@@ -49,6 +50,11 @@ func (sl *Selector[T]) Debug() *Selector[T] {
 	return sl
 }
 
+func (sl *Selector[T]) NoCache() *Selector[T] {
+	sl.nocache = true
+	return sl
+}
+
 func (sl *Selector[T]) Query(statement string, args ...any) error {
 	var db *DatabaseEntity
 	var stt string
@@ -61,7 +67,7 @@ func (sl *Selector[T]) Query(statement string, args ...any) error {
 	} else {
 		db = &databases[0]
 	}
-	if useCache {
+	if useCache && !sl.nocache {
 		stt = statement + fmt.Sprint(args...)
 		if v, ok := cacheQ.Get(stt); ok {
 			if len(*sl.dest) == 0 {
@@ -346,7 +352,7 @@ loop:
 			return fmt.Errorf("default triggered, case not handled")
 		}
 	}
-	if useCache && !isChan && len(*sl.dest) > 0 {
+	if useCache && !sl.nocache && !isChan && len(*sl.dest) > 0 {
 		cacheQ.Set(stt, *sl.dest)
 	}
 	return nil
@@ -364,7 +370,7 @@ func (sl *Selector[T]) Named(statement string, args map[string]any, unsafe ...bo
 	} else {
 		db = &databases[0]
 	}
-	if useCache {
+	if useCache && !sl.nocache {
 		stt = statement + fmt.Sprint(args)
 		if v, ok := cacheQ.Get(stt); ok {
 			if len(*sl.dest) == 0 {
@@ -670,7 +676,7 @@ loop:
 			return fmt.Errorf("default triggered, case not handled")
 		}
 	}
-	if useCache && !isChan && len(*sl.dest) > 0 {
+	if useCache && !sl.nocache && !isChan && len(*sl.dest) > 0 {
 		cacheQ.Set(stt, *sl.dest)
 	}
 	return nil

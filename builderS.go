@@ -25,6 +25,7 @@ var (
 // BuilderS is query builder for struct using generics
 type BuilderS[T any] struct {
 	debug      bool
+	nocache    bool
 	limit      int
 	page       int
 	tableName  string
@@ -96,6 +97,11 @@ func (b *BuilderS[T]) Database(dbName string, model ...T) *BuilderS[T] {
 			b.db = &databases[i]
 		}
 	}
+	return b
+}
+
+func (b *BuilderS[T]) NoCache() *BuilderS[T] {
+	b.nocache = true
 	return b
 }
 
@@ -1334,7 +1340,7 @@ func (b *BuilderS[T]) All() ([]T, error) {
 		page:       b.page,
 		args:       fmt.Sprint(b.args...),
 	}
-	if useCache {
+	if useCache && !b.nocache {
 		if v, ok := cacheAllS.Get(c); ok {
 			return v.([]T), nil
 		}
@@ -1371,7 +1377,7 @@ func (b *BuilderS[T]) All() ([]T, error) {
 	if err != nil {
 		return nil, err
 	}
-	if useCache {
+	if useCache && !b.nocache {
 		_ = cacheAllS.Set(c, models)
 	}
 	return models, nil
@@ -1393,7 +1399,7 @@ func (b *BuilderS[T]) ToChan(ptrChan *chan T) ([]T, error) {
 		page:       b.page,
 		args:       fmt.Sprint(b.args...),
 	}
-	if useCache {
+	if useCache && !b.nocache {
 		if v, ok := cacheAllS.Get(c); ok {
 			if vv, ok := v.([]T); ok {
 				for _, val := range vv {
@@ -1518,7 +1524,7 @@ func (b *BuilderS[T]) ToChan(ptrChan *chan T) ([]T, error) {
 	if len(res) == 0 {
 		return res, ErrNoData
 	}
-	if useCache {
+	if useCache && !b.nocache {
 		_ = cacheAllS.Set(c, res)
 	}
 	return res, nil
@@ -1547,7 +1553,7 @@ func (b *BuilderS[T]) QuerySNamed(statement string, args map[string]any, unsafe 
 		statement: statement,
 		args:      rgs,
 	}
-	if useCache {
+	if useCache && !b.nocache {
 		if v, ok := cacheQueryS.Get(c); ok {
 			return v.([]T), nil
 		}
@@ -1654,7 +1660,7 @@ func (b *BuilderS[T]) QuerySNamed(statement string, args map[string]any, unsafe 
 	if len(res) == 0 {
 		return nil, ErrNoData
 	}
-	if useCache {
+	if useCache && !b.nocache {
 		_ = cacheQueryS.Set(c, res)
 	}
 	return res, nil
@@ -1673,7 +1679,7 @@ func (b *BuilderS[T]) QueryS(statement string, args ...any) ([]T, error) {
 		statement: statement,
 		args:      fmt.Sprint(args...),
 	}
-	if useCache {
+	if useCache && !b.nocache {
 		if v, ok := cacheQueryS.Get(c); ok {
 			return v.([]T), nil
 		}
@@ -1761,7 +1767,7 @@ func (b *BuilderS[T]) QueryS(statement string, args ...any) ([]T, error) {
 	if len(res) == 0 {
 		return nil, ErrNoData
 	}
-	if useCache {
+	if useCache && !b.nocache {
 		_ = cacheQueryS.Set(c, res)
 	}
 	return res, nil
@@ -1784,7 +1790,7 @@ func (b *BuilderS[T]) One() (T, error) {
 		page:       b.page,
 		args:       fmt.Sprint(b.args...),
 	}
-	if useCache {
+	if useCache && !b.nocache {
 		if v, ok := cacheOneS.Get(c); ok {
 			return v.(T), nil
 		}
@@ -1819,7 +1825,7 @@ func (b *BuilderS[T]) One() (T, error) {
 	} else if len(model) == 0 {
 		return *new(T), ErrNoData
 	}
-	if useCache {
+	if useCache && !b.nocache {
 		_ = cacheOneS.Set(c, model[0])
 	}
 	return model[0], nil
