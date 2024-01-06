@@ -20,14 +20,6 @@ import (
 	"github.com/kamalshkeir/kmux"
 )
 
-var WsSecure = false
-
-func init() {
-	if strings.Contains(kmux.ADDRESS, ".") {
-		WsSecure = true
-	}
-}
-
 func reverseSlice[T any](slice []T) []T {
 	new := make([]T, 0, len(slice))
 	for i := len(slice) - 1; i >= 0; i-- {
@@ -40,7 +32,7 @@ var LogsView = func(c *kmux.Context) {
 	d := map[string]any{
 		"admin_path": adminPathNameGroup,
 		"static_pf":  StaticUrl,
-		"secure":     WsSecure,
+		"secure":     kmux.IsTLS,
 	}
 	if v := klog.GetLogs(); v != nil {
 		d["logs"] = reverseSlice[string](v.Slice)
