@@ -135,8 +135,7 @@ var AllModelsGet = func(c *kmux.Context) {
 		if err != nil {
 			// usualy should not use error string because it divulge infkormation, but here only admin use it, so no worry
 			if err != ErrNoData {
-				klog.CheckError(err)
-				c.TextHtml("<h1>Unable to find this model</h1>")
+				c.Error(404, "Unable to find this model")
 				return
 			}
 		}
@@ -189,7 +188,7 @@ var AllModelsGet = func(c *kmux.Context) {
 		c.Html("admin/admin_all_models.html", data)
 	} else {
 		klog.Printf("rdtable %s not found\n", model)
-		c.TextHtml("<h1>Unable to find this model</h1>")
+		c.Error(404, "Unable to find this model")
 	}
 }
 
