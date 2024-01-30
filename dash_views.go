@@ -263,9 +263,11 @@ var AllModelsSearch = func(c *kmux.Context) {
 		})
 		return
 	}
+
 	c.Json(map[string]any{
-		"rows": data,
-		"cols": t.Columns,
+		"rows":  data,
+		"cols":  t.Columns,
+		"types": t.ModelTypes,
 	})
 }
 
