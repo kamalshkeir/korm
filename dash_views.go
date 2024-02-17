@@ -17,7 +17,7 @@ import (
 	"github.com/kamalshkeir/aes"
 	"github.com/kamalshkeir/argon"
 	"github.com/kamalshkeir/klog"
-	"github.com/kamalshkeir/kmux"
+	"github.com/kamalshkeir/ksmux"
 )
 
 func reverseSlice[T any](slice []T) []T {
@@ -28,11 +28,11 @@ func reverseSlice[T any](slice []T) []T {
 	return new
 }
 
-var LogsView = func(c *kmux.Context) {
+var LogsView = func(c *ksmux.Context) {
 	d := map[string]any{
 		"admin_path": adminPathNameGroup,
 		"static_pf":  StaticUrl,
-		"secure":     kmux.IsTLS,
+		"secure":     ksmux.IsTLS,
 	}
 	if v := klog.GetLogs(); v != nil {
 		d["logs"] = reverseSlice[string](v.Slice)
@@ -40,7 +40,7 @@ var LogsView = func(c *kmux.Context) {
 	c.Html("admin/logs.html", d)
 }
 
-var IndexView = func(c *kmux.Context) {
+var IndexView = func(c *ksmux.Context) {
 	allTables := GetAllTables()
 	c.Html("admin/admin_index.html", map[string]any{
 		"admin_path": adminPathNameGroup,
@@ -48,13 +48,13 @@ var IndexView = func(c *kmux.Context) {
 	})
 }
 
-var LoginView = func(c *kmux.Context) {
+var LoginView = func(c *ksmux.Context) {
 	c.Html("admin/admin_login.html", map[string]any{
 		"admin_path": adminPathNameGroup,
 	})
 }
 
-var LoginPOSTView = func(c *kmux.Context) {
+var LoginPOSTView = func(c *ksmux.Context) {
 	requestData := c.BodyJson()
 	email := requestData["email"]
 	passRequest := requestData["password"]
@@ -101,12 +101,12 @@ var LoginPOSTView = func(c *kmux.Context) {
 	}
 }
 
-var LogoutView = func(c *kmux.Context) {
+var LogoutView = func(c *ksmux.Context) {
 	c.DeleteCookie("session")
 	c.Status(http.StatusTemporaryRedirect).Redirect("/")
 }
 
-var AllModelsGet = func(c *kmux.Context) {
+var AllModelsGet = func(c *ksmux.Context) {
 	model := c.Param("model")
 	if model == "" {
 		c.Json(map[string]any{
@@ -192,7 +192,7 @@ var AllModelsGet = func(c *kmux.Context) {
 	}
 }
 
-var AllModelsSearch = func(c *kmux.Context) {
+var AllModelsSearch = func(c *ksmux.Context) {
 	model := c.Param("model")
 	if model == "" {
 		c.Json(map[string]any{
@@ -271,7 +271,7 @@ var AllModelsSearch = func(c *kmux.Context) {
 	})
 }
 
-var DeleteRowPost = func(c *kmux.Context) {
+var DeleteRowPost = func(c *ksmux.Context) {
 	data := c.BodyJson()
 	if data["mission"] == "delete_row" {
 		if model, ok := data["model_name"]; ok {
@@ -325,8 +325,8 @@ var DeleteRowPost = func(c *kmux.Context) {
 	}
 }
 
-var CreateModelView = func(c *kmux.Context) {
-	parseErr := c.Request.ParseMultipartForm(int64(kmux.MultipartSize))
+var CreateModelView = func(c *ksmux.Context) {
+	parseErr := c.Request.ParseMultipartForm(int64(ksmux.MultipartSize))
 	if parseErr != nil {
 		klog.Printf("rdParse error = %v\n", parseErr)
 	}
@@ -381,7 +381,7 @@ var CreateModelView = func(c *kmux.Context) {
 	})
 }
 
-var SingleModelGet = func(c *kmux.Context) {
+var SingleModelGet = func(c *ksmux.Context) {
 	model := c.Param("model")
 	if model == "" {
 		c.Status(http.StatusBadRequest).Json(map[string]any{
@@ -442,7 +442,7 @@ var SingleModelGet = func(c *kmux.Context) {
 	})
 }
 
-var UpdateRowPost = func(c *kmux.Context) {
+var UpdateRowPost = func(c *ksmux.Context) {
 	// parse the fkorm and get data values + files
 	data, files := c.ParseMultipartForm()
 	id := data["row_id"][0]
@@ -525,7 +525,7 @@ var UpdateRowPost = func(c *kmux.Context) {
 	})
 }
 
-func handleFilesUpload(files map[string][]*multipart.FileHeader, model string, id string, c *kmux.Context, idString string) error {
+func handleFilesUpload(files map[string][]*multipart.FileHeader, model string, id string, c *ksmux.Context, idString string) error {
 	if len(files) > 0 {
 		for key, val := range files {
 			file, _ := val[0].Open()
@@ -563,7 +563,7 @@ func handleFilesUpload(files map[string][]*multipart.FileHeader, model string, i
 	return nil
 }
 
-var DropTablePost = func(c *kmux.Context) {
+var DropTablePost = func(c *ksmux.Context) {
 	data := c.BodyJson()
 	if table, ok := data["table"]; ok && table != "" {
 		if t, ok := data["table"].(string); ok {
@@ -589,7 +589,7 @@ var DropTablePost = func(c *kmux.Context) {
 	})
 }
 
-var ExportView = func(c *kmux.Context) {
+var ExportView = func(c *ksmux.Context) {
 	table := c.Param("table")
 	if table == "" {
 		c.Status(http.StatusBadRequest).Json(map[string]any{
@@ -606,7 +606,7 @@ var ExportView = func(c *kmux.Context) {
 	c.Download(data_bytes, table+".json")
 }
 
-var ExportCSVView = func(c *kmux.Context) {
+var ExportCSVView = func(c *ksmux.Context) {
 	table := c.Param("table")
 	if table == "" {
 		c.Status(http.StatusBadRequest).Json(map[string]any{
@@ -664,7 +664,7 @@ var ExportCSVView = func(c *kmux.Context) {
 	c.Download(buff.Bytes(), table+".csv")
 }
 
-var ImportView = func(c *kmux.Context) {
+var ImportView = func(c *ksmux.Context) {
 	// get table name
 	table := c.Request.FormValue("table")
 	if table == "" {
@@ -753,7 +753,7 @@ var ImportView = func(c *kmux.Context) {
 	})
 }
 
-var ManifestView = func(c *kmux.Context) {
+var ManifestView = func(c *ksmux.Context) {
 	if EmbededDashboard {
 		f, err := staticAndTemplatesFS[0].ReadFile(StaticDir + "/manifest.json")
 		if err != nil {
@@ -766,7 +766,7 @@ var ManifestView = func(c *kmux.Context) {
 	}
 }
 
-var ServiceWorkerView = func(c *kmux.Context) {
+var ServiceWorkerView = func(c *ksmux.Context) {
 	if EmbededDashboard {
 		f, err := staticAndTemplatesFS[0].ReadFile(StaticDir + "/sw.js")
 		if err != nil {
@@ -779,11 +779,11 @@ var ServiceWorkerView = func(c *kmux.Context) {
 	}
 }
 
-var RobotsTxtView = func(c *kmux.Context) {
+var RobotsTxtView = func(c *ksmux.Context) {
 	c.ServeFile("text/plain; charset=utf-8", "./static/robots.txt")
 }
 
-var OfflineView = func(c *kmux.Context) {
+var OfflineView = func(c *ksmux.Context) {
 	c.Text("<h1>YOUR ARE OFFLINE, check connection</h1>")
 }
 

@@ -90,11 +90,9 @@
 
 - [AutoMigrate](#automigrate) directly from struct
 
-- [Crud Api From Model](#example-korm-api) , similar to Model Viewsets from django rest framework
-
 - Compatible with official database/sql,  so you can do your queries yourself using sql.DB  `korm.GetConnection()``, and overall a painless integration of your existing codebases using database/sql
 
-- [Router/Mux](https://github.com/kamalshkeir/kmux) accessible from the serverBus after calling `korm.WithBus()` or `korm.WithDashboard()`
+- [Router/Mux](https://github.com/kamalshkeir/ksmux) accessible from the serverBus after calling `korm.WithBus()` or `korm.WithDashboard()`
 
 - [Hooks](#hooks) : OnInsert OnSet OnDelete and OnDrop
 
@@ -123,7 +121,7 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@latest // v1.91.99
+go get -u github.com/kamalshkeir/korm@latest // v1.92.0
 ```
 
 # Drivers moved outside this package to not get them all in your go.mod file
@@ -562,7 +560,7 @@ package main
 
 import (
 	"github.com/kamalshkeir/klog"
-	"github.com/kamalshkeir/kmux"
+	"github.com/kamalshkeir/ksmux"
 	"github.com/kamalshkeir/korm"
 	"github.com/kamalshkeir/sqlitedriver"
 )
@@ -576,11 +574,11 @@ func main() {
 	serverBus := korm.WithDashboard() 
 	korm.WithShell()
 	// you can overwrite Admin and Auth middleware used for dashboard (dash_middlewares.go) 
-	//korm.Auth = func(handler kmux.Handler) kmux.Handler {}
-	//korm.Admin = func(handler kmux.Handler) kmux.Handler {}
+	//korm.Auth = func(handler ksmux.Handler) ksmux.Handler {}
+	//korm.Admin = func(handler ksmux.Handler) ksmux.Handler {}
 
 	// and also all handlers (dash_views.go)
-	//korm.LoginView = func(c *kmux.Context) {
+	//korm.LoginView = func(c *ksmux.Context) {
 	//	c.Html("admin/new_admin_login.html", nil)
 	//}
 
@@ -589,7 +587,7 @@ func main() {
 	//serverBus.App.LocalTemplates("assets/templates") // will make them available to use with c.Html
 
 	// serve HTML 
-	// serverBus.App.Get("/",func(c *kmux.Context) {
+	// serverBus.App.Get("/",func(c *ksmux.Context) {
 	// 	c.Html("index.html", map[string]any{
 	// 		"data": data,
 	// 	})
@@ -626,7 +624,7 @@ func main() {
 	klog.Printfs("mgrunning on http://localhost:9313\n")
 	app := srv.App
 
-	app.Get("/", korm.Auth(func(c *kmux.Context) { // work with korm.Admin also
+	app.Get("/", korm.Auth(func(c *ksmux.Context) { // work with korm.Admin also
 		// c.IsAuthenticated also return bool
 		if v, ok := c.User(); ok {
 			c.Json(map[string]any{
@@ -692,14 +690,14 @@ import (
 	"net/http"
 
 	"github.com/kamalshkeir/aes"
-	"github.com/kamalshkeir/kmux"
+	"github.com/kamalshkeir/ksmux"
 )
 
 
 
-var Auth = func(handler kmux.Handler) kmux.Handler {
-	const key kmux.ContextKey = "user"
-	return func(c *kmux.Context) {
+var Auth = func(handler ksmux.Handler) ksmux.Handler {
+	const key ksmux.ContextKey = "user"
+	return func(c *ksmux.Context) {
 		session, err := c.GetCookie("session")
 		if err != nil || session == "" {
 			// NOT AUTHENTICATED
@@ -722,7 +720,7 @@ var Auth = func(handler kmux.Handler) kmux.Handler {
 
 		// AUTHENTICATED AND FOUND IN DB
 		ctx := context.WithValue(c.Request.Context(), key, user)
-		*c = kmux.Context{
+		*c = ksmux.Context{
 			Params:         c.ParamsMap(),
 			Request:        c.Request.WithContext(ctx),
 			ResponseWriter: c.ResponseWriter,
@@ -731,9 +729,9 @@ var Auth = func(handler kmux.Handler) kmux.Handler {
 	}
 }
 
-var Admin = func(handler kmux.Handler) kmux.Handler {
-	const key kmux.ContextKey = "user"
-	return func(c *kmux.Context) {
+var Admin = func(handler ksmux.Handler) ksmux.Handler {
+	const key ksmux.ContextKey = "user"
+	return func(c *ksmux.Context) {
 		session, err := c.GetCookie("session")
 		if err != nil || session == "" {
 			// NOT AUTHENTICATED
@@ -761,7 +759,7 @@ var Admin = func(handler kmux.Handler) kmux.Handler {
 		}
 
 		ctx := context.WithValue(c.Request.Context(), key, user)
-		*c = kmux.Context{
+		*c = ksmux.Context{
 			Params:         c.ParamsMap(),
 			Request:        c.Request.WithContext(ctx),
 			ResponseWriter: c.ResponseWriter,
@@ -773,8 +771,8 @@ var Admin = func(handler kmux.Handler) kmux.Handler {
 
 
 
-var BasicAuth = func(handler kmux.Handler) kmux.Handler {
-	return kmux.BasicAuth(handler, BASIC_AUTH_USER, BASIC_AUTH_PASS)
+var BasicAuth = func(handler ksmux.Handler) ksmux.Handler {
+	return ksmux.BasicAuth(handler, BASIC_AUTH_USER, BASIC_AUTH_PASS)
 }
 ```
 
@@ -784,7 +782,7 @@ package main
 
 import (
 	"github.com/kamalshkeir/klog"
-	"github.com/kamalshkeir/kmux"
+	"github.com/kamalshkeir/ksmux"
 	"github.com/kamalshkeir/korm"
 	"github.com/kamalshkeir/sqlitedriver"
 )
@@ -800,7 +798,7 @@ func main() {
 	korm.WithShell() // to enable shell
 	app := bus.App
 	klog.Printfs("mgrunning on http://localhost:9313\n")
-	app.Get("/", func(c *kmux.Context) {
+	app.Get("/", func(c *ksmux.Context) {
 		c.Text("hello")
 	})
 
@@ -852,8 +850,8 @@ import (
 	"net/http"
 
 	"github.com/kamalshkeir/klog"
-	"github.com/kamalshkeir/kmux"
-	"github.com/kamalshkeir/kmux/ws"
+	"github.com/kamalshkeir/ksmux"
+	"github.com/kamalshkeir/ksmux/ws"
 	"github.com/kamalshkeir/korm"
 	"github.com/kamalshkeir/ksbus"
 	"github.com/kamalshkeir/sqlitedriver"
@@ -876,7 +874,7 @@ func main() {
 	})
 
 	// built in router to the bus, check it at https://github.com/kamalshkeir/ksbus
-	serverBus.App.Get("/",func(c *kmux.Context) {
+	serverBus.App.Get("/",func(c *ksmux.Context) {
 		serverBus.SendToServer("localhost:9314",map[string]any{
 			"msg":"hello from server 1",
 		})
@@ -899,8 +897,8 @@ import (
 	"net/http"
 
 	"github.com/kamalshkeir/klog"
-	"github.com/kamalshkeir/kmux"
-	"github.com/kamalshkeir/kmux/ws"
+	"github.com/kamalshkeir/ksmux"
+	"github.com/kamalshkeir/ksmux/ws"
 	"github.com/kamalshkeir/korm"
 	"github.com/kamalshkeir/sqlitedriver"
 )
@@ -917,7 +915,7 @@ func main() {
 	})
 
 	// built in router to the bus, check it at https://github.com/kamalshkeir/ksbus
-	serverBus.App.GET("/",func(c *kmux.Context) {
+	serverBus.App.GET("/",func(c *ksmux.Context) {
 		serverBus.SendToServer("localhost:9314",map[string]any{
 			"msg":"hello from server 2",
 		})
@@ -985,7 +983,7 @@ func TestConcatANDLen(t *testing.T) {
 
 
 ## Router/Mux 
-Learn more about [Kmux](https://github.com/kamalshkeir/kmux)
+Learn more about [Ksmux](https://github.com/kamalshkeir/ksmux)
 ```go
 func main() {
 	err := korm.New(korm.SQLITE, "db", sqlitedriver.Use())
@@ -998,7 +996,6 @@ func main() {
 	mux := serverBus.App
 	// add global middlewares
 	mux.Use((midws ...func(http.Handler) http.Handler))
-	mux.Use(kmux.Recover()) 
 	...
 }
 
@@ -1038,8 +1035,8 @@ will enable:
 srv := korm.WithDashboard()
 // or srv := korm.WithBus()
 //srv.WithMetrics(httpHandler http.Handler, path ...string) path default to 'metrics'
-srv.App.Use(kmux.Logs()) // it take an optional callback executed on each request if you want to add log to a file or send
-srv.App.Use(kmux.Logs(func(method, path, remote string, status int, took time.Duration) {
+srv.App.Use(ksmux.Logs()) // it take an optional callback executed on each request if you want to add log to a file or send
+srv.App.Use(ksmux.Logs(func(method, path, remote string, status int, took time.Duration) {
 	// save somewhere
 }))
 

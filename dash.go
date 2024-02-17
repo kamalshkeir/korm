@@ -39,7 +39,7 @@ func cloneAndMigrateDashboard(migrateUser bool, staticAndTemplatesEmbeded ...emb
 		err := serverBus.App.LocalTemplates(TemplatesDir)
 		klog.CheckError(err)
 	}
-	dashboardCloned = true
+	IsDashboardCloned = true
 	if migrateUser {
 		err := AutoMigrate[User]("users")
 		if klog.CheckError(err) {

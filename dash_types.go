@@ -9,8 +9,8 @@ import (
 var (
 	PaginationPer      = 10
 	EmbededDashboard   = false
-	docsUsed           = false
-	dashboardCloned    = false
+	IsDocsUsed         = false
+	IsDashboardCloned  = false
 	MediaDir           = "media"
 	DocsUrl            = "/docs"
 	StaticUrl          = "/static"

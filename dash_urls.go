@@ -4,12 +4,12 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/kamalshkeir/kmux"
+	"github.com/kamalshkeir/ksmux"
 )
 
 func init() {
-	kmux.BeforeRenderHtml("korm-user", func(reqCtx context.Context, data *map[string]any) {
-		const key kmux.ContextKey = "user"
+	ksmux.BeforeRenderHtml("korm-user", func(reqCtx context.Context, data *map[string]any) {
+		const key ksmux.ContextKey = "user"
 		user, ok := reqCtx.Value(key).(User)
 		if ok {
 			(*data)["IsAuthenticated"] = true
@@ -21,12 +21,12 @@ func init() {
 	})
 }
 
-func initAdminUrlPatterns(r *kmux.Router) {
+func initAdminUrlPatterns(r *ksmux.Router) {
 	media_root := http.FileServer(http.Dir("./" + MediaDir))
-	r.Get(`/`+MediaDir+`/*path`, func(c *kmux.Context) {
+	r.Get(`/`+MediaDir+`/*path`, func(c *ksmux.Context) {
 		http.StripPrefix("/"+MediaDir+"/", media_root).ServeHTTP(c.ResponseWriter, c.Request)
 	})
-	r.Get("/mon/ping", func(c *kmux.Context) { c.Status(200).Text("pong") })
+	r.Get("/mon/ping", func(c *ksmux.Context) { c.Status(200).Text("pong") })
 	r.Get("/offline", OfflineView)
 	r.Get("/manifest.webmanifest", ManifestView)
 	r.Get("/sw.js", ServiceWorkerView)

@@ -6,18 +6,19 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/kamalshkeir/kmux"
 	"github.com/kamalshkeir/ksbus"
+	"github.com/kamalshkeir/ksmux"
 )
 
 var (
 	basePath         = "/api"
+	docsUsed         = false
 	registeredTables = []string{}
-	globalMiddws     []func(handler kmux.Handler) kmux.Handler
+	globalMiddws     []func(handler ksmux.Handler) ksmux.Handler
 	tableMethods     = map[string]string{}
 )
 
-var ApiIndexHandler = func(c *kmux.Context) {
+var ApiIndexHandler = func(c *ksmux.Context) {
 	m := map[string]TableEntity{}
 	for _, t := range registeredTables {
 		tb, _ := GetMemoryTable(t)
@@ -43,7 +44,7 @@ var ApiIndexHandler = func(c *kmux.Context) {
 	})
 }
 
-func WithAPI(rootPath string, middws ...func(handler kmux.Handler) kmux.Handler) *ksbus.Server {
+func WithAPI(rootPath string, middws ...func(handler ksmux.Handler) ksmux.Handler) *ksbus.Server {
 	if serverBus == nil {
 		serverBus = WithBus()
 	}
@@ -65,7 +66,7 @@ func WithAPI(rootPath string, middws ...func(handler kmux.Handler) kmux.Handler)
 
 type TableRegistration[T any] struct {
 	TableName     string
-	Middws        []func(handler kmux.Handler) kmux.Handler
+	Middws        []func(handler ksmux.Handler) ksmux.Handler
 	Methods       []string
 	BuilderGetAll func(modelBuilder *BuilderS[T]) *BuilderS[T]
 	BuilderGetOne func(modelBuilder *BuilderS[T]) *BuilderS[T]
@@ -90,12 +91,12 @@ func RegisterTable[T any](table TableRegistration[T], gendocs ...bool) error {
 			return fmt.Errorf("table %v not registered, use korm.AutoMigrate before", *new(T))
 		}
 	}
-	if !dashboardCloned {
+	if !IsDashboardCloned {
 		cloneAndMigrateDashboard(false)
 	}
 
 	app := serverBus.App
-	var apiAllModels = func(c *kmux.Context) {
+	var apiAllModels = func(c *ksmux.Context) {
 		q := ModelTable[T](tbName)
 		if table.BuilderGetAll != nil {
 			q = table.BuilderGetAll(q)
@@ -111,7 +112,7 @@ func RegisterTable[T any](table TableRegistration[T], gendocs ...bool) error {
 		}
 		c.JsonIndent(rows)
 	}
-	var singleModelGet = func(c *kmux.Context) {
+	var singleModelGet = func(c *ksmux.Context) {
 		model := tbName
 		id := c.Param("id")
 		if id == "" {
@@ -146,7 +147,7 @@ func RegisterTable[T any](table TableRegistration[T], gendocs ...bool) error {
 		}
 		c.JsonIndent(rows)
 	}
-	var singleModelPut = func(c *kmux.Context) {
+	var singleModelPut = func(c *ksmux.Context) {
 		model := tbName
 		id := c.Param("id")
 		if id == "" {
@@ -187,7 +188,7 @@ func RegisterTable[T any](table TableRegistration[T], gendocs ...bool) error {
 			"success": model + " where " + idString + " = " + id + " updated",
 		})
 	}
-	var modelCreate = func(c *kmux.Context) {
+	var modelCreate = func(c *ksmux.Context) {
 		model := tbName
 		body := c.BodyJson()
 		if len(body) == 0 {
@@ -211,7 +212,7 @@ func RegisterTable[T any](table TableRegistration[T], gendocs ...bool) error {
 			"success": msg,
 		})
 	}
-	var modelDelete = func(c *kmux.Context) {
+	var modelDelete = func(c *ksmux.Context) {
 		model := tbName
 		id := c.Param("id")
 		if id == "" {
@@ -244,7 +245,7 @@ func RegisterTable[T any](table TableRegistration[T], gendocs ...bool) error {
 		apiAllModels = wrapHandlerWithMiddlewares(apiAllModels, globalMiddws...)
 	}
 	var modType string
-	if docsUsed {
+	if IsDocsUsed {
 		modType = fmt.Sprintf("%T", *new(T))
 		if modType == "" {
 			return fmt.Errorf("could not find type of %T %v %s", *new(T), *new(T), modType)
@@ -259,7 +260,7 @@ func RegisterTable[T any](table TableRegistration[T], gendocs ...bool) error {
 			case "get", "GET":
 				getallRoute := app.Get(basePath+"/"+tbName, apiAllModels)
 				getsingleRoute := app.Get(basePath+"/"+tbName+"/:id", singleModelGet)
-				if docsUsed && len(gendocs) == 1 && gendocs[0] {
+				if IsDocsUsed && len(gendocs) == 1 && gendocs[0] {
 					getallRoute.Out("200 {array} "+modType+" 'all rows'", "400 {object} kmuxdocs.DocsError 'error message'").Tags(tbName).Summary("Get all rows from " + tbName)
 					getsingleRoute.In("id path int required 'Pk column'").Out("200 {object} "+modType+" 'user model'", "400 {object} kmuxdocs.DocsError 'error message'").Tags(tbName).Summary("Get single row from " + tbName)
 				}
@@ -333,7 +334,7 @@ func RegisterTable[T any](table TableRegistration[T], gendocs ...bool) error {
 	return nil
 }
 
-func wrapHandlerWithMiddlewares(handler func(c *kmux.Context), middws ...func(handler kmux.Handler) kmux.Handler) func(c *kmux.Context) {
+func wrapHandlerWithMiddlewares(handler func(c *ksmux.Context), middws ...func(handler ksmux.Handler) ksmux.Handler) func(c *ksmux.Context) {
 	found := false
 	if len(middws) > 0 {
 		handler = middws[0](handler)

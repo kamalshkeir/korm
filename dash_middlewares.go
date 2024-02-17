@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/kamalshkeir/aes"
-	"github.com/kamalshkeir/kmux"
+	"github.com/kamalshkeir/ksmux"
 )
 
 var (
@@ -13,9 +13,9 @@ var (
 	BASIC_AUTH_PASS = "testnotsetbutwaititshouldbeset"
 )
 
-var Auth = func(handler kmux.Handler) kmux.Handler {
-	const key kmux.ContextKey = "user"
-	return func(c *kmux.Context) {
+var Auth = func(handler ksmux.Handler) ksmux.Handler {
+	const key ksmux.ContextKey = "user"
+	return func(c *ksmux.Context) {
 		session, err := c.GetCookie("session")
 		if err != nil || session == "" {
 			// NOT AUTHENTICATED
@@ -38,8 +38,8 @@ var Auth = func(handler kmux.Handler) kmux.Handler {
 
 		// AUTHENTICATED AND FOUND IN DB
 		ctx := context.WithValue(c.Request.Context(), key, user)
-		*c = kmux.Context{
-			CtxParams:      c.CtxParams,
+		*c = ksmux.Context{
+			Params:         c.Params,
 			Request:        c.Request.WithContext(ctx),
 			ResponseWriter: c.ResponseWriter,
 		}
@@ -47,9 +47,9 @@ var Auth = func(handler kmux.Handler) kmux.Handler {
 	}
 }
 
-var Admin = func(handler kmux.Handler) kmux.Handler {
-	const key kmux.ContextKey = "user"
-	return func(c *kmux.Context) {
+var Admin = func(handler ksmux.Handler) ksmux.Handler {
+	const key ksmux.ContextKey = "user"
+	return func(c *ksmux.Context) {
 		session, err := c.GetCookie("session")
 		if err != nil || session == "" {
 			// NOT AUTHENTICATED
@@ -77,8 +77,8 @@ var Admin = func(handler kmux.Handler) kmux.Handler {
 		}
 
 		ctx := context.WithValue(c.Request.Context(), key, user)
-		*c = kmux.Context{
-			CtxParams:      c.CtxParams,
+		*c = ksmux.Context{
+			Params:         c.Params,
 			Request:        c.Request.WithContext(ctx),
 			ResponseWriter: c.ResponseWriter,
 		}
@@ -87,6 +87,6 @@ var Admin = func(handler kmux.Handler) kmux.Handler {
 	}
 }
 
-var BasicAuth = func(handler kmux.Handler) kmux.Handler {
-	return kmux.BasicAuth(handler, BASIC_AUTH_USER, BASIC_AUTH_PASS)
+var BasicAuth = func(handler ksmux.Handler) ksmux.Handler {
+	return ksmux.BasicAuth(handler, BASIC_AUTH_USER, BASIC_AUTH_PASS)
 }

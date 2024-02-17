@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/kamalshkeir/klog"
-	"github.com/kamalshkeir/kmux"
-	"github.com/kamalshkeir/kmux/ws"
 	"github.com/kamalshkeir/ksbus"
+	"github.com/kamalshkeir/ksmux"
+	"github.com/kamalshkeir/ksmux/ws"
 )
 
 var (
@@ -41,14 +41,14 @@ func (h *logAndCacheHook) Before(ctx context.Context, query string, args ...inte
 	}
 	if logQueries {
 		klog.Printfs("yl> %s %v", query, args)
-		return context.WithValue(ctx, kmux.ContextKey("begin"), time.Now()), nil
+		return context.WithValue(ctx, ksmux.ContextKey("begin"), time.Now()), nil
 	}
 	return context.Background(), nil
 }
 
 func (h *logAndCacheHook) After(ctx context.Context, query string, args ...interface{}) (context.Context, error) {
 	if logQueries {
-		begin := ctx.Value(kmux.ContextKey("begin")).(time.Time)
+		begin := ctx.Value(ksmux.ContextKey("begin")).(time.Time)
 		klog.Printfs("yl, took: %v\n", time.Since(begin))
 		return ctx, nil
 	}

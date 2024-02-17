@@ -16,8 +16,8 @@ import (
 
 	"github.com/kamalshkeir/klog"
 	"github.com/kamalshkeir/kmap"
-	"github.com/kamalshkeir/kmux"
 	"github.com/kamalshkeir/ksbus"
+	"github.com/kamalshkeir/ksmux"
 	"github.com/kamalshkeir/kstrct"
 )
 
@@ -280,18 +280,18 @@ func WithDashboard(staticAndTemplatesEmbeded ...embed.FS) *ksbus.Server {
 }
 
 // WithDocs enable swagger docs at DocsUrl default to '/docs/'
-func WithDocs(generateJsonDocs bool, outJsonDocs string, handlerMiddlewares ...func(handler kmux.Handler) kmux.Handler) *ksbus.Server {
+func WithDocs(generateJsonDocs bool, outJsonDocs string, handlerMiddlewares ...func(handler ksmux.Handler) ksmux.Handler) *ksbus.Server {
 	if serverBus == nil {
 		serverBus = WithBus()
 	}
 
 	if outJsonDocs != "" {
-		kmux.DocsOutJson = outJsonDocs
+		ksmux.DocsOutJson = outJsonDocs
 	} else {
-		kmux.DocsOutJson = StaticDir + "/docs"
+		ksmux.DocsOutJson = StaticDir + "/docs"
 	}
 
-	docsUsed = true
+	IsDocsUsed = true
 	// check swag install and init docs.Routes slice
 	serverBus.App.WithDocs(generateJsonDocs)
 	webPath := DocsUrl
@@ -299,8 +299,8 @@ func WithDocs(generateJsonDocs bool, outJsonDocs string, handlerMiddlewares ...f
 		webPath = "/" + webPath
 	}
 	webPath = strings.TrimSuffix(webPath, "/")
-	handler := func(c *kmux.Context) {
-		http.StripPrefix(webPath, http.FileServer(http.Dir(kmux.DocsOutJson))).ServeHTTP(c.ResponseWriter, c.Request)
+	handler := func(c *ksmux.Context) {
+		http.StripPrefix(webPath, http.FileServer(http.Dir(ksmux.DocsOutJson))).ServeHTTP(c.ResponseWriter, c.Request)
 	}
 	if len(handlerMiddlewares) > 0 {
 		for _, mid := range handlerMiddlewares {
@@ -312,29 +312,29 @@ func WithDocs(generateJsonDocs bool, outJsonDocs string, handlerMiddlewares ...f
 }
 
 // WithEmbededDocs same as WithDocs but embeded, enable swagger docs at DocsUrl default to '/docs/'
-func WithEmbededDocs(embeded embed.FS, embededDirPath string, handlerMiddlewares ...func(handler kmux.Handler) kmux.Handler) *ksbus.Server {
+func WithEmbededDocs(embeded embed.FS, embededDirPath string, handlerMiddlewares ...func(handler ksmux.Handler) ksmux.Handler) *ksbus.Server {
 	if serverBus == nil {
 		serverBus = WithBus()
 	}
 	if embededDirPath != "" {
-		kmux.DocsOutJson = embededDirPath
+		ksmux.DocsOutJson = embededDirPath
 	} else {
-		kmux.DocsOutJson = StaticDir + "/docs"
+		ksmux.DocsOutJson = StaticDir + "/docs"
 	}
 	webPath := DocsUrl
 
-	kmux.DocsOutJson = filepath.ToSlash(kmux.DocsOutJson)
+	ksmux.DocsOutJson = filepath.ToSlash(ksmux.DocsOutJson)
 	if webPath[0] != '/' {
 		webPath = "/" + webPath
 	}
 	webPath = strings.TrimSuffix(webPath, "/")
-	toembed_dir, err := fs.Sub(embeded, kmux.DocsOutJson)
+	toembed_dir, err := fs.Sub(embeded, ksmux.DocsOutJson)
 	if err != nil {
 		klog.Printf("rdServeEmbededDir error= %v\n", err)
 		return serverBus
 	}
 	toembed_root := http.FileServer(http.FS(toembed_dir))
-	handler := func(c *kmux.Context) {
+	handler := func(c *ksmux.Context) {
 		http.StripPrefix(webPath, toembed_root).ServeHTTP(c.ResponseWriter, c.Request)
 	}
 	if len(handlerMiddlewares) > 0 {
