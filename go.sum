@@ -23,8 +23,8 @@ github.com/kamalshkeir/kmap v1.1.2 h1:P89SXps9LN8JYQWDPkfhDsp5pF6tsV7O8OCuxtV8g8
 github.com/kamalshkeir/kmap v1.1.2/go.mod h1:SLSllMqrhSTJtgYd14nXeFZ/shp9AY4t20YGCtlcziI=
 github.com/kamalshkeir/ksbus v1.1.7 h1:wpnlw591WK3jY5pJcceofdtZ1xlAC1G0S8DMCWMkBvI=
 github.com/kamalshkeir/ksbus v1.1.7/go.mod h1:yzZNgpAb1ysgfPqKNS3oXVH0/C+02+wT1nVUN4AYse4=
-github.com/kamalshkeir/ksmux v0.0.5 h1:HFnkn8O5zK0URjCTjrveu/7a2nLp1inuPbzz3YSRZRI=
-github.com/kamalshkeir/ksmux v0.0.5/go.mod h1:h1z+ogkZM3CNvSXkgT2GmIOUfQ+DQZfqpdBDg4MSYcc=
+github.com/kamalshkeir/ksmux v0.0.6 h1:nzo+8ZC/SronLGsUzthYt1mTKbg8lO3qfU81p7/8aqE=
+github.com/kamalshkeir/ksmux v0.0.6/go.mod h1:h1z+ogkZM3CNvSXkgT2GmIOUfQ+DQZfqpdBDg4MSYcc=
 github.com/kamalshkeir/kstrct v1.8.3 h1:LYCjVAb5MusTVImMK6o05nOBIUE2N0wHF3H5w2Mm4uA=
 github.com/kamalshkeir/kstrct v1.8.3/go.mod h1:YGDnTviZIEkaBJi7w5QErIuf1D/ynE2MGotxpiWFjbY=
 github.com/kamalshkeir/sqlitedriver v1.4.0 h1:xclbjfX3YUGrVnfIuI04EkWZArWqn3MdH6pi1dSpsNo=
