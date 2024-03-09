@@ -9,7 +9,7 @@ require (
 	github.com/kamalshkeir/klog v1.1.5
 	github.com/kamalshkeir/kmap v1.1.2
 	github.com/kamalshkeir/ksbus v1.1.8
-	github.com/kamalshkeir/ksmux v0.0.7
+	github.com/kamalshkeir/ksmux v0.0.9
 	github.com/kamalshkeir/kstrct v1.8.3
 )
 
