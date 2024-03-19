@@ -11,10 +11,10 @@ import (
 	"github.com/kamalshkeir/kstrct"
 )
 
-var checkEnabled = true
+var checkEnabled = false
 
-// DisableCheck disable struct changes check
-func DisableCheck() {
+// EnableCheck disable struct changes check
+func EnableCheck() {
 	checkEnabled = false
 }
 

@@ -106,15 +106,17 @@ func autoMigrate[T any](model *T, db *DatabaseEntity, tableName string, execute 
 				mindexes: &mindexes,
 				uindexes: &uindexes,
 			}
-
+			if ty[0] != '[' && strings.Contains(ty, "int") {
+				if ty[0] != '*' && ty[1] != '[' {
+					handleMigrationInt(mi)
+				}
+			}
 			switch ty {
-			case "int", "uint", "int64", "uint64", "int32", "uint32", "*int", "*uint", "*int64", "*uint64", "*int32", "*uint32":
-				handleMigrationInt(mi)
 			case "bool", "*bool":
 				handleMigrationBool(mi)
 			case "string", "*string", "[]string", "[]int", "[]int64", "[]float64", "[]any":
 				handleMigrationString(mi)
-			case "[]uint8", "[]byte":
+			case "[]uint8", "[]byte", "*[]uint8", "*[]byte":
 				handleMigrationSliceByte(mi)
 			case "float64", "float32", "*float64", "*float32":
 				handleMigrationFloat(mi)
@@ -122,7 +124,7 @@ func autoMigrate[T any](model *T, db *DatabaseEntity, tableName string, execute 
 				handleMigrationTime(mi)
 			default:
 				if tags, ok := mFieldName_Tags[fName]; ok {
-					if !strings.Contains(strings.Join(tags, ","), "generated") {
+					if !strings.Contains(strings.Join(tags, ","), "generated") && !strings.Contains(ty, "int") {
 						klog.Printf("rd%s of type %s not handled\n", fName, ty)
 					}
 				}
