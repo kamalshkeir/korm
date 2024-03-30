@@ -3,7 +3,7 @@ package korm
 import (
 	"strings"
 
-	"github.com/kamalshkeir/klog"
+	"github.com/kamalshkeir/lg"
 )
 
 // AddTrigger add trigger tablename_trig if col empty and tablename_trig_col if not
@@ -14,7 +14,7 @@ func AddTrigger(onTable, col, bf_af_UpdateInsertDelete string, stmt string, dbNa
 	}
 	var dialect = ""
 	db, err := GetMemoryDatabase(dbName[0])
-	if !klog.CheckError(err) {
+	if !lg.CheckError(err) {
 		dialect = db.Dialect
 	}
 	switch dialect {
@@ -65,14 +65,14 @@ func AddTrigger(onTable, col, bf_af_UpdateInsertDelete string, stmt string, dbNa
 	}
 
 	if Debug {
-		klog.Printf("statement: %s \n", stat)
+		lg.InfoC("debug", "stat", stat)
 	}
 
 	for _, s := range stat {
 		err := Exec(dbName[0], s)
 		if err != nil {
 			if !strings.Contains(err.Error(), "Trigger does not exist") {
-				klog.Printf("rdcould not add trigger %v\n", err)
+				lg.ErrorC("could not add trigger", "err", err)
 				return
 			}
 		}
@@ -87,7 +87,7 @@ func DropTrigger(tableName, column string, dbName ...string) {
 	}
 	stat += ";"
 	if Debug {
-		klog.Printf("yl%s\n", stat)
+		lg.InfoC("debug", "stat", stat)
 	}
 	n := databases[0].Name
 	if len(dbName) > 0 {
@@ -98,7 +98,7 @@ func DropTrigger(tableName, column string, dbName ...string) {
 		if !strings.Contains(err.Error(), "Trigger does not exist") {
 			return
 		}
-		klog.Printf("rderr:%v\n", err)
+		lg.CheckError(err)
 	}
 }
 
@@ -108,7 +108,7 @@ type sizeDb struct {
 
 func StorageSize(dbName string) float64 {
 	db, err := GetMemoryDatabase(dbName)
-	if klog.CheckError(err) {
+	if lg.CheckError(err) {
 		return -1
 	}
 	var statement string
@@ -124,7 +124,7 @@ func StorageSize(dbName string) float64 {
 	}
 
 	m, err := Model[sizeDb]().Database(db.Name).QueryS(statement)
-	if klog.CheckError(err) {
+	if lg.CheckError(err) {
 		return -1
 	}
 	if len(m) > 0 {

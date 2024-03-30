@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kamalshkeir/klog"
 	"github.com/kamalshkeir/kmap"
 	"github.com/kamalshkeir/kstrct"
+	"github.com/kamalshkeir/lg"
 )
 
 var (
@@ -259,8 +259,7 @@ func (b *BuilderM) All() ([]map[string]any, error) {
 	}
 
 	if b.debug {
-		klog.Printf("statement:%s\n", b.statement)
-		klog.Printf("args:%v\n", b.args)
+		lg.InfoC("debug", "statement", b.statement, "args", b.args)
 	}
 	models, err := b.QueryM(b.statement, b.args...)
 	if err != nil {
@@ -317,8 +316,7 @@ func (b *BuilderM) One() (map[string]any, error) {
 	}
 
 	if b.debug {
-		klog.Printf("ylstatement:%s\n", b.statement)
-		klog.Printf("ylargs:%v\n", b.args)
+		lg.InfoC("debug", "statement", b.statement, "args", b.args)
 	}
 
 	models, err := b.QueryM(b.statement, b.args...)
@@ -411,7 +409,7 @@ func (b *BuilderM) Insert(rowData map[string]any) (int, error) {
 	var id int
 	if db.Dialect != POSTGRES {
 		if b.debug {
-			klog.Printf("statement : %s, values : %s\n", statement, values)
+			lg.InfoC("debug", "statement", b.statement, "args", values)
 		}
 		var res sql.Result
 		if b.ctx != nil {
@@ -430,7 +428,7 @@ func (b *BuilderM) Insert(rowData map[string]any) (int, error) {
 		}
 	} else {
 		if b.debug {
-			klog.Printf("statement : %s, values : %s\n", statement+" RETURNING "+pk, values)
+			lg.InfoC("debug", "statement", b.statement+" RETURNING "+pk, "args", values)
 		}
 		if b.ctx != nil {
 			err = db.Conn.QueryRowContext(b.ctx, statement+" RETURNING "+pk, values...).Scan(&id)
@@ -516,7 +514,7 @@ func (b *BuilderM) InsertR(rowData map[string]any) (map[string]any, error) {
 	stat.WriteString(")")
 	statement := stat.String()
 	if b.debug {
-		klog.Printf("statement : %s, values : %v\n", statement, values)
+		lg.InfoC("debug", "statement", statement, "args", values)
 	}
 	var id int
 	if db.Dialect != POSTGRES {
@@ -623,7 +621,7 @@ func (b *BuilderM) BulkInsert(rowsData ...map[string]any) ([]int, error) {
 		stat.WriteString(")")
 		statement := stat.String()
 		if b.debug {
-			klog.Printf("%s,%s\n", statement, values)
+			lg.InfoC("debug", "statement", statement, "args", values)
 		}
 		if db.Dialect != POSTGRES {
 			var res sql.Result
@@ -700,8 +698,7 @@ func (b *BuilderM) Set(query string, args ...any) (int, error) {
 	adaptPlaceholdersToDialect(&b.statement, db.Dialect)
 	args = append(args, b.args...)
 	if b.debug {
-		klog.Printf("ylstatement:%s\n", b.statement)
-		klog.Printf("ylargs:%v\n", args)
+		lg.InfoC("debug", "statement", b.statement, "args", args)
 	}
 
 	var res sql.Result
@@ -744,8 +741,7 @@ func (b *BuilderM) Delete() (int, error) {
 	}
 	adaptPlaceholdersToDialect(&b.statement, db.Dialect)
 	if b.debug {
-		klog.Printf("ylstatement:%s\n", b.statement)
-		klog.Printf("ylargs:%v\n", b.args)
+		lg.InfoC("debug", "statement", b.statement, "args", b.args)
 	}
 
 	var res sql.Result
@@ -888,8 +884,7 @@ func (b *BuilderM) AddRelated(relatedTable string, whereRelatedTable string, whe
 	stat := "INSERT INTO " + relationTableName + "(" + cols + ") select ?,? WHERE NOT EXISTS (select * FROM " + relationTableName + " WHERE " + wherecols + ");"
 	adaptPlaceholdersToDialect(&stat, db.Dialect)
 	if b.debug {
-		klog.Printf("ylstatement:%s\n", stat)
-		klog.Printf("ylargs:%v\n", ids)
+		lg.InfoC("debug", "statement", stat, "args", ids)
 	}
 	err = Exec(b.database, stat, ids...)
 	if err != nil {
@@ -957,8 +952,7 @@ func (b *BuilderM) GetRelated(relatedTable string, dest *[]map[string]any) error
 		}
 	}
 	if b.debug {
-		klog.Printf("statement:%s\n", b.statement)
-		klog.Printf("args:%v\n", b.args)
+		lg.InfoC("debug", "statement", b.statement, "args", b.args)
 	}
 	var err error
 	*dest, err = Table(relationTableName).QueryM(b.statement, b.args...)
@@ -1027,8 +1021,7 @@ func (b *BuilderM) JoinRelated(relatedTable string, dest *[]map[string]any) erro
 		}
 	}
 	if b.debug {
-		klog.Printf("statement:%s\n", b.statement)
-		klog.Printf("args:%v\n", b.args)
+		lg.InfoC("debug", "statement", b.statement, "args", b.args)
 	}
 	var err error
 	*dest, err = Table(relationTableName).QueryM(b.statement, b.args...)

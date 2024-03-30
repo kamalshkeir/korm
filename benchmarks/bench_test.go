@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kamalshkeir/klog"
 	"github.com/kamalshkeir/korm"
+	"github.com/kamalshkeir/lg"
 	//"gorm.io/driver/sqlite"
 	//"gorm.io/gorm"
 )
@@ -41,16 +41,16 @@ type TestTableGorm struct {
 func TestMain(m *testing.M) {
 	var err error
 	// err = korm.New(korm.SQLITE, DB_BENCH_NAME, sqlitedriver.Use())
-	// if klog.CheckError(err) {
+	// if lg.CheckError(err) {
 	// 	return
 	// }
 	// gormDB, err = gorm.Open(sqlite.Open("benchgorm.sqlite"), &gorm.Config{})
-	// if klog.CheckError(err) {
+	// if lg.CheckError(err) {
 	// 	return
 	// }
 	// migrate table test_table from struct TestTable
 	err = korm.AutoMigrate[TestTable]("test_table")
-	if klog.CheckError(err) {
+	if lg.CheckError(err) {
 		return
 	}
 	t, _ := korm.Table("test_table").All()
@@ -62,12 +62,12 @@ func TestMain(m *testing.M) {
 				Password: "aaffsbfaaaj2sbfsdjqbfsa2bfesfb",
 				IsAdmin:  true,
 			})
-			klog.CheckError(err)
+			lg.CheckError(err)
 		}
 	}
 	// gorm
 	// err = gormDB.AutoMigrate(&TestTableGorm{})
-	// if klog.CheckError(err) {
+	// if lg.CheckError(err) {
 	// 	return
 	// }
 	// dest := []TestTableGorm{}
@@ -80,7 +80,7 @@ func TestMain(m *testing.M) {
 	// 			Password: "aaffsbfaaaj2sbfsdjqbfsa2bfesfb",
 	// 			IsAdmin:  true,
 	// 		}).Error
-	// 		if klog.CheckError(err) {
+	// 		if lg.CheckError(err) {
 	// 			return
 	// 		}
 	// 	}
@@ -90,12 +90,12 @@ func TestMain(m *testing.M) {
 	exitCode := m.Run()
 
 	err = korm.Shutdown(DB_BENCH_NAME)
-	if klog.CheckError(err) {
+	if lg.CheckError(err) {
 		return
 	}
 	// gormdb, _ := gormDB.DB()
 	// err = gormdb.Close()
-	// if klog.CheckError(err) {
+	// if lg.CheckError(err) {
 	// 	return
 	// }
 	// Cleanup for sqlite , remove file db

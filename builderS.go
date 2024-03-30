@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kamalshkeir/klog"
 	"github.com/kamalshkeir/kmap"
 	"github.com/kamalshkeir/kstrct"
+	"github.com/kamalshkeir/lg"
 )
 
 var (
@@ -281,7 +281,7 @@ func (b *BuilderS[T]) Insert(model *T) (int, error) {
 			}
 			values = append(values, v)
 		} else {
-			klog.Printf("rd%vnot found in fields\n")
+			lg.ErrorC("not found in fields", "f", name)
 			return 0, errors.New("field not found")
 		}
 
@@ -334,7 +334,7 @@ func (b *BuilderS[T]) Insert(model *T) (int, error) {
 	if b.db.Dialect != POSTGRES {
 		var res sql.Result
 		if b.debug {
-			klog.Printf("statement : %s, values : %s\n", b.statement, values)
+			lg.InfoC("debug", "stat", b.statement, "args", values)
 		}
 		if b.ctx != nil {
 			res, err = b.db.Conn.ExecContext(b.ctx, b.statement, values...)
@@ -352,7 +352,7 @@ func (b *BuilderS[T]) Insert(model *T) (int, error) {
 	} else {
 		var id int
 		if b.debug {
-			klog.Printf("statement : %s, values : %s\n", b.statement+" RETURNING "+pk, values)
+			lg.InfoC("debug", "stat", b.statement+" RETURNING "+pk, "args", values)
 		}
 		if b.ctx != nil {
 			err = b.db.Conn.QueryRowContext(b.ctx, b.statement+" RETURNING "+pk, values...).Scan(&id)
@@ -542,7 +542,7 @@ func (b *BuilderS[T]) InsertR(model *T) (T, error) {
 			}
 			values = append(values, v)
 		} else {
-			klog.Printf("rd%vnot found in fields\n")
+			lg.ErrorC("not found in fields", "f", name)
 			return *model, fmt.Errorf("field not found")
 		}
 
@@ -592,7 +592,7 @@ func (b *BuilderS[T]) InsertR(model *T) (T, error) {
 	b.statement = stat.String()
 	adaptPlaceholdersToDialect(&b.statement, b.db.Dialect)
 	if b.debug {
-		klog.Printf("statement : %s, values : %s\n", b.statement, values)
+		lg.InfoC("debug", "stat", b.statement, "args", values)
 	}
 	var id int
 	var err error
@@ -714,7 +714,7 @@ func (b *BuilderS[T]) BulkInsert(models ...*T) ([]int, error) {
 		statem := stat.String()
 		adaptPlaceholdersToDialect(&statem, b.db.Dialect)
 		if b.debug {
-			klog.Printf("%s,%s\n", statem, values)
+			lg.InfoC("debug", "stat", statem, "args", values)
 		}
 
 		if b.db.Dialect != POSTGRES {
@@ -845,8 +845,7 @@ func (b *BuilderS[T]) AddRelated(relatedTable string, whereRelatedTable string, 
 	stat := "INSERT INTO " + relationTableName + "(" + cols + ") select ?,? WHERE NOT EXISTS (select * FROM " + relationTableName + " WHERE " + wherecols + ");"
 	adaptPlaceholdersToDialect(&stat, b.db.Dialect)
 	if b.debug {
-		klog.Printf("statement:%s\n", stat)
-		klog.Printf("args:%v\n", ids)
+		lg.InfoC("debug", "stat", stat, "args", ids)
 	}
 	err = Exec(b.db.Name, stat, ids...)
 	if err != nil {
@@ -982,8 +981,7 @@ func (b *BuilderS[T]) GetRelated(relatedTable string, dest any) error {
 		}
 	}
 	if b.debug {
-		klog.Printf("statement:%s\n", b.statement)
-		klog.Printf("args:%v\n", b.args)
+		lg.InfoC("debug", "stat", b.statement, "args", b.args)
 	}
 	err := Table(relationTableName).queryS(dest, b.statement, b.args...)
 	if err != nil {
@@ -1051,8 +1049,7 @@ func (b *BuilderS[T]) JoinRelated(relatedTable string, dest any) error {
 		}
 	}
 	if b.debug {
-		klog.Printf("statement:%s\n", b.statement)
-		klog.Printf("args:%v\n", b.args)
+		lg.InfoC("debug", "stat", b.statement, "args", b.args)
 	}
 	err := Table(relationTableName).queryS(dest, b.statement, b.args...)
 	if err != nil {
@@ -1093,8 +1090,7 @@ func (b *BuilderS[T]) Set(query string, args ...any) (int, error) {
 	adaptPlaceholdersToDialect(&b.statement, b.db.Dialect)
 	args = append(args, b.args...)
 	if b.debug {
-		klog.Printf("statement:%s\n", b.statement)
-		klog.Printf("args:%v\n", args)
+		lg.InfoC("debug", "stat", b.statement, "args", args)
 	}
 
 	var (
@@ -1136,8 +1132,7 @@ func (b *BuilderS[T]) Delete() (int, error) {
 	}
 	adaptPlaceholdersToDialect(&b.statement, b.db.Dialect)
 	if b.debug {
-		klog.Printf("statement:%s\n", b.statement)
-		klog.Printf("args:%v\n", b.args)
+		lg.InfoC("debug", "stat", b.statement, "args", b.args)
 	}
 
 	var res sql.Result
@@ -1369,8 +1364,7 @@ func (b *BuilderS[T]) All() ([]T, error) {
 	}
 
 	if b.debug {
-		klog.Printf("statement:%s\n", b.statement)
-		klog.Printf("args:%v\n", b.args)
+		lg.InfoC("debug", "stat", b.statement, "args", b.args)
 	}
 
 	models, err := b.QueryS(b.statement, b.args...)
@@ -1433,8 +1427,7 @@ func (b *BuilderS[T]) ToChan(ptrChan *chan T) ([]T, error) {
 	}
 
 	if b.debug {
-		klog.Printf("statement:%s\n", b.statement)
-		klog.Printf("args:%v\n", b.args)
+		lg.InfoC("debug", "stat", b.statement, "args", b.args)
 	}
 	adaptPlaceholdersToDialect(&b.statement, b.db.Dialect)
 	adaptTimeToUnixArgs(&b.args)
@@ -1483,7 +1476,7 @@ func (b *BuilderS[T]) ToChan(ptrChan *chan T) ([]T, error) {
 		}
 		err := rows.Scan(columns_ptr_to_values...)
 		if err != nil {
-			klog.Printf("yl%s, err: %v\n", b.statement, err)
+			lg.ErrorC("error", "stat", b.statement, "err", err)
 			return res, err
 		}
 
@@ -1624,7 +1617,7 @@ func (b *BuilderS[T]) QuerySNamed(statement string, args map[string]any, unsafe 
 
 		err := rows.Scan(columns_ptr_to_values...)
 		if err != nil {
-			klog.Printf("yl%s\n", statement)
+			lg.InfoC("debug", "stat", b.statement, "args", values)
 			return nil, err
 		}
 
@@ -1732,7 +1725,7 @@ func (b *BuilderS[T]) QueryS(statement string, args ...any) ([]T, error) {
 		}
 		err := rows.Scan(columns_ptr_to_values...)
 		if err != nil {
-			klog.Printf("yl%s\n", statement)
+			lg.InfoC("debug", "stat", statement, "args", values)
 			return nil, err
 		}
 
@@ -1816,8 +1809,7 @@ func (b *BuilderS[T]) One() (T, error) {
 	b.statement += " LIMIT 1"
 
 	if b.debug {
-		klog.Printf("statement:%s\n", b.statement)
-		klog.Printf("args:%v\n", b.args)
+		lg.InfoC("debug", "stat", b.statement, "args", b.args)
 	}
 	model, err := b.QueryS(b.statement, b.args...)
 	if err != nil {

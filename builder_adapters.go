@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kamalshkeir/klog"
+	"github.com/kamalshkeir/lg"
 )
 
 func UnsafeNamedQuery(query string, args map[string]any) (string, error) {
@@ -60,10 +60,10 @@ func AdaptNamedParams(dialect, statement string, variables map[string]any, unsaf
 		if len(unsafe) > 0 && unsafe[0] {
 			if v, ok := value.(string); ok {
 				_, err := buf.WriteString(v)
-				klog.CheckError(err)
+				lg.CheckError(err)
 			} else {
 				_, err := buf.WriteString(fmt.Sprint(value))
-				klog.CheckError(err)
+				lg.CheckError(err)
 			}
 		} else {
 			buf.WriteString("?")

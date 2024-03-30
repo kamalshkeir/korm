@@ -56,7 +56,7 @@
 - Additionally, its caching system uses goroutines and channels to efficiently to clean the cache when rows or tables are created, updated, deleted, or dropped
 
 ### It Has :
-- <strong>New:</strong>  When using korm.WithDashboard, now you have access to all logs in realtime (websockets) from admin dashboard when you log using klog pkg. By default only 10 last logs are keeped in memory, you can increase it using klog.SaveLogs(50) for keeping last 50 logs
+- <strong>New:</strong>  When using korm.WithDashboard, now you have access to all logs in realtime (websockets) from admin dashboard when you log using lg pkg. By default only 10 last logs are keeped in memory, you can increase it using lg.SaveLogs(50) for keeping last 50 logs
 
 - <strong>New:</strong>  Automatic check your structs (schema) against database tables, prompt you with changes, and so it can add or remove columns by adding or removing fields to the struct, it is Disabled by default, use `korm.EnableCheck()` to enable it
 
@@ -170,7 +170,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/kamalshkeir/klog"
+	"github.com/kamalshkeir/lg"
 	"github.com/kamalshkeir/korm"
 	"github.com/kamalshkeir/sqlitedriver"
 )
@@ -190,7 +190,7 @@ type Student struct {
 
 func main() {
 	err := korm.New(korm.SQLITE, "db", sqlitedriver.Use())
-	if klog.CheckError(err) {
+	if lg.CheckError(err) {
 		return
 	}
 	defer korm.Shutdown()
@@ -199,10 +199,10 @@ func main() {
 	korm.WithShell()
 
 	err = korm.AutoMigrate[Class]("classes")
-	klog.CheckError(err)
+	lg.CheckError(err)
 
 	err = korm.AutoMigrate[Student]("students")
-	klog.CheckError(err)
+	lg.CheckError(err)
 
 	// go run main.go shell to createsuperuser
 	// connect to admin and create some data to query
@@ -216,7 +216,7 @@ func main() {
 		}
 	}()
 	err = korm.To(&studentsChan).Query("select students.*,classes.id as 'classes.id',classes.name as 'classes.name'  from students join classes where classes.id = students.class")
-	klog.CheckError(err)
+	lg.CheckError(err)
 	fmt.Println()
 
 	// Named with nested (second argument of 'To') filled automatically from join, support nested slices and structs
@@ -225,7 +225,7 @@ func main() {
 	err = korm.To(&classes, true).Named(query,map[string]any{
 		"order_here": "classes.id",
 	})
-	klog.CheckError(err)
+	lg.CheckError(err)
 	for _, s := range classes {
 		fmt.Println("class:", s)
 	}
@@ -234,7 +234,7 @@ func main() {
 	// // not nested, only remove second arg true from 'To' method
 	students := []Student{}
 	err = korm.To(&students, true).Query("select students.*,classes.id as 'classes.id',classes.name as 'classes.name'  from students join classes where classes.id = students.class")
-	klog.CheckError(err)
+	lg.CheckError(err)
 	for _, s := range students {
 		fmt.Println("student:", s)
 	}
@@ -242,31 +242,31 @@ func main() {
 
 	maps := []map[string]any{}
 	err = korm.To(&maps).Query("select * from students")
-	klog.CheckError(err)
+	lg.CheckError(err)
 	fmt.Println("maps =", maps)
 	fmt.Println()
 
 	names := []*string{}
 	err = korm.To(&names).Query("select name from students")
-	klog.CheckError(err)
+	lg.CheckError(err)
 	fmt.Println("names =", names)
 	fmt.Println()
 
 	ids := []int{}
 	err = korm.To(&ids).Query("select id from students")
-	klog.CheckError(err)
+	lg.CheckError(err)
 	fmt.Println("ids =", ids)
 	fmt.Println()
 
 	bools := []bool{}
 	err = korm.To(&bools).Query("select is_admin from users")
-	klog.CheckError(err)
+	lg.CheckError(err)
 	fmt.Println("bools =", bools)
 	fmt.Println()
 
 	times := []time.Time{}
 	err = korm.To(&times).Query("select created_at from users")
-	klog.CheckError(err)
+	lg.CheckError(err)
 	fmt.Println("times =", times)
 
 	server.Run(":9313")
@@ -559,7 +559,7 @@ korm.adminPathNameGroup = "/admin" // korm.SetAdminPath("/another")
 package main
 
 import (
-	"github.com/kamalshkeir/klog"
+	"github.com/kamalshkeir/lg"
 	"github.com/kamalshkeir/ksmux"
 	"github.com/kamalshkeir/korm"
 	"github.com/kamalshkeir/sqlitedriver"
@@ -567,7 +567,7 @@ import (
 
 func main() {
 	err := korm.New(korm.SQLITE, "db", sqlitedriver.Use())
-	klog.CheckError(err)
+	lg.CheckError(err)
 
 
 
@@ -614,14 +614,14 @@ Then you can visit `/admin`
 ```go
 func main() {
 	err := korm.New(korm.SQLITE, "db", sqlitedriver.Use())
-	if klog.CheckError(err) {
+	if lg.CheckError(err) {
 		return
 	}
 	defer korm.Shutdown()
 	
 	srv := korm.WithDashboard()
 	korm.WithShell()
-	klog.Printfs("mgrunning on http://localhost:9313\n")
+	lg.Printfs("mgrunning on http://localhost:9313\n")
 	app := srv.App
 
 	app.Get("/", korm.Auth(func(c *ksmux.Context) { // work with korm.Admin also
@@ -781,7 +781,7 @@ var BasicAuth = func(handler ksmux.Handler) ksmux.Handler {
 package main
 
 import (
-	"github.com/kamalshkeir/klog"
+	"github.com/kamalshkeir/lg"
 	"github.com/kamalshkeir/ksmux"
 	"github.com/kamalshkeir/korm"
 	"github.com/kamalshkeir/sqlitedriver"
@@ -789,7 +789,7 @@ import (
 
 func main() {
 	err := korm.New(korm.SQLITE, "db",sqlitedriver.Use())
-	if klog.CheckError(err) {
+	if lg.CheckError(err) {
 		return
 	}
 	defer korm.Shutdown()
@@ -797,7 +797,7 @@ func main() {
 	bus := korm.WithDashboard()
 	korm.WithShell() // to enable shell
 	app := bus.App
-	klog.Printfs("mgrunning on http://localhost:9313\n")
+	lg.Printfs("mgrunning on http://localhost:9313\n")
 	app.Get("/", func(c *ksmux.Context) {
 		c.Text("hello")
 	})
@@ -805,7 +805,7 @@ func main() {
 	korm.BASIC_AUTH_USER = "user"
 	korm.BASIC_AUTH_PASS = "pass"
 	err = korm.WithAPI("/api", korm.BasicAuth)
-	if klog.CheckError(err) {
+	if lg.CheckError(err) {
 		return
 	}
 	// Register a table to the api
@@ -828,7 +828,7 @@ func main() {
 			return modelBuilder
 		},
 	})
-	if klog.CheckError(err) {
+	if lg.CheckError(err) {
 		return
 	}
 
@@ -849,7 +849,7 @@ package main
 import (
 	"net/http"
 
-	"github.com/kamalshkeir/klog"
+	"github.com/kamalshkeir/lg"
 	"github.com/kamalshkeir/ksmux"
 	"github.com/kamalshkeir/ksmux/ws"
 	"github.com/kamalshkeir/korm"
@@ -859,18 +859,18 @@ import (
 
 func main() {
 	err := korm.New(korm.SQLITE,"db1", sqlitedriver.Use())
-	if klog.CheckError(err) {return}
+	if lg.CheckError(err) {return}
 
 	korm.WithShell()
 	serverBus := korm.WithBus(ksbus.NewServer())
 	// handler authentication	
 	korm.BeforeDataWS(func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) bool {
-        klog.Printf("handle authentication here\n")
+		lg.Info("handle authentication here")
 		return true
 	})
 	// handler data from other KORM
 	korm.BeforeServersData(func(data any, conn *ws.Conn) {
-		klog.Printf("grrecv orm2: %v\n",data) // 'gr' for green
+		lg.Info("recv orm:", "data", data)
 	})
 
 	// built in router to the bus, check it at https://github.com/kamalshkeir/ksbus
@@ -896,7 +896,7 @@ package main
 import (
 	"net/http"
 
-	"github.com/kamalshkeir/klog"
+	"github.com/kamalshkeir/lg"
 	"github.com/kamalshkeir/ksmux"
 	"github.com/kamalshkeir/ksmux/ws"
 	"github.com/kamalshkeir/korm"
@@ -905,13 +905,13 @@ import (
 
 func main() {
 	err := korm.New(korm.SQLITE,"db2",sqlitedriver.Use())
-	if klog.CheckError(err) {return}
+	if lg.CheckError(err) {return}
 
 	korm.WithShell() // if dashboard used, this line should be after it
 	serverBus := korm.WithBus(ksbus.NewServer())
 
 	korm.BeforeServersData(func(data any, conn *ws.Conn) {
-        klog.Printf("grrecv orm2: %v\n",data)
+        lg.Info("recv", "data", data)
 	})
 
 	// built in router to the bus, check it at https://github.com/kamalshkeir/ksbus
@@ -1120,15 +1120,15 @@ type Student struct {
 // migrate
 func migrate() {
 	err := korm.AutoMigrate[Class]("classes")
-	if klog.CheckError(err) {
+	if lg.CheckError(err) {
 		return
 	}
 	err = korm.AutoMigrate[Student]("students")
-	if klog.CheckError(err) {
+	if lg.CheckError(err) {
 		return
 	}
 	err = korm.ManyToMany("classes", "students")
-	if klog.CheckError(err) {
+	if lg.CheckError(err) {
 		return
 	}
 }
@@ -1291,7 +1291,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/kamalshkeir/klog"
+	"github.com/kamalshkeir/lg"
 	"github.com/kamalshkeir/korm"
 	"github.com/kamalshkeir/sqlitedriver"
 )
@@ -1311,7 +1311,7 @@ type Student struct {
 
 func main() {
 	err := korm.New(korm.SQLITE, "db", sqlitedriver.Use())
-	if klog.CheckError(err) {
+	if lg.CheckError(err) {
 		return
 	}
 	defer korm.Shutdown()
@@ -1320,10 +1320,10 @@ func main() {
 	korm.WithShell()
 
 	err = korm.AutoMigrate[Class]("classes")
-	klog.CheckError(err)
+	lg.CheckError(err)
 
 	err = korm.AutoMigrate[Student]("students")
-	klog.CheckError(err)
+	lg.CheckError(err)
 
 	// go run main.go shell to createsuperuser
 	// connect to admin and create some data to query
@@ -1337,13 +1337,13 @@ func main() {
 		}
 	}()
 	err = korm.To(&studentsChan).Query("select students.*,classes.id as 'classes.id',classes.name as 'classes.name'  from students join classes where classes.id = students.class")
-	klog.CheckError(err)
+	lg.CheckError(err)
 	fmt.Println()
 
 	// nested (second argument of 'Scan') filled automatically from join, support nested slices and structs
 	classes := []Class{}
 	err = korm.To(&classes, true).Query("select classes.*, students.id as 'students.id',students.name as 'students.name' from classes join students on students.class = classes.id order by classes.id")
-	klog.CheckError(err)
+	lg.CheckError(err)
 	for _, s := range classes {
 		fmt.Println("class:", s)
 	}
@@ -1352,7 +1352,7 @@ func main() {
 	// // not nested, only remove second arg true from Scan method
 	students := []Student{}
 	err = korm.To(&students, true).Query("select students.*,classes.id as 'classes.id',classes.name as 'classes.name'  from students join classes where classes.id = students.class")
-	klog.CheckError(err)
+	lg.CheckError(err)
 	for _, s := range students {
 		fmt.Println("student:", s)
 	}
@@ -1360,31 +1360,31 @@ func main() {
 
 	maps := []map[string]any{}
 	err = korm.To(&maps).Query("select * from students")
-	klog.CheckError(err)
+	lg.CheckError(err)
 	fmt.Println("maps =", maps)
 	fmt.Println()
 
 	names := []*string{}
 	err = korm.To(&names).Query("select name from students")
-	klog.CheckError(err)
+	lg.CheckError(err)
 	fmt.Println("names =", names)
 	fmt.Println()
 
 	ids := []int{}
 	err = korm.To(&ids).Query("select id from students")
-	klog.CheckError(err)
+	lg.CheckError(err)
 	fmt.Println("ids =", ids)
 	fmt.Println()
 
 	bools := []bool{}
 	err = korm.To(&bools).Query("select is_admin from users")
-	klog.CheckError(err)
+	lg.CheckError(err)
 	fmt.Println("bools =", bools)
 	fmt.Println()
 
 	times := []time.Time{}
 	err = korm.To(&times).Query("select created_at from users")
-	klog.CheckError(err)
+	lg.CheckError(err)
 	fmt.Println("times =", times)
 
 	server.Run(":9313")

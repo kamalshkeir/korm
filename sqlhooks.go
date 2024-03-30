@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kamalshkeir/klog"
 	"github.com/kamalshkeir/ksmux"
+	"github.com/kamalshkeir/lg"
 )
 
 var (
@@ -37,7 +37,7 @@ func (h *logAndCacheHook) Before(ctx context.Context, query string, args ...inte
 		}
 	}
 	if logQueries {
-		klog.Printfs("yl> %s %v", query, args)
+		lg.Printfs("yl> %s %v", query, args)
 		return context.WithValue(ctx, ksmux.ContextKey("begin"), time.Now()), nil
 	}
 	return context.Background(), nil
@@ -46,7 +46,7 @@ func (h *logAndCacheHook) Before(ctx context.Context, query string, args ...inte
 func (h *logAndCacheHook) After(ctx context.Context, query string, args ...interface{}) (context.Context, error) {
 	if logQueries {
 		begin := ctx.Value(ksmux.ContextKey("begin")).(time.Time)
-		klog.Printfs("yl, took: %v\n", time.Since(begin))
+		lg.Printfs("yl, took: %v\n", time.Since(begin))
 		return ctx, nil
 	}
 	return context.Background(), nil

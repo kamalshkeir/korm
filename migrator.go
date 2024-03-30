@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kamalshkeir/klog"
 	"github.com/kamalshkeir/kstrct"
+	"github.com/kamalshkeir/lg"
 )
 
 // CREATE TRIGGER IF NOT EXISTS users_update_trig AFTER UPDATE ON
@@ -125,7 +125,7 @@ func autoMigrate[T any](model *T, db *DatabaseEntity, tableName string, execute 
 			default:
 				if tags, ok := mFieldName_Tags[fName]; ok {
 					if !strings.Contains(strings.Join(tags, ","), "generated") && !strings.Contains(ty, "int") {
-						klog.Printf("rd%s of type %s not handled\n", fName, ty)
+						lg.Errorf("%s of type %s not handled", fName, ty)
 					}
 				}
 			}
@@ -146,15 +146,15 @@ func autoMigrate[T any](model *T, db *DatabaseEntity, tableName string, execute 
 	}
 
 	if Debug {
-		klog.Printf("ylstatement:%s\n", statement)
+		lg.InfoC("debug", "stat", statement)
 	}
 
 	c, cancel := context.WithTimeout(context.TODO(), 5*time.Second)
 	defer cancel()
 	if execute {
 		ress, err := db.Conn.ExecContext(c, statement)
-		if err != nil {
-			klog.Printf("ylstat:%s\n", statement)
+		if lg.CheckError(err) {
+			lg.InfoC("debug", "stat", statement)
 			return "", err
 		}
 		_, err = ress.RowsAffected()
@@ -169,12 +169,12 @@ func autoMigrate[T any](model *T, db *DatabaseEntity, tableName string, execute 
 			for _, stats := range triggers {
 				for _, st := range stats {
 					if Debug {
-						klog.Printfs("trigger updated_at %s: %s\n", tableName, st)
+						lg.Printfs("trigger updated_at %s: %s\n", tableName, st)
 					}
 					if execute {
 						err := Exec(db.Name, st)
-						if klog.CheckError(err) {
-							klog.Printfs("rdtrigger updated_at %s: %s\n", tableName, st)
+						if lg.CheckError(err) {
+							lg.Printfs("rdtrigger updated_at %s: %s\n", tableName, st)
 							return "", err
 						}
 					}
@@ -210,12 +210,12 @@ func autoMigrate[T any](model *T, db *DatabaseEntity, tableName string, execute 
 		statIndexesExecuted := false
 		if statIndexes != "" {
 			if Debug {
-				klog.Printfs("%s\n", statIndexes)
+				lg.Printfs("%s\n", statIndexes)
 			}
 			if execute && !statIndexesExecuted {
 				_, err := db.Conn.Exec(statIndexes)
-				if klog.CheckError(err) {
-					klog.Printfs("rdindexes: %s\n", statIndexes)
+				if lg.CheckError(err) {
+					lg.Printfs("rdindexes: %s\n", statIndexes)
 					return "", err
 				}
 				statIndexesExecuted = true
@@ -225,12 +225,12 @@ func autoMigrate[T any](model *T, db *DatabaseEntity, tableName string, execute 
 		}
 		if mstatIndexes != "" {
 			if Debug {
-				klog.Printfs("mindexes: %s\n", mstatIndexes)
+				lg.Printfs("mindexes: %s\n", mstatIndexes)
 			}
 			if execute {
 				_, err := db.Conn.Exec(mstatIndexes)
-				if klog.CheckError(err) {
-					klog.Printfs("rdmindexes: %s\n", mstatIndexes)
+				if lg.CheckError(err) {
+					lg.Printfs("rdmindexes: %s\n", mstatIndexes)
 					return "", err
 				}
 			}
@@ -240,12 +240,12 @@ func autoMigrate[T any](model *T, db *DatabaseEntity, tableName string, execute 
 		if len(ustatIndexes) > 0 {
 			for i := range ustatIndexes {
 				if Debug {
-					klog.Printfs("uindexes: %s\n", ustatIndexes[i])
+					lg.Printfs("uindexes: %s\n", ustatIndexes[i])
 				}
 				if execute {
 					_, err := db.Conn.Exec(ustatIndexes[i])
-					if klog.CheckError(err) {
-						klog.Printfs("rduindexes: %s\n", ustatIndexes)
+					if lg.CheckError(err) {
+						lg.Printfs("rduindexes: %s\n", ustatIndexes)
 						return "", err
 					}
 				}
@@ -254,7 +254,7 @@ func autoMigrate[T any](model *T, db *DatabaseEntity, tableName string, execute 
 		}
 	}
 	if execute && Debug {
-		klog.Printfs("gr %s migrated\n", tableName)
+		lg.Printfs("gr %s migrated\n", tableName)
 	}
 	toReturnQuery := strings.Join(toReturnstats, ";")
 	return toReturnQuery, nil
@@ -300,7 +300,7 @@ func AutoMigrate[T any](tableName string, dbName ...string) error {
 	}
 	if !tbFoundDB {
 		_, err := autoMigrate(new(T), db, tableName, true)
-		if klog.CheckError(err) {
+		if lg.CheckError(err) {
 			return err
 		}
 	}
@@ -348,7 +348,7 @@ func handleMigrationInt(mi *migrationInput) {
 				case MYSQL, MARIA:
 					autoinc = "INTEGER NOT NULL PRIMARY KEY AUTO_INCREMENT"
 				default:
-					klog.Printf("dialect can be sqlite3, postgres or mysql only, not %s\n", mi.dialect)
+					lg.ErrorC("not supported dialect")
 				}
 			case "notnull":
 				notnull = " NOT NULL"
@@ -361,7 +361,7 @@ func handleMigrationInt(mi *migrationInput) {
 			case "default":
 				defaultt = " DEFAULT 0"
 			default:
-				klog.Printf("%s not handled for migration int\n", tag)
+				lg.ErrorC("tag not handled", "tag", tag)
 			}
 		} else {
 			// with params
@@ -389,7 +389,7 @@ func handleMigrationInt(mi *migrationInput) {
 						case "setdefault", "default":
 							fkey += " ON DELETE SET DEFAULT"
 						default:
-							klog.Printf("rdfk %s not handled\n", sp[2])
+							lg.ErrorC("fk not handled", "fk", sp[2])
 						}
 						if len(sp) > 3 {
 							switch sp[3] {
@@ -402,13 +402,13 @@ func handleMigrationInt(mi *migrationInput) {
 							case "setdefault", "default":
 								fkey += " ON UPDATE SET DEFAULT"
 							default:
-								klog.Printf("rdfk %s not handled\n", sp[3])
+								lg.ErrorC("fk not handled", "fk", sp[3])
 							}
 						}
 					}
 					*mi.fKeys = append(*mi.fKeys, fkey)
 				} else {
-					klog.Printf("allowed options cascade/donothing/noaction\n")
+					lg.ErrorC("allowed options cascade/donothing/noaction")
 				}
 			case "check":
 				sp[1] = adaptConcatAndLen(sp[1], mi.dialect)
@@ -420,7 +420,7 @@ func handleMigrationInt(mi *migrationInput) {
 					} else if strings.Contains(sp[1], ",") {
 						(*mi.mindexes)[mi.fName] += "," + sp[1]
 					} else {
-						klog.Printf("mindex not working for %s %v \n", mi.fName, sp[1])
+						lg.ErrorC("mindex not working for", "fname", mi.fName, "sp", sp[1])
 					}
 				} else {
 					(*mi.mindexes)[mi.fName] = sp[1]
@@ -432,13 +432,13 @@ func handleMigrationInt(mi *migrationInput) {
 					} else if strings.Contains(sp[1], ",") {
 						(*mi.uindexes)[mi.fName] += "," + sp[1]
 					} else {
-						klog.Printf("mindex not working for %s %v \n", mi.fName, sp[1])
+						lg.ErrorC("mindex not working for", "fname", mi.fName, "sp", sp[1])
 					}
 				} else {
 					(*mi.uindexes)[mi.fName] = sp[1]
 				}
 			default:
-				klog.Printf("MIGRATION INT: not handled %s for %s , field: %s\n", sp[0], tag, mi.fName)
+				lg.ErrorC("MIGRATION INT: not handled for field", "fname", mi.fName, "v", sp[0], "tag", tag)
 			}
 		}
 	}
@@ -512,7 +512,7 @@ func handleMigrationBool(mi *migrationInput) {
 					} else if strings.Contains(sp[1], ",") {
 						(*mi.mindexes)[mi.fName] += "," + sp[1]
 					} else {
-						klog.Printf("mindex not working for %s %s \n", mi.fName, sp[1])
+						lg.ErrorC("mindex not working for", "field", mi.fName, "v", sp[1])
 					}
 				} else {
 					(*mi.mindexes)[mi.fName] = sp[1]
@@ -532,7 +532,7 @@ func handleMigrationBool(mi *migrationInput) {
 						case "setdefault", "default":
 							fkey += " ON DELETE SET DEFAULT"
 						default:
-							klog.Printf("rdfk %s not handled\n", sp[2])
+							lg.ErrorC("fk not handled action", "ac", sp[2])
 						}
 						if len(sp) > 3 {
 							switch sp[3] {
@@ -545,16 +545,16 @@ func handleMigrationBool(mi *migrationInput) {
 							case "setdefault", "default":
 								fkey += " ON UPDATE SET DEFAULT"
 							default:
-								klog.Printf("rdfk %s not handled\n", sp[3])
+								lg.ErrorC("fk not handled action", "ac", sp[3])
 							}
 						}
 					}
 					*mi.fKeys = append(*mi.fKeys, fkey)
 				} else {
-					klog.Printf("it should be fk:users.id:cascade/donothing\n")
+					lg.ErrorC("fk should be fk:users.id:cascade/donothing")
 				}
 			default:
-				klog.Printf("%s not handled for %s migration bool\n", sp[0], mi.fName)
+				lg.ErrorC("not handled migration bool", "v", sp[0], "field", mi.fName)
 			}
 		} else {
 			switch tag {
@@ -565,7 +565,7 @@ func handleMigrationBool(mi *migrationInput) {
 			case "default":
 				defaultt = " DEFAULT 0"
 			default:
-				klog.Printf("%s not handled in Migration Bool\n", tag)
+				lg.ErrorC("not handled in Migration Bool", "tag", tag)
 			}
 		}
 	}
@@ -607,7 +607,7 @@ func handleMigrationString(mi *migrationInput) {
 			case "default":
 				defaultt = " DEFAULT ''"
 			default:
-				klog.Printf(tag, "not handled for migration string")
+				lg.ErrorC("not handled migration String", "tag", tag)
 			}
 		} else {
 			sp := strings.Split(tag, ":")
@@ -624,7 +624,7 @@ func handleMigrationString(mi *migrationInput) {
 					} else if strings.Contains(sp[1], ",") {
 						(*mi.mindexes)[mi.fName] += "," + sp[1]
 					} else {
-						klog.Printf("mindex not working for %s %s \n", mi.fName, sp[1])
+						lg.ErrorC("mindex not working", "f", mi.fName, "v", sp[1])
 					}
 				} else {
 					(*mi.mindexes)[mi.fName] = sp[1]
@@ -636,7 +636,7 @@ func handleMigrationString(mi *migrationInput) {
 					} else if strings.Contains(sp[1], ",") {
 						(*mi.uindexes)[mi.fName] += "," + sp[1]
 					} else {
-						klog.Printf("mindex not working for %s %s \n", mi.fName, sp[1])
+						lg.ErrorC("mindex not working", "f", mi.fName, "v", sp[1])
 					}
 				} else {
 					(*mi.uindexes)[mi.fName] = sp[1]
@@ -656,7 +656,7 @@ func handleMigrationString(mi *migrationInput) {
 						case "setdefault", "default":
 							fkey += " ON DELETE SET DEFAULT"
 						default:
-							klog.Printf("rdfk %s not handled\n", sp[2])
+							lg.ErrorC("fk not handled", "fk", sp[2])
 						}
 						if len(sp) > 3 {
 							switch sp[3] {
@@ -669,13 +669,13 @@ func handleMigrationString(mi *migrationInput) {
 							case "setdefault", "default":
 								fkey += " ON UPDATE SET DEFAULT"
 							default:
-								klog.Printf("rdfk %s not handled\n", sp[3])
+								lg.ErrorC("fk not handled", "fk", sp[3])
 							}
 						}
 					}
 					*mi.fKeys = append(*mi.fKeys, fkey)
 				} else {
-					klog.Printf("foreign key should be like fk:table.column:[cascade/donothing]:[cascade/donothing]\n")
+					lg.ErrorC("foreign key should be like fk:table.column:[cascade/donothing]:[cascade/donothing]")
 				}
 			case "size":
 				sp := strings.Split(tag, ":")
@@ -686,7 +686,7 @@ func handleMigrationString(mi *migrationInput) {
 				sp[1] = adaptConcatAndLen(sp[1], mi.dialect)
 				checks = append(checks, strings.TrimSpace(sp[1]))
 			default:
-				klog.Printf("MIGRATION STRING: not handled %s for %s , field: %s \n", sp[0], tag, mi.fName)
+				lg.ErrorC("migration String not handled for", "v", sp[0], "tag", tag, "f", mi.fName)
 			}
 		}
 	}
@@ -753,7 +753,7 @@ func handleMigrationSliceByte(mi *migrationInput) {
 			case "default":
 				defaultt = " DEFAULT ''"
 			default:
-				klog.Printf(tag, "not handled for migration string")
+				lg.ErrorC("tag not handled for migration string", "tag", tag)
 			}
 		} else {
 			sp := strings.Split(tag, ":")
@@ -770,7 +770,7 @@ func handleMigrationSliceByte(mi *migrationInput) {
 					} else if strings.Contains(sp[1], ",") {
 						(*mi.mindexes)[mi.fName] += "," + sp[1]
 					} else {
-						klog.Printf("mindex not working for %s %s \n", mi.fName, sp[1])
+						lg.ErrorC("mindex not working", "f", mi.fName, "v", sp[1])
 					}
 				} else {
 					(*mi.mindexes)[mi.fName] = sp[1]
@@ -782,7 +782,7 @@ func handleMigrationSliceByte(mi *migrationInput) {
 					} else if strings.Contains(sp[1], ",") {
 						(*mi.uindexes)[mi.fName] += "," + sp[1]
 					} else {
-						klog.Printf("mindex not working for %s %s \n", mi.fName, sp[1])
+						lg.ErrorC("mindex not working", "f", mi.fName, "v", sp[1])
 					}
 				} else {
 					(*mi.uindexes)[mi.fName] = sp[1]
@@ -802,7 +802,7 @@ func handleMigrationSliceByte(mi *migrationInput) {
 						case "setdefault", "default":
 							fkey += " ON DELETE SET DEFAULT"
 						default:
-							klog.Printf("rdfk %s not handled\n", sp[2])
+							lg.ErrorC("fk not handled", "v", sp[2])
 						}
 						if len(sp) > 3 {
 							switch sp[3] {
@@ -815,13 +815,13 @@ func handleMigrationSliceByte(mi *migrationInput) {
 							case "setdefault", "default":
 								fkey += " ON UPDATE SET DEFAULT"
 							default:
-								klog.Printf("rdfk %s not handled\n", sp[3])
+								lg.ErrorC("fk not handled", "v", sp[3])
 							}
 						}
 					}
 					*mi.fKeys = append(*mi.fKeys, fkey)
 				} else {
-					klog.Printf("foreign key should be like fk:table.column:[cascade/donothing]:[cascade/donothing]\n")
+					lg.ErrorC("foreign key should be like fk:table.column:[cascade/donothing]:[cascade/donothing]")
 				}
 			case "size":
 				sp := strings.Split(tag, ":")
@@ -832,7 +832,7 @@ func handleMigrationSliceByte(mi *migrationInput) {
 				sp[1] = adaptConcatAndLen(sp[1], mi.dialect)
 				checks = append(checks, strings.TrimSpace(sp[1]))
 			default:
-				klog.Printf("MIGRATION STRING: not handled %s for %s , field: %s \n", sp[0], tag, mi.fName)
+				lg.ErrorC("Migration string not handled", "v", sp[0], "tag", tag, "f", mi.fName)
 			}
 		}
 	}
@@ -903,7 +903,7 @@ func handleMigrationFloat(mi *migrationInput) {
 			case "default":
 				mtags["default"] = " DEFAULT 0.00"
 			default:
-				klog.Printf("%s not handled for migration float\n", tag)
+				lg.ErrorC("tag not handled for migration float", "tag", tag)
 			}
 		} else {
 			sp := strings.Split(tag, ":")
@@ -930,7 +930,7 @@ func handleMigrationFloat(mi *migrationInput) {
 						case "setdefault", "default":
 							fkey += " ON DELETE SET DEFAULT"
 						default:
-							klog.Printf("rdfk %s not handled\n", sp[2])
+							lg.ErrorC("fk not handled action", "action", sp[2])
 						}
 						if len(sp) > 3 {
 							switch sp[3] {
@@ -943,13 +943,13 @@ func handleMigrationFloat(mi *migrationInput) {
 							case "setdefault", "default":
 								fkey += " ON UPDATE SET DEFAULT"
 							default:
-								klog.Printf("rdfk %s not handled\n", sp[3])
+								lg.ErrorC("fk not handled", "action", sp[3])
 							}
 						}
 					}
 					*mi.fKeys = append(*mi.fKeys, fkey)
 				} else {
-					klog.Printf("foreign key should be like fk:table.column:[cascade/donothing]\n")
+					lg.ErrorC("foreign key should be like fk:table.column:[cascade/donothing]")
 				}
 			case "mindex":
 				if v, ok := (*mi.mindexes)[mi.fName]; ok {
@@ -958,7 +958,7 @@ func handleMigrationFloat(mi *migrationInput) {
 					} else if strings.Contains(sp[1], ",") {
 						(*mi.mindexes)[mi.fName] += "," + sp[1]
 					} else {
-						klog.Printf("mindex not working for %s %s \n", mi.fName, sp[1])
+						lg.ErrorC("mindex not working for", "f", mi.fName, "v", sp[1])
 					}
 				} else {
 					(*mi.mindexes)[mi.fName] = sp[1]
@@ -970,7 +970,7 @@ func handleMigrationFloat(mi *migrationInput) {
 					} else if strings.Contains(sp[1], ",") {
 						(*mi.uindexes)[mi.fName] += "," + sp[1]
 					} else {
-						klog.Printf("mindex not working for %s %s \n", mi.fName, sp[1])
+						lg.ErrorC("mindex not working", "f", mi.fName, "v", sp[1])
 					}
 				} else {
 					(*mi.uindexes)[mi.fName] = sp[1]
@@ -983,7 +983,7 @@ func handleMigrationFloat(mi *migrationInput) {
 					mtags["check"] = strings.TrimSpace(sp[1])
 				}
 			default:
-				klog.Printf("MIGRATION FLOAT: not handled %s for %s , field: %s \n", sp[0], tag, mi.fName)
+				lg.ErrorC("MIGRATION FLOAT: not handled", "v", sp[0], "tag", tag, "f", mi.fName)
 			}
 		}
 
@@ -1005,7 +1005,7 @@ func handleMigrationFloat(mi *migrationInput) {
 			case "check":
 				(*mi.res)[mi.fName] += " CHECK(" + v + ")"
 			default:
-				klog.Printf("case %s not handled\n", k)
+				lg.ErrorC("case not handled", "case", k)
 			}
 		}
 	}
@@ -1030,7 +1030,7 @@ func handleMigrationTime(mi *migrationInput) {
 				case MYSQL, MARIA:
 					defaultt = "BIGINT NOT NULL DEFAULT (UNIX_TIMESTAMP())"
 				default:
-					klog.Printf("not handled Time for %s %s \n", mi.fName, mi.fType)
+					lg.ErrorC("not handled Time for", "f", mi.fName, "type", mi.fType)
 				}
 			case "update":
 				switch mi.dialect {
@@ -1041,14 +1041,14 @@ func handleMigrationTime(mi *migrationInput) {
 				case MYSQL, MARIA:
 					defaultt = "BIGINT NOT NULL DEFAULT (UNIX_TIMESTAMP()) ON UPDATE (UNIX_TIMESTAMP())"
 				default:
-					klog.Printf("not handled Time for %s %s \n", mi.fName, mi.fType)
+					lg.ErrorC("not handled Time for", "f", mi.fName, "type", mi.fType)
 				}
 			case "index", "+index", "index+":
 				*mi.indexes = append(*mi.indexes, mi.fName)
 			case "-index", "index-":
 				*mi.indexes = append(*mi.indexes, mi.fName+" DESC")
 			default:
-				klog.Printf("%s tag not handled for time\n", tag)
+				lg.ErrorC("time tag not handled", "tag", tag)
 			}
 		} else {
 			sp := strings.Split(tag, ":")
@@ -1068,7 +1068,7 @@ func handleMigrationTime(mi *migrationInput) {
 						case "setdefault", "default":
 							fkey += " ON DELETE SET DEFAULT"
 						default:
-							klog.Printf("rdfk %s not handled\n", sp[2])
+							lg.ErrorC("fk action not handled", "action", sp[2])
 						}
 						if len(sp) > 3 {
 							switch sp[3] {
@@ -1081,13 +1081,13 @@ func handleMigrationTime(mi *migrationInput) {
 							case "setdefault", "default":
 								fkey += " ON UPDATE SET DEFAULT"
 							default:
-								klog.Printf("rdfk %s not handled\n", sp[3])
+								lg.ErrorC("fk action not handled", "action", sp[3])
 							}
 						}
 					}
 					*mi.fKeys = append(*mi.fKeys, fkey)
 				} else {
-					klog.Printf("wtf ?, it should be fk:users.id:cascade/donothing\n")
+					lg.ErrorC("it should be fk:users.id:cascade/donothing")
 				}
 			case "check":
 				sp[1] = adaptConcatAndLen(sp[1], mi.dialect)
@@ -1103,13 +1103,13 @@ func handleMigrationTime(mi *migrationInput) {
 					} else if strings.Contains(sp[1], ",") {
 						(*mi.mindexes)[mi.fName] += "," + sp[1]
 					} else {
-						klog.Printf("mindex not working for %s %s \n", mi.fName, sp[1])
+						lg.ErrorC("mindex not working", "f", mi.fName, "v", sp[1])
 					}
 				} else {
 					(*mi.mindexes)[mi.fName] = sp[1]
 				}
 			default:
-				klog.Printf("case %s not handled for time\n", sp[0])
+				lg.ErrorC("case not handled for time", "case", sp[0])
 			}
 		}
 	}

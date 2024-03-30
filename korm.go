@@ -14,11 +14,11 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/kamalshkeir/klog"
 	"github.com/kamalshkeir/kmap"
 	"github.com/kamalshkeir/ksbus"
 	"github.com/kamalshkeir/ksmux"
 	"github.com/kamalshkeir/kstrct"
+	"github.com/kamalshkeir/lg"
 )
 
 var (
@@ -52,8 +52,9 @@ var (
 func New(dbType Dialect, dbName string, dbDriver driver.Driver, dbDSN ...string) error {
 	var dsn string
 	if dbDriver == nil {
-		klog.Printf("rdNew expect a dbDriver, you can use sqlitedriver.Use that return a driver.Driver \n")
-		return fmt.Errorf("New expect a dbDriver, you can use sqlitedriver.Use that return a driver.Driver")
+		err := fmt.Errorf("New expect a dbDriver, you can use sqlitedriver.Use that return a driver.Driver")
+		lg.ErrorC(err.Error())
+		return err
 	}
 	if defaultDB == "" {
 		defaultDB = dbName
@@ -111,7 +112,7 @@ func New(dbType Dialect, dbName string, dbDriver driver.Driver, dbDSN ...string)
 		}
 	default:
 		dbType = "sqlite3"
-		klog.Printf("%s not handled, choices are: postgres,mysql,sqlite3,maria,cockroach\n", dbType)
+		lg.Errorf("%s not handled, choices are: postgres,mysql,sqlite3,maria,cockroach", dbType)
 		dsn = dbName + ".sqlite3"
 		if dsn == "" {
 			dsn = "db.sqlite3"
@@ -131,12 +132,12 @@ func New(dbType Dialect, dbName string, dbDriver driver.Driver, dbDSN ...string)
 	}
 
 	conn, err := sql.Open(cstm, dsn)
-	if klog.CheckError(err) {
+	if lg.CheckError(err) {
 		return err
 	}
 	err = conn.Ping()
-	if klog.CheckError(err) {
-		klog.Printf("check if env is loaded %s \n", dsn)
+	if lg.CheckError(err) {
+		lg.ErrorC("make sure env is loaded", "dsn", dsn)
 		return err
 	}
 	if dbType == SQLITE {
@@ -215,7 +216,7 @@ func ManyToMany(table1, table2 string, dbName ...string) error {
 	case MYSQL, MARIA:
 		autoinc = "INTEGER NOT NULL PRIMARY KEY AUTO_INCREMENT"
 	default:
-		klog.Printf("dialect can be sqlite3, postgres, cockroach or mysql,maria only, not %s\n", dben.Dialect)
+		lg.ErrorC("allowed dialects: dialect can be sqlite3, postgres, cockroach or mysql,maria only")
 	}
 
 	fkeys = append(fkeys, foreignkeyStat(table1+"_id", table1, "cascade", "cascade"))
@@ -231,7 +232,7 @@ func ManyToMany(table1, table2 string, dbName ...string) error {
 		[]string{"id", table1 + "_id", table2 + "_id"},
 	)
 	if Debug {
-		klog.Printfs("yl%s\n", st)
+		lg.Printfs("yl%s\n", st)
 	}
 	err = Exec(dben.Name, st)
 	if err != nil {
@@ -264,7 +265,7 @@ func WithDashboard(staticAndTemplatesEmbeded ...embed.FS) *ksbus.Server {
 	if serverBus == nil {
 		serverBus = WithBus()
 	}
-	klog.UsePublisher(serverBus, "klog:logs")
+	lg.UsePublisher(serverBus, "klog:logs")
 	cloneAndMigrateDashboard(true, staticAndTemplatesEmbeded...)
 	initAdminUrlPatterns(serverBus.App)
 	var razor = `
@@ -275,7 +276,7 @@ func WithDashboard(staticAndTemplatesEmbeded ...embed.FS) *ksbus.Server {
 |   |   |'. '.  | |  .' |   |  |'. |   |  |   |
 |___|   |_|   '.|=|.'   |___|  |_| |___|  |___|
 `
-	klog.Printfs("yl%s\n", razor)
+	lg.Printfs("yl%s\n", razor)
 	return serverBus
 }
 
@@ -330,7 +331,7 @@ func WithEmbededDocs(embeded embed.FS, embededDirPath string, handlerMiddlewares
 	webPath = strings.TrimSuffix(webPath, "/")
 	toembed_dir, err := fs.Sub(embeded, ksmux.DocsOutJson)
 	if err != nil {
-		klog.Printf("rdServeEmbededDir error= %v\n", err)
+		lg.ErrorC("rdServeEmbededDir error", "err", err)
 		return serverBus
 	}
 	toembed_root := http.FileServer(http.FS(toembed_dir))
@@ -386,7 +387,7 @@ func GetConnection(dbName ...string) *sql.DB {
 	if len(dbName) > 0 {
 		var err error
 		db, err = GetMemoryDatabase(dbName[0])
-		if klog.CheckError(err) {
+		if lg.CheckError(err) {
 			return nil
 		}
 	} else {
@@ -395,7 +396,7 @@ func GetConnection(dbName ...string) *sql.DB {
 	}
 
 	if db.Conn == nil {
-		klog.Printf("rdmemory database %s have no connection\n", name)
+		lg.ErrorC("memory db have no connection", "name", name)
 	}
 	return db.Conn
 }
@@ -425,21 +426,21 @@ func GetAllTables(dbName ...string) []string {
 	switch db.Dialect {
 	case POSTGRES:
 		rows, err := db.Conn.Query(`select tablename FROM pg_catalog.pg_tables WHERE schemaname NOT IN ('pg_catalog','information_schema','crdb_internal','pg_extension') AND tableowner != 'node'`)
-		if klog.CheckError(err) {
+		if lg.CheckError(err) {
 			return nil
 		}
 		defer rows.Close()
 		for rows.Next() {
 			var table string
 			err := rows.Scan(&table)
-			if klog.CheckError(err) {
+			if lg.CheckError(err) {
 				return nil
 			}
 			tables = append(tables, table)
 		}
 	case MYSQL, MARIA:
 		rows, err := db.Conn.Query("SELECT table_name,table_schema FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE' AND table_schema ='" + name + "'")
-		if klog.CheckError(err) {
+		if lg.CheckError(err) {
 			return nil
 		}
 		defer rows.Close()
@@ -447,14 +448,14 @@ func GetAllTables(dbName ...string) []string {
 			var table string
 			var table_schema string
 			err := rows.Scan(&table, &table_schema)
-			if klog.CheckError(err) {
+			if lg.CheckError(err) {
 				return nil
 			}
 			tables = append(tables, table)
 		}
 	case SQLITE, "":
 		rows, err := db.Conn.Query(`select name FROM sqlite_master WHERE type ='table' AND name NOT LIKE 'sqlite_%';`)
-		if klog.CheckError(err) {
+		if lg.CheckError(err) {
 			return nil
 		}
 		defer rows.Close()
@@ -462,13 +463,13 @@ func GetAllTables(dbName ...string) []string {
 		for rows.Next() {
 			var table string
 			err := rows.Scan(&table)
-			if klog.CheckError(err) {
+			if lg.CheckError(err) {
 				return nil
 			}
 			tables = append(tables, table)
 		}
 	default:
-		klog.Printf("rddatabase type not supported, should be sqlite3, postgres, cockroach, maria or mysql")
+		lg.ErrorC("database type not supported, should be sqlite3, postgres, cockroach, maria or mysql")
 		return nil
 	}
 	if useCache && len(tables) > 0 {
@@ -508,7 +509,7 @@ func GetAllColumnsTypes(table string, dbName ...string) (map[string]string, []st
 	default:
 		statement = "pragma table_info(" + table + ");"
 		row, err := db.Conn.Query(statement)
-		if klog.CheckError(err) {
+		if lg.CheckError(err) {
 			return nil, nil
 		}
 		defer row.Close()
@@ -520,7 +521,7 @@ func GetAllColumnsTypes(table string, dbName ...string) (map[string]string, []st
 		var fake3 int
 		for row.Next() {
 			err := row.Scan(&num, &singleColName, &singleColType, &fake1, &fake2, &fake3)
-			if klog.CheckError(err) {
+			if lg.CheckError(err) {
 				return nil, nil
 			}
 			columns[singleColName] = singleColType
@@ -534,7 +535,7 @@ func GetAllColumnsTypes(table string, dbName ...string) (map[string]string, []st
 
 	row, err := db.Conn.Query(statement)
 
-	if klog.CheckError(err) {
+	if lg.CheckError(err) {
 		return nil, nil
 	}
 	defer row.Close()
@@ -542,7 +543,7 @@ func GetAllColumnsTypes(table string, dbName ...string) (map[string]string, []st
 	var singleColType string
 	for row.Next() {
 		err := row.Scan(&singleColName, &singleColType)
-		if klog.CheckError(err) {
+		if lg.CheckError(err) {
 			return nil, nil
 		}
 		columns[singleColName] = singleColType

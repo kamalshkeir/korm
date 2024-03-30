@@ -16,8 +16,8 @@ import (
 
 	"github.com/kamalshkeir/aes"
 	"github.com/kamalshkeir/argon"
-	"github.com/kamalshkeir/klog"
 	"github.com/kamalshkeir/ksmux"
+	"github.com/kamalshkeir/lg"
 )
 
 func reverseSlice[T any](slice []T) []T {
@@ -34,7 +34,7 @@ var LogsView = func(c *ksmux.Context) {
 		"static_url": StaticUrl,
 		"secure":     ksmux.IsTLS,
 	}
-	if v := klog.GetLogs(); v != nil {
+	if v := lg.GetLogs(); v != nil {
 		d["logs"] = reverseSlice[string](v.Slice)
 	}
 	c.Html("admin/logs.html", d)
@@ -91,7 +91,7 @@ var LoginPOSTView = func(c *ksmux.Context) {
 			} else {
 				if uuid, ok := data["uuid"].(string); ok {
 					uuid, err = aes.Encrypt(uuid)
-					klog.CheckError(err)
+					lg.CheckError(err)
 					c.SetCookie("session", uuid)
 					c.Json(map[string]any{
 						"success": "U Are Logged In",
@@ -119,7 +119,7 @@ var AllModelsGet = func(c *ksmux.Context) {
 
 	dbMem, _ := GetMemoryDatabase(defaultDB)
 	if dbMem == nil {
-		klog.Printf("rdunable to find db in mem %s\n", defaultDB)
+		lg.ErrorC("unable to find db in mem", "db", defaultDB)
 		dbMem = &databases[0]
 	}
 	idString := "id"
@@ -153,7 +153,7 @@ var AllModelsGet = func(c *ksmux.Context) {
 					q := "select " + spTo[1] + " from " + spTo[0] + " order by " + spTo[1]
 					mm := []map[string]any{}
 					err := To(&mm).Query(q)
-					if !klog.CheckError(err) {
+					if !lg.CheckError(err) {
 						ress := []any{}
 						for _, res := range mm {
 							ress = append(ress, res[spTo[1]])
@@ -162,7 +162,7 @@ var AllModelsGet = func(c *ksmux.Context) {
 							mmfkeys[spFrom[1]] = ress
 						}
 					} else {
-						klog.Printf("rd%s %v\n", q, spTo)
+						lg.ErrorC("error:", "q", q, "spTo", spTo)
 					}
 				}
 			}
@@ -190,7 +190,7 @@ var AllModelsGet = func(c *ksmux.Context) {
 		data["static_url"] = StaticUrl
 		c.Html("admin/admin_all_models.html", data)
 	} else {
-		klog.Printf("rdtable %s not found\n", model)
+		lg.ErrorC("table not found", "table", model)
 		c.Error(404, "Unable to find this model")
 	}
 }
@@ -222,7 +222,7 @@ var AllModelsSearch = func(c *ksmux.Context) {
 
 	oB := ""
 	t, err := GetMemoryTable(model)
-	if klog.CheckError(err) {
+	if lg.CheckError(err) {
 		c.Json(map[string]any{
 			"error": err,
 		})
@@ -285,8 +285,8 @@ var DeleteRowPost = func(c *ksmux.Context) {
 					idString = t.Pk
 				}
 				modelDB, err := Table(mm).Where(idString+" = ?", data["id"]).One()
-				if klog.CheckError(err) {
-					klog.Printf("rddata received DeleteRowPost:%v\n", data)
+				if lg.CheckError(err) {
+					lg.ErrorC("data received DeleteRowPost", "data", data)
 					c.Status(http.StatusBadRequest).Json(map[string]any{
 						"error": err.Error(),
 					})
@@ -331,13 +331,14 @@ var DeleteRowPost = func(c *ksmux.Context) {
 var CreateModelView = func(c *ksmux.Context) {
 	parseErr := c.Request.ParseMultipartForm(int64(ksmux.MultipartSize))
 	if parseErr != nil {
-		klog.Printf("rdParse error = %v\n", parseErr)
+		lg.ErrorC(parseErr.Error())
+		return
 	}
 	data := c.Request.Form
 
 	defer func() {
 		err := c.Request.MultipartForm.RemoveAll()
-		klog.CheckError(err)
+		lg.CheckError(err)
 	}()
 
 	model := data["table"][0]
@@ -372,7 +373,7 @@ var CreateModelView = func(c *ksmux.Context) {
 	}
 	_, err := Table(model).Insert(m)
 	if err != nil {
-		klog.Printf("rdCreateModelView error: %v\n", err)
+		lg.ErrorC("CreateModelView error", "err", err)
 		c.Status(http.StatusBadRequest).Json(map[string]any{
 			"error": err.Error(),
 		})
@@ -406,7 +407,7 @@ var SingleModelGet = func(c *ksmux.Context) {
 	}
 
 	modelRow, err := Table(model).Where(idString+" = ?", id).One()
-	if klog.CheckError(err) {
+	if lg.CheckError(err) {
 		c.Status(http.StatusBadRequest).Json(map[string]any{
 			"error": err.Error(),
 		})
@@ -421,7 +422,7 @@ var SingleModelGet = func(c *ksmux.Context) {
 			if len(spTo) == 2 {
 				q := "select " + spTo[1] + " from " + spTo[0] + " order by " + spTo[1]
 				mm, err := Table(spTo[0]).QueryM(q)
-				if !klog.CheckError(err) {
+				if !lg.CheckError(err) {
 					ress := []any{}
 					for _, res := range mm {
 						ress = append(ress, res[spTo[1]])
@@ -551,12 +552,12 @@ func handleFilesUpload(files map[string][]*multipart.FileHeader, model string, i
 					if err != nil {
 						//le fichier existe pas
 						_, err := Table(model).Where(idString+" = ?", id).Set(key+" = ?", uploadedImage)
-						klog.CheckError(err)
+						lg.CheckError(err)
 						continue
 					} else {
 						//le fichier existe et donc supprimer
 						_, err := Table(model).Where(idString+" = ?", id).Set(key+" = ?", uploadedImage)
-						klog.CheckError(err)
+						lg.CheckError(err)
 						continue
 					}
 				}
@@ -572,7 +573,7 @@ var DropTablePost = func(c *ksmux.Context) {
 	if table, ok := data["table"]; ok && table != "" {
 		if t, ok := data["table"].(string); ok {
 			_, err := Table(t).Drop()
-			if klog.CheckError(err) {
+			if lg.CheckError(err) {
 				c.Status(http.StatusBadRequest).Json(map[string]any{
 					"error": err.Error(),
 				})
@@ -602,10 +603,10 @@ var ExportView = func(c *ksmux.Context) {
 		return
 	}
 	data, err := Table(table).All()
-	klog.CheckError(err)
+	lg.CheckError(err)
 
 	data_bytes, err := json.Marshal(data)
-	klog.CheckError(err)
+	lg.CheckError(err)
 
 	c.Download(data_bytes, table+".json")
 }
@@ -619,7 +620,7 @@ var ExportCSVView = func(c *ksmux.Context) {
 		return
 	}
 	data, err := Table(table).All()
-	klog.CheckError(err)
+	lg.CheckError(err)
 	var buff bytes.Buffer
 	writer := csv.NewWriter(&buff)
 
@@ -635,7 +636,7 @@ var ExportCSVView = func(c *ksmux.Context) {
 	}
 
 	err = writer.Write(cols)
-	klog.CheckError(err)
+	lg.CheckError(err)
 	for _, sd := range data {
 		values := []string{}
 		for _, k := range cols {
@@ -662,7 +663,7 @@ var ExportCSVView = func(c *ksmux.Context) {
 
 		}
 		err = writer.Write(values)
-		klog.CheckError(err)
+		lg.CheckError(err)
 	}
 	writer.Flush()
 	c.Download(buff.Bytes(), table+".csv")
@@ -678,7 +679,7 @@ var ImportView = func(c *ksmux.Context) {
 		return
 	}
 	t, err := GetMemoryTable(table)
-	if klog.CheckError(err) {
+	if lg.CheckError(err) {
 		c.Status(http.StatusBadRequest).Json(map[string]any{
 			"error": err.Error(),
 		})
@@ -686,7 +687,7 @@ var ImportView = func(c *ksmux.Context) {
 	}
 	// upload file and return bytes of file
 	fname, dataBytes, err := c.UploadFile("thefile", "backup", "json", "csv")
-	if klog.CheckError(err) {
+	if lg.CheckError(err) {
 		c.Status(http.StatusBadRequest).Json(map[string]any{
 			"error": err.Error(),
 		})
@@ -698,13 +699,13 @@ var ImportView = func(c *ksmux.Context) {
 	modelsOld, _ := Table(table).All()
 	if len(modelsOld) > 0 {
 		modelsOldBytes, err := json.Marshal(modelsOld)
-		if !klog.CheckError(err) {
+		if !lg.CheckError(err) {
 			_ = os.MkdirAll(MediaDir+"/backup/", 0770)
 			dst, err := os.Create(MediaDir + "/backup/" + table + "-" + time.Now().Format("2006-01-02") + ".json")
-			klog.CheckError(err)
+			lg.CheckError(err)
 			defer dst.Close()
 			_, err = dst.Write(modelsOldBytes)
-			klog.CheckError(err)
+			lg.CheckError(err)
 		}
 	}
 
@@ -713,7 +714,7 @@ var ImportView = func(c *ksmux.Context) {
 	if isCsv {
 		reader := csv.NewReader(bytes.NewReader(dataBytes))
 		lines, err := reader.ReadAll()
-		if klog.CheckError(err) {
+		if lg.CheckError(err) {
 			c.Status(http.StatusBadRequest).Json(map[string]any{
 				"error": err.Error(),
 			})
@@ -729,7 +730,7 @@ var ImportView = func(c *ksmux.Context) {
 		}
 	} else {
 		err := json.Unmarshal(dataBytes, &list_map)
-		if klog.CheckError(err) {
+		if lg.CheckError(err) {
 			c.Status(http.StatusBadRequest).Json(map[string]any{
 				"error": err.Error(),
 			})
@@ -761,7 +762,7 @@ var ManifestView = func(c *ksmux.Context) {
 	if EmbededDashboard {
 		f, err := staticAndTemplatesFS[0].ReadFile(StaticDir + "/manifest.json")
 		if err != nil {
-			klog.Printf("rdcannot embed manifest.json from static :%v\n", err)
+			lg.ErrorC("cannot embed manifest.json", "err", err)
 			return
 		}
 		c.ServeEmbededFile("application/json; charset=utf-8", f)
@@ -774,7 +775,7 @@ var ServiceWorkerView = func(c *ksmux.Context) {
 	if EmbededDashboard {
 		f, err := staticAndTemplatesFS[0].ReadFile(StaticDir + "/sw.js")
 		if err != nil {
-			klog.Printf("rdcannot embed sw.js from static %v\n", err)
+			lg.ErrorC("cannot embed sw.js", "err", err)
 			return
 		}
 		c.ServeEmbededFile("application/javascript; charset=utf-8", f)

@@ -7,8 +7,8 @@ import (
 	"unicode"
 
 	"github.com/kamalshkeir/kinput"
-	"github.com/kamalshkeir/klog"
 	"github.com/kamalshkeir/kstrct"
+	"github.com/kamalshkeir/lg"
 )
 
 var checkEnabled = false
@@ -31,7 +31,7 @@ func LinkModel[T any](to_table_name string, dbName ...string) {
 		db = &databases[0]
 	} else {
 		dbb, err := GetMemoryDatabase(dbName[0])
-		if klog.CheckError(err) {
+		if lg.CheckError(err) {
 			return
 		}
 		db = dbb
@@ -134,7 +134,7 @@ tagsLoop:
 					}
 					if !found {
 						// remove dbcol from db
-						klog.Printfs("rd⚠️ field '%s' has been removed from '%T'\n", dbcol, *new(T))
+						lg.Printfs("rd⚠️ field '%s' has been removed from '%T'\n", dbcol, *new(T))
 						removedCols = append(removedCols, dbcol)
 					} else {
 						colss = append(colss, dbcol)
@@ -142,12 +142,12 @@ tagsLoop:
 				}
 				if len(removedCols) > 0 {
 					choice, err := kinput.String(kinput.Yellow, "> do we remove extra columns ? (Y/n): ")
-					klog.CheckError(err)
+					lg.CheckError(err)
 					switch choice {
 					case "y", "Y":
 						temp := te.Name + "_temp"
 						tempQuery, err := autoMigrate(new(T), db, temp, true)
-						if klog.CheckError(err) {
+						if lg.CheckError(err) {
 							return
 						}
 						if Debug {
@@ -155,22 +155,22 @@ tagsLoop:
 						}
 						cls := strings.Join(colss, ",")
 						_, err = db.Conn.Exec("INSERT INTO " + temp + " (" + cls + ") SELECT " + cls + " FROM " + te.Name)
-						if klog.CheckError(err) {
+						if lg.CheckError(err) {
 							return
 						}
 						_, err = Table(te.Name + "_old").Database(db.Name).Drop()
-						if klog.CheckError(err) {
+						if lg.CheckError(err) {
 							return
 						}
 						_, err = db.Conn.Exec("ALTER TABLE " + te.Name + " RENAME TO " + te.Name + "_old")
-						if klog.CheckError(err) {
+						if lg.CheckError(err) {
 							return
 						}
 						_, err = db.Conn.Exec("ALTER TABLE " + temp + " RENAME TO " + te.Name)
-						if klog.CheckError(err) {
+						if lg.CheckError(err) {
 							return
 						}
-						klog.Printfs("grDone, you can still find your old table with the same data %s\n", te.Name+"_old")
+						lg.Printfs("grDone, you can still find your old table with the same data %s\n", te.Name+"_old")
 						os.Exit(0)
 					default:
 						return
@@ -180,18 +180,18 @@ tagsLoop:
 				addedFields := []string{}
 				for _, fname := range te.Columns {
 					if _, ok := te.Types[fname]; !ok {
-						klog.Printfs("rd⚠️ column '%s' is missing from table '%s'\n", fname, to_table_name)
+						lg.Printfs("rd⚠️ column '%s' is missing from table '%s'\n", fname, to_table_name)
 						addedFields = append(addedFields, fname)
 					}
 				}
 				if len(addedFields) > 0 {
 					choice, err := kinput.String(kinput.Yellow, "> do we add missing columns ? (Y/n): ")
-					klog.CheckError(err)
+					lg.CheckError(err)
 					switch choice {
 					case "y", "Y":
 						temp := te.Name + "_temp"
 						tempQuery, err := autoMigrate(new(T), db, temp, true)
-						if klog.CheckError(err) {
+						if lg.CheckError(err) {
 							return
 						}
 						if Debug {
@@ -204,23 +204,23 @@ tagsLoop:
 						}
 						cls := strings.Join(colss, ",")
 						_, err = db.Conn.Exec("INSERT INTO " + temp + " (" + cls + ") SELECT " + cls + " FROM " + te.Name)
-						if klog.CheckError(err) {
-							klog.Printfs("query: %s\n", "INSERT INTO "+temp+" ("+cls+") SELECT "+cls+" FROM "+te.Name)
+						if lg.CheckError(err) {
+							lg.Printfs("query: %s\n", "INSERT INTO "+temp+" ("+cls+") SELECT "+cls+" FROM "+te.Name)
 							return
 						}
 						_, err = Table(te.Name + "_old").Database(db.Name).Drop()
-						if klog.CheckError(err) {
+						if lg.CheckError(err) {
 							return
 						}
 						_, err = db.Conn.Exec("ALTER TABLE " + te.Name + " RENAME TO " + te.Name + "_old")
-						if klog.CheckError(err) {
+						if lg.CheckError(err) {
 							return
 						}
 						_, err = db.Conn.Exec("ALTER TABLE " + temp + " RENAME TO " + te.Name)
-						if klog.CheckError(err) {
+						if lg.CheckError(err) {
 							return
 						}
-						klog.Printfs("grDone, you can still find your old table with the same data %s\n", te.Name+"_old")
+						lg.Printfs("grDone, you can still find your old table with the same data %s\n", te.Name+"_old")
 						os.Exit(0)
 					default:
 						return

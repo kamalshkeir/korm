@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kamalshkeir/klog"
 	"github.com/kamalshkeir/kstrct"
+	"github.com/kamalshkeir/lg"
 )
 
 type Selector[T any] struct {
@@ -85,7 +85,7 @@ func (sl *Selector[T]) Query(statement string, args ...any) error {
 	var rows *sql.Rows
 	var err error
 	if sl.debug {
-		klog.Printfs("yl%s , args: %v", statement, args)
+		lg.Printfs("yl%s , args: %v", statement, args)
 	}
 	if sl.ctx != nil {
 		rows, err = db.Conn.QueryContext(sl.ctx, statement, args...)
@@ -154,13 +154,13 @@ loop:
 					t := ref.Type().Elem()
 					newElem := reflect.New(t).Interface().(T)
 					err := kstrct.FillFromKV(newElem, kv)
-					if klog.CheckError(err) {
+					if lg.CheckError(err) {
 						return err
 					}
 					*sl.dest = append(*sl.dest, newElem)
 				} else {
 					err := kstrct.FillFromKV(temp, kv)
-					if klog.CheckError(err) {
+					if lg.CheckError(err) {
 						return err
 					}
 					*sl.dest = append(*sl.dest, *temp)
@@ -176,14 +176,14 @@ loop:
 					*sl.dest = append(*sl.dest, newElem)
 					temp = &(*sl.dest)[0]
 					err := kstrct.FillFromKV(*temp, kv, true)
-					if klog.CheckError(err) {
+					if lg.CheckError(err) {
 						return err
 					}
 				} else {
 					*sl.dest = append(*sl.dest, *new(T))
 					temp = &(*sl.dest)[0]
 					err := kstrct.FillFromKV(temp, kv, true)
-					if klog.CheckError(err) {
+					if lg.CheckError(err) {
 						return err
 					}
 				}
@@ -206,14 +206,14 @@ loop:
 								*sl.dest = append(*sl.dest, newElem)
 								temp = &(*sl.dest)[index]
 								err := kstrct.FillFromKV(*temp, kv, true)
-								if klog.CheckError(err) {
+								if lg.CheckError(err) {
 									return err
 								}
 							} else {
 								*sl.dest = append(*sl.dest, *new(T))
 								temp = &(*sl.dest)[index]
 								err := kstrct.FillFromKV(temp, kv, true)
-								if klog.CheckError(err) {
+								if lg.CheckError(err) {
 									return err
 								}
 							}
@@ -221,12 +221,12 @@ loop:
 							lastData = append(lastData, kvv)
 							if !isPtr {
 								err := kstrct.FillFromKV(&(*sl.dest)[index], kv, true)
-								if klog.CheckError(err) {
+								if lg.CheckError(err) {
 									return err
 								}
 							} else {
 								err := kstrct.FillFromKV((*sl.dest)[index], kv, true)
-								if klog.CheckError(err) {
+								if lg.CheckError(err) {
 									return err
 								}
 							}
@@ -296,13 +296,13 @@ loop:
 				}
 				if !isNested {
 					err := kstrct.FillFromKV((*sl.dest)[0], kv)
-					if klog.CheckError(err) {
+					if lg.CheckError(err) {
 						return err
 					}
 					continue loop
 				} else {
 					err := kstrct.FillFromKV((*sl.dest)[0], kv, true)
-					if klog.CheckError(err) {
+					if lg.CheckError(err) {
 						return err
 					}
 					continue loop
@@ -334,12 +334,12 @@ loop:
 							m[vkv.Key] = vkv.Value
 						}
 						err := kstrct.SetReflectFieldValue(chanType, m)
-						if klog.CheckError(err) {
+						if lg.CheckError(err) {
 							return err
 						}
 					} else {
 						err := kstrct.SetReflectFieldValue(chanType, vKv.Value)
-						if klog.CheckError(err) {
+						if lg.CheckError(err) {
 							return err
 						}
 					}
@@ -409,7 +409,7 @@ func (sl *Selector[T]) Named(statement string, args map[string]any, unsafe ...bo
 	var rows *sql.Rows
 	var err error
 	if sl.debug {
-		klog.Printfs("yl%s , args: %v", query, newargs)
+		lg.Printfs("yl%s , args: %v", query, newargs)
 	}
 	if sl.ctx != nil {
 		rows, err = db.Conn.QueryContext(sl.ctx, query, newargs...)
@@ -478,13 +478,13 @@ loop:
 					t := ref.Type().Elem()
 					newElem := reflect.New(t).Interface().(T)
 					err := kstrct.FillFromKV(newElem, kv)
-					if klog.CheckError(err) {
+					if lg.CheckError(err) {
 						return err
 					}
 					*sl.dest = append(*sl.dest, newElem)
 				} else {
 					err := kstrct.FillFromKV(temp, kv)
-					if klog.CheckError(err) {
+					if lg.CheckError(err) {
 						return err
 					}
 					*sl.dest = append(*sl.dest, *temp)
@@ -500,14 +500,14 @@ loop:
 					*sl.dest = append(*sl.dest, newElem)
 					temp = &(*sl.dest)[0]
 					err := kstrct.FillFromKV(*temp, kv, true)
-					if klog.CheckError(err) {
+					if lg.CheckError(err) {
 						return err
 					}
 				} else {
 					*sl.dest = append(*sl.dest, *new(T))
 					temp = &(*sl.dest)[0]
 					err := kstrct.FillFromKV(temp, kv, true)
-					if klog.CheckError(err) {
+					if lg.CheckError(err) {
 						return err
 					}
 				}
@@ -530,14 +530,14 @@ loop:
 								*sl.dest = append(*sl.dest, newElem)
 								temp = &(*sl.dest)[index]
 								err := kstrct.FillFromKV(*temp, kv, true)
-								if klog.CheckError(err) {
+								if lg.CheckError(err) {
 									return err
 								}
 							} else {
 								*sl.dest = append(*sl.dest, *new(T))
 								temp = &(*sl.dest)[index]
 								err := kstrct.FillFromKV(temp, kv, true)
-								if klog.CheckError(err) {
+								if lg.CheckError(err) {
 									return err
 								}
 							}
@@ -545,12 +545,12 @@ loop:
 							lastData = append(lastData, kvv)
 							if !isPtr {
 								err := kstrct.FillFromKV(&(*sl.dest)[index], kv, true)
-								if klog.CheckError(err) {
+								if lg.CheckError(err) {
 									return err
 								}
 							} else {
 								err := kstrct.FillFromKV((*sl.dest)[index], kv, true)
-								if klog.CheckError(err) {
+								if lg.CheckError(err) {
 									return err
 								}
 							}
@@ -621,13 +621,13 @@ loop:
 				}
 				if !isNested {
 					err := kstrct.FillFromKV((*sl.dest)[0], kv)
-					if klog.CheckError(err) {
+					if lg.CheckError(err) {
 						return err
 					}
 					continue loop
 				} else {
 					err := kstrct.FillFromKV((*sl.dest)[0], kv, true)
-					if klog.CheckError(err) {
+					if lg.CheckError(err) {
 						return err
 					}
 					continue loop
@@ -658,12 +658,12 @@ loop:
 							m[vkv.Key] = vkv.Value
 						}
 						err := kstrct.SetReflectFieldValue(chanType, m)
-						if klog.CheckError(err) {
+						if lg.CheckError(err) {
 							return err
 						}
 					} else {
 						err := kstrct.SetReflectFieldValue(chanType, vKv.Value)
-						if klog.CheckError(err) {
+						if lg.CheckError(err) {
 							return err
 						}
 					}

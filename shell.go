@@ -10,8 +10,8 @@ import (
 
 	"github.com/kamalshkeir/argon"
 	"github.com/kamalshkeir/kinput"
-	"github.com/kamalshkeir/klog"
 	"github.com/kamalshkeir/ksmux"
+	"github.com/kamalshkeir/lg"
 )
 
 const (
@@ -131,7 +131,7 @@ func InitShell() bool {
 					path = kinput.Input(kinput.Blue, "path to sql file: ")
 				}
 				err := migratefromfile(path)
-				if !klog.CheckError(err) {
+				if !lg.CheckError(err) {
 					fmt.Printf(green, "migrated successfully")
 				}
 			case "databases":
@@ -145,7 +145,7 @@ func InitShell() bool {
 				}
 				db, err := GetMemoryDatabase(dbName)
 				if err != nil {
-					klog.Printfs("rd%v\n", err)
+					lg.Printfs("rd%v\n", err)
 				}
 				usedDB = *db
 				fmt.Printf(green, "you are using database "+usedDB.Name)
