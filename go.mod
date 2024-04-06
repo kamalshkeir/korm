@@ -10,7 +10,7 @@ require (
 	github.com/kamalshkeir/ksbus v1.3.2
 	github.com/kamalshkeir/ksmux v0.1.1
 	github.com/kamalshkeir/kstrct v1.8.3
-	github.com/kamalshkeir/lg v0.1.2
+	github.com/kamalshkeir/lg v0.1.3
 )
 
 require (
