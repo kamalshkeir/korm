@@ -1,16 +1,15 @@
 package korm
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/kamalshkeir/ksmux"
 )
 
 func init() {
-	ksmux.BeforeRenderHtml("korm-user", func(reqCtx context.Context, data *map[string]any) {
-		const key ksmux.ContextKey = "user"
-		user, ok := reqCtx.Value(key).(User)
+	const kormKeyUser = "korm-user"
+	ksmux.BeforeRenderHtml("korm-user", func(c *ksmux.Context, data *map[string]any) {
+		user, ok := c.GetKey(kormKeyUser)
 		if ok {
 			(*data)["IsAuthenticated"] = true
 			(*data)["User"] = user
@@ -19,6 +18,7 @@ func init() {
 			(*data)["User"] = nil
 		}
 	})
+
 }
 
 func initAdminUrlPatterns(r *ksmux.Router) {

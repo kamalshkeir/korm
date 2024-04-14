@@ -1,7 +1,6 @@
 package korm
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/kamalshkeir/aes"
@@ -14,7 +13,6 @@ var (
 )
 
 var Auth = func(handler ksmux.Handler) ksmux.Handler {
-	const key ksmux.ContextKey = "user"
 	return func(c *ksmux.Context) {
 		session, err := c.GetCookie("session")
 		if err != nil || session == "" {
@@ -37,18 +35,12 @@ var Auth = func(handler ksmux.Handler) ksmux.Handler {
 		}
 
 		// AUTHENTICATED AND FOUND IN DB
-		ctx := context.WithValue(c.Request.Context(), key, user)
-		*c = ksmux.Context{
-			Params:         c.Params,
-			Request:        c.Request.WithContext(ctx),
-			ResponseWriter: c.ResponseWriter,
-		}
+		c.SetKey("korm-user", user)
 		handler(c)
 	}
 }
 
 var Admin = func(handler ksmux.Handler) ksmux.Handler {
-	const key ksmux.ContextKey = "user"
 	return func(c *ksmux.Context) {
 		session, err := c.GetCookie("session")
 		if err != nil || session == "" {
@@ -75,14 +67,7 @@ var Admin = func(handler ksmux.Handler) ksmux.Handler {
 			c.Status(403).Text("Middleware : Not allowed to access this page")
 			return
 		}
-
-		ctx := context.WithValue(c.Request.Context(), key, user)
-		*c = ksmux.Context{
-			Params:         c.Params,
-			Request:        c.Request.WithContext(ctx),
-			ResponseWriter: c.ResponseWriter,
-		}
-
+		c.SetKey("korm-user", user)
 		handler(c)
 	}
 }
