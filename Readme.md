@@ -195,7 +195,11 @@ func main() {
 	}
 	defer korm.Shutdown()
 
-	server := korm.WithDashboard()
+	server := korm.WithDashboard(korm.DashOpts{
+		ServerOpts: &ksbus.ServerOpts{
+			Address: ":9313",
+		},
+	})
 	korm.WithShell()
 
 	err = korm.AutoMigrate[Class]("classes")
@@ -571,7 +575,11 @@ func main() {
 
 
 
-	serverBus := korm.WithDashboard() 
+	serverBus := korm.WithDashboard(korm.DashOpts{
+		ServerOpts: &ksbus.ServerOpts{
+			Address: "localhost:9313",
+		},
+	})
 	korm.WithShell()
 	// you can overwrite Admin and Auth middleware used for dashboard (dash_middlewares.go) 
 	//korm.Auth = func(handler ksmux.Handler) ksmux.Handler {}
@@ -592,12 +600,12 @@ func main() {
 	// 		"data": data,
 	// 	})
 	// })
-	serverBus.Run("localhost:9313")
+	serverBus.Run()
 	// OR run https if you have certificates
-	serverBus.RunTLS(addr string, cert string, certKey string)
+	serverBus.RunTLS(cert string, certKey string)
 
 	// OR generate certificates let's encrypt for a domain name, check https://github.com/kamalshkeir/ksbus for more infos
-	serverBus.RunAutoTLS(domainName string, subDomains ...string)
+	serverBus.RunAutoTLS(subDomains ...string)
 }
 ```
 Then create admin user to connect to the dashboard
@@ -619,7 +627,11 @@ func main() {
 	}
 	defer korm.Shutdown()
 	
-	srv := korm.WithDashboard()
+	srv := korm.WithDashboard(korm.DashOpts{
+		ServerOpts: &ksbus.ServerOpts{
+			Address: "localhost:9313",
+		},
+	})
 	korm.WithShell()
 	lg.Printfs("mgrunning on http://localhost:9313\n")
 	app := srv.App
@@ -638,7 +650,7 @@ func main() {
 		}
 	}))
 
-	srv.Run("localhost:9313")
+	srv.Run()
 }
 ```
 
@@ -777,7 +789,11 @@ func main() {
 	}
 	defer korm.Shutdown()
 
-	bus := korm.WithDashboard()
+	serverBus := korm.WithDashboard(korm.DashOpts{
+		ServerOpts: &ksbus.ServerOpts{
+			Address: "localhost:9313",
+		},
+	})
 	korm.WithShell() // to enable shell
 	app := bus.App
 	lg.Printfs("mgrunning on http://localhost:9313\n")
@@ -815,7 +831,7 @@ func main() {
 		return
 	}
 
-	bus.Run(":9313")
+	bus.Run()
 }
 ```
 
@@ -974,7 +990,11 @@ func main() {
 		log.Fatal(err)
 	}
 
-	serverBus := korm.WithDashboard()
+	serverBus := korm.WithDashboard(korm.DashOpts{
+		ServerOpts: &ksbus.ServerOpts{
+			Address: "localhost:9313",
+		},
+	})
 	korm.WithShell()
 	mux := serverBus.App
 	// add global middlewares
@@ -987,9 +1007,13 @@ func main() {
 ### Pprof
 ```go
 
-srv := korm.WithDashboard()
+serverBus := korm.WithDashboard(korm.DashOpts{
+	ServerOpts: &ksbus.ServerOpts{
+		Address: "localhost:9313",
+	},
+})
 // or srv := korm.WithBus()
-srv.WithPprof(path ...string) // path is 'debug' by default
+serverBus.WithPprof(path ...string) // path is 'debug' by default
 
 will enable:
 	- /debug/pprof
@@ -1004,7 +1028,6 @@ Then to see the trace : `go tool trace path/to/trace`
 
 ### Metrics Prometheus
 ```go
-srv := korm.WithDashboard()
 // or srv := korm.WithBus()
 //srv.WithMetrics(httpHandler http.Handler, path ...string) path default to 'metrics'
 srv.WithMetrics(promhttp.Handler())
@@ -1015,7 +1038,6 @@ will enable:
 
 ### Logs middleware
 ```go
-srv := korm.WithDashboard()
 // or srv := korm.WithBus()
 //srv.WithMetrics(httpHandler http.Handler, path ...string) path default to 'metrics'
 srv.App.Use(ksmux.Logs()) // it take an optional callback executed on each request if you want to add log to a file or send
@@ -1299,7 +1321,11 @@ func main() {
 	}
 	defer korm.Shutdown()
 
-	server := korm.WithDashboard()
+	server := korm.WithDashboard(korm.DashOpts{
+		ServerOpts: &ksbus.ServerOpts{
+			Address: "localhost:9313",
+		},
+	})
 	korm.WithShell()
 
 	err = korm.AutoMigrate[Class]("classes")
@@ -1370,7 +1396,7 @@ func main() {
 	lg.CheckError(err)
 	fmt.Println("times =", times)
 
-	server.Run(":9313")
+	server.Run()
 }
 
 // OUTPUT
