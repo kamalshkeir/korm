@@ -92,7 +92,7 @@
 
 - Compatible with official database/sql,  so you can do your queries yourself using sql.DB  `korm.GetConnection()``, and overall a painless integration of your existing codebases using database/sql
 
-- [Router/Mux](https://github.com/kamalshkeir/ksmux) accessible from the serverBus after calling `korm.WithBus()` or `korm.WithDashboard()`
+- [Router/Mux](https://github.com/kamalshkeir/ksmux) accessible from the serverBus after calling `korm.WithBus(opts)` or `korm.WithDashboard(opts)`
 
 - [Hooks](#hooks) : OnInsert OnSet OnDelete and OnDrop
 
@@ -121,7 +121,7 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@latest // v1.92.7
+go get -u github.com/kamalshkeir/korm@latest // v1.92.8
 ```
 
 # Drivers moved outside this package to not get them all in your go.mod file
@@ -269,7 +269,7 @@ func main() {
 	lg.CheckError(err)
 	fmt.Println("times =", times)
 
-	server.Run(":9313")
+	server.Run()
 }
 
 // OUTPUT

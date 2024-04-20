@@ -11,35 +11,35 @@ import (
 var staticAndTemplatesFS []embed.FS
 
 func cloneAndMigrateDashboard(migrateUser bool, staticAndTemplatesEmbeded ...embed.FS) {
-	if _, err := os.Stat(AssetsDir); err != nil && !EmbededDashboard {
+	if _, err := os.Stat(assetsDir); err != nil && !embededDashboard {
 		// if not generated
-		cmd := exec.Command("git", "clone", "https://github.com/"+RepoUser+"/"+RepoName)
+		cmd := exec.Command("git", "clone", "https://github.com/"+repoUser+"/"+repoName)
 		err := cmd.Run()
 		if lg.CheckError(err) {
 			return
 		}
-		err = os.RemoveAll(RepoName + "/.git")
+		err = os.RemoveAll(repoName + "/.git")
 		if err != nil {
-			lg.ErrorC("unable to delete .git", "repo", RepoName, "err", err)
+			lg.ErrorC("unable to delete .git", "repo", repoName, "err", err)
 		}
-		err = os.Rename(RepoName, AssetsDir)
+		err = os.Rename(repoName, assetsDir)
 		if err != nil {
-			lg.ErrorC("unable to rename", "repo", RepoName, "err", err)
+			lg.ErrorC("unable to rename", "repo", repoName, "err", err)
 		}
 		lg.Printfs("grdashboard assets cloned\n")
 	}
 
 	if len(staticAndTemplatesEmbeded) > 0 {
 		staticAndTemplatesFS = staticAndTemplatesEmbeded
-		serverBus.App.EmbededStatics(staticAndTemplatesEmbeded[0], StaticDir, StaticUrl)
-		err := serverBus.App.EmbededTemplates(staticAndTemplatesEmbeded[1], TemplatesDir)
+		serverBus.App.EmbededStatics(staticAndTemplatesEmbeded[0], staticDir, staticUrl)
+		err := serverBus.App.EmbededTemplates(staticAndTemplatesEmbeded[1], templatesDir)
 		lg.CheckError(err)
 	} else {
-		serverBus.App.LocalStatics(StaticDir, StaticUrl)
-		err := serverBus.App.LocalTemplates(TemplatesDir)
+		serverBus.App.LocalStatics(staticDir, staticUrl)
+		err := serverBus.App.LocalTemplates(templatesDir)
 		lg.CheckError(err)
 	}
-	IsDashboardCloned = true
+	isDashboardCloned = true
 	if migrateUser {
 		err := AutoMigrate[User]("users")
 		if lg.CheckError(err) {

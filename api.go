@@ -36,7 +36,7 @@ var ApiIndexHandler = func(c *ksmux.Context) {
 		"tables":     registeredTables,
 		"tbMem":      m,
 		"tbMethods":  tableMethods,
-		"static_url": StaticUrl,
+		"static_url": staticUrl,
 		"EndWithSlash": func(str string) bool {
 			q := []rune(str)
 			return q[len(q)-1] == '/'
@@ -91,7 +91,7 @@ func RegisterTable[T any](table TableRegistration[T], gendocs ...bool) error {
 			return fmt.Errorf("table %v not registered, use korm.AutoMigrate before", *new(T))
 		}
 	}
-	if !IsDashboardCloned {
+	if !isDashboardCloned {
 		cloneAndMigrateDashboard(false)
 	}
 
@@ -245,7 +245,7 @@ func RegisterTable[T any](table TableRegistration[T], gendocs ...bool) error {
 		apiAllModels = wrapHandlerWithMiddlewares(apiAllModels, globalMiddws...)
 	}
 	var modType string
-	if IsDocsUsed {
+	if isDocsUsed {
 		modType = fmt.Sprintf("%T", *new(T))
 		if modType == "" {
 			return fmt.Errorf("could not find type of %T %v %s", *new(T), *new(T), modType)
@@ -261,32 +261,32 @@ func RegisterTable[T any](table TableRegistration[T], gendocs ...bool) error {
 			case "get", "GET":
 				getallRoute := app.Get(basePath+"/"+tbName, apiAllModels)
 				getsingleRoute := app.Get(basePath+"/"+tbName+"/:id", singleModelGet)
-				if IsDocsUsed && len(gendocs) == 1 && gendocs[0] {
+				if isDocsUsed && len(gendocs) == 1 && gendocs[0] {
 					getallRoute.Out("200 {array} "+modType+" 'all rows'", "400 {object} ksmuxdocs.DocsError 'error message'").Tags(tbName).Summary("Get all rows from " + tbName)
 					getsingleRoute.In("id path int required 'Pk column'").Out("200 {object} "+modType+" 'user model'", "400 {object} ksmuxdocs.DocsError 'error message'").Tags(tbName).Summary("Get single row from " + tbName)
 				}
 				tableMethods[tbName] = tableMethods[tbName] + ",get"
 			case "post", "POST":
 				postRoute := app.Post(basePath+"/"+tbName, modelCreate)
-				if IsDocsUsed && len(gendocs) == 1 && gendocs[0] {
+				if isDocsUsed && len(gendocs) == 1 && gendocs[0] {
 					postRoute.In("thebody body " + modType + " required 'create model'").Out("200 {object} ksmuxdocs.DocsSuccess 'success message'").Tags(tbName).Summary("Create new row in " + tbName)
 				}
 				tableMethods[tbName] = tableMethods[tbName] + ",post"
 			case "put", "PUT":
 				putRoute := app.Put(basePath+"/"+tbName+"/:id", singleModelPut)
-				if IsDocsUsed && len(gendocs) == 1 && gendocs[0] {
+				if isDocsUsed && len(gendocs) == 1 && gendocs[0] {
 					putRoute.In("id path int required 'Pk column'", "thebody body "+modType+" required 'model to update'").Out("200 {object} ksmuxdocs.DocsSuccess 'success message'", "400 {object} ksmuxdocs.DocsError 'error message'").Tags(tbName).Summary("Update a row from " + tbName)
 				}
 				tableMethods[tbName] = tableMethods[tbName] + ",put"
 			case "patch", "PATCH":
 				patchRoute := app.Patch(basePath+"/"+tbName+"/:id", singleModelPut)
-				if IsDocsUsed && len(gendocs) == 1 && gendocs[0] {
+				if isDocsUsed && len(gendocs) == 1 && gendocs[0] {
 					patchRoute.In("id path int required 'Pk column'", "thebody body "+modType+" required 'model to update'").Out("200 {object} ksmuxdocs.DocsSuccess 'success message'", "400 {object} ksmuxdocs.DocsError 'error message'").Tags(tbName).Summary("Update a row from " + tbName)
 				}
 				tableMethods[tbName] = tableMethods[tbName] + ",patch"
 			case "delete", "DELETE":
 				deleteRoute := app.Delete(basePath+"/"+tbName+"/:id", modelDelete)
-				if IsDocsUsed && len(gendocs) == 1 && gendocs[0] {
+				if isDocsUsed && len(gendocs) == 1 && gendocs[0] {
 					deleteRoute.In("id path int required 'Pk column'").Out("200 {object} ksmuxdocs.DocsSuccess 'success message'", "400 {object} ksmuxdocs.DocsError 'error message'").Tags(tbName).Summary("Delete a row from " + tbName)
 				}
 				tableMethods[tbName] = tableMethods[tbName] + ",delete"
@@ -298,7 +298,7 @@ func RegisterTable[T any](table TableRegistration[T], gendocs ...bool) error {
 				putRoute := app.Put(basePath+"/"+tbName+"/:id", singleModelPut)
 				patchRoute := app.Patch(basePath+"/"+tbName+"/:id", singleModelPut)
 				deleteRoute := app.Delete(basePath+"/"+tbName+"/:id", modelDelete)
-				if IsDocsUsed && len(gendocs) == 1 && gendocs[0] {
+				if isDocsUsed && len(gendocs) == 1 && gendocs[0] {
 					postRoute.In("thebody body " + modType + " required 'create model'").Out("200 {object} ksmuxdocs.DocsSuccess 'success message'").Tags(tbName).Summary("Create new row in " + tbName)
 					getallRoute.Out("200 {array} "+modType+" 'all rows'", "400 {object} ksmuxdocs.DocsError 'error message'").Tags(tbName).Summary("Get all rows from " + tbName)
 					getsingleRoute.In("id path int required 'Pk column'").Out("200 {object} "+modType+" 'user model'", "400 {object} ksmuxdocs.DocsError 'error message'").Tags(tbName).Summary("Get single row from " + tbName)
@@ -320,7 +320,7 @@ func RegisterTable[T any](table TableRegistration[T], gendocs ...bool) error {
 		patchRoute := app.Patch(basePath+"/"+tbName+"/:id", singleModelPut)
 		deleteRoute := app.Delete(basePath+"/"+tbName+"/:id", modelDelete)
 
-		if IsDocsUsed && len(gendocs) == 1 && gendocs[0] {
+		if isDocsUsed && len(gendocs) == 1 && gendocs[0] {
 			postRoute.In("thebody body " + modType + " required 'create model'").Out("200 {object} ksmuxdocs.DocsSuccess 'success message'").Tags(tbName).Summary("Create new row in " + tbName)
 			getallRoute.Out("200 {array} "+modType+" 'all rows'", "400 {object} ksmuxdocs.DocsError 'error message'").Tags(tbName).Summary("Get all rows from " + tbName)
 			getsingleRoute.In("id path int required 'Pk column'").Out("200 {object} "+modType+" 'user model'", "400 {object} ksmuxdocs.DocsError 'error message'").Tags(tbName).Summary("Get single row from " + tbName)

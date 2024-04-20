@@ -33,7 +33,7 @@ type BuilderM struct {
 	whereQuery string
 	offset     string
 	statement  string
-	database   string
+	db         *DatabaseEntity
 	args       []any
 	order      []string
 	ctx        context.Context
@@ -43,22 +43,27 @@ type BuilderM struct {
 func Table(tableName string) *BuilderM {
 	return &BuilderM{
 		tableName: tableName,
-		database:  databases[0].Name,
+		db:        &databases[0],
 	}
 }
 
 func BuilderMap() *BuilderM {
 	return &BuilderM{
-		database: databases[0].Name,
+		db: &databases[0],
 	}
 }
 
 // Database allow to choose database to execute query on
 func (b *BuilderM) Database(dbName string) *BuilderM {
 	if b == nil || b.tableName == "" {
-		return nil
+		lg.Error("korm.Table(tableName) first", "db", dbName)
+		return b
 	}
-	b.database = dbName
+	db, err := GetMemoryDatabase(dbName)
+	if lg.CheckError(err) {
+		db = &databases[0]
+	}
+	b.db = db
 	return b
 }
 
@@ -82,15 +87,7 @@ func (b *BuilderM) Where(query string, args ...any) *BuilderM {
 	if b == nil || b.tableName == "" {
 		return nil
 	}
-	if b.database == "" && len(databases) == 1 {
-		query = adaptConcatAndLen(query, databases[0].Dialect)
-	} else if b.database != "" {
-		db, err := GetMemoryDatabase(b.database)
-		if err == nil {
-			query = adaptConcatAndLen(query, db.Dialect)
-			b.database = db.Name
-		}
-	}
+	query = adaptConcatAndLen(query, b.db.Dialect)
 	adaptTimeToUnixArgs(&args)
 	b.whereQuery = query
 	b.args = append(b.args, args...)
@@ -103,19 +100,8 @@ func (b *BuilderM) WhereNamed(query string, args map[string]any) *BuilderM {
 	if b == nil || b.tableName == "" {
 		return nil
 	}
-	db := databases[0]
-	if b.database == "" && len(databases) == 1 {
-		query = adaptConcatAndLen(query, databases[0].Dialect)
-	} else if b.database != "" {
-		var err error
-		dbb, err := GetMemoryDatabase(b.database)
-		if err == nil {
-			query = adaptConcatAndLen(query, db.Dialect)
-			b.database = db.Name
-		}
-		db = *dbb
-	}
-	q, newargs, err := AdaptNamedParams(db.Dialect, query, args)
+	query = adaptConcatAndLen(query, b.db.Dialect)
+	q, newargs, err := AdaptNamedParams(b.db.Dialect, query, args)
 	if err != nil {
 		b.whereQuery = query
 		for _, v := range args {
@@ -218,7 +204,7 @@ func (b *BuilderM) All() ([]map[string]any, error) {
 	}
 
 	c := dbCache{
-		database:   b.database,
+		database:   b.db.Name,
 		table:      b.tableName,
 		selected:   b.selected,
 		statement:  b.statement,
@@ -276,8 +262,9 @@ func (b *BuilderM) One() (map[string]any, error) {
 	if b == nil || b.tableName == "" {
 		return nil, ErrTableNotFound
 	}
+
 	c := dbCache{
-		database:   b.database,
+		database:   b.db.Name,
 		table:      b.tableName,
 		selected:   b.selected,
 		statement:  b.statement,
@@ -319,7 +306,7 @@ func (b *BuilderM) One() (map[string]any, error) {
 		lg.InfoC("debug", "statement", b.statement, "args", b.args)
 	}
 
-	models, err := b.QueryM(b.statement, b.args...)
+	models, err := b.Database(b.db.Name).QueryM(b.statement, b.args...)
 	if err != nil {
 		return nil, err
 	}
@@ -343,19 +330,15 @@ func (b *BuilderM) Insert(rowData map[string]any) (int, error) {
 		return 0, ErrTableNotFound
 	}
 	if onInsert != nil {
-		err := onInsert(b.database, b.tableName, rowData)
+		err := onInsert(b.db.Name, b.tableName, rowData)
 		if err != nil {
 			return 0, err
 		}
 
 	}
-	db, err := GetMemoryDatabase(b.database)
-	if err != nil {
-		return 0, err
-	}
 	pk := ""
 	var tbmem TableEntity
-	for _, t := range db.Tables {
+	for _, t := range b.db.Tables {
 		if t.Name == b.tableName {
 			pk = t.Pk
 			tbmem = t
@@ -367,7 +350,7 @@ func (b *BuilderM) Insert(rowData map[string]any) (int, error) {
 	values := []any{}
 	count := 0
 	for k, v := range rowData {
-		switch db.Dialect {
+		switch b.db.Dialect {
 		case POSTGRES, SQLITE:
 			placeholdersSlice = append(placeholdersSlice, "$"+strconv.Itoa(count+1))
 		case MYSQL, MARIA:
@@ -407,15 +390,16 @@ func (b *BuilderM) Insert(rowData map[string]any) (int, error) {
 	stat.WriteString(")")
 	statement := stat.String()
 	var id int
-	if db.Dialect != POSTGRES {
+	if b.db.Dialect != POSTGRES {
 		if b.debug {
 			lg.InfoC("debug", "statement", b.statement, "args", values)
 		}
 		var res sql.Result
+		var err error
 		if b.ctx != nil {
-			res, err = db.Conn.ExecContext(b.ctx, statement, values...)
+			res, err = b.db.Conn.ExecContext(b.ctx, statement, values...)
 		} else {
-			res, err = db.Conn.Exec(statement, values...)
+			res, err = b.db.Conn.Exec(statement, values...)
 		}
 		if err != nil {
 			return 0, err
@@ -430,10 +414,11 @@ func (b *BuilderM) Insert(rowData map[string]any) (int, error) {
 		if b.debug {
 			lg.InfoC("debug", "statement", b.statement+" RETURNING "+pk, "args", values)
 		}
+		var err error
 		if b.ctx != nil {
-			err = db.Conn.QueryRowContext(b.ctx, statement+" RETURNING "+pk, values...).Scan(&id)
+			err = b.db.Conn.QueryRowContext(b.ctx, statement+" RETURNING "+pk, values...).Scan(&id)
 		} else {
-			err = db.Conn.QueryRow(statement+" RETURNING "+pk, values...).Scan(&id)
+			err = b.db.Conn.QueryRow(statement+" RETURNING "+pk, values...).Scan(&id)
 		}
 		if err != nil {
 			id = -1
@@ -449,19 +434,15 @@ func (b *BuilderM) InsertR(rowData map[string]any) (map[string]any, error) {
 		return nil, ErrTableNotFound
 	}
 	if onInsert != nil {
-		err := onInsert(b.database, b.tableName, rowData)
+		err := onInsert(b.db.Name, b.tableName, rowData)
 		if err != nil {
 			return nil, err
 		}
 
 	}
-	db, err := GetMemoryDatabase(b.database)
-	if err != nil {
-		return nil, err
-	}
 	pk := ""
 	var tbmem TableEntity
-	for _, t := range db.Tables {
+	for _, t := range b.db.Tables {
 		if t.Name == b.tableName {
 			pk = t.Pk
 			tbmem = t
@@ -473,7 +454,7 @@ func (b *BuilderM) InsertR(rowData map[string]any) (map[string]any, error) {
 	values := []any{}
 	count := 0
 	for k, v := range rowData {
-		switch db.Dialect {
+		switch b.db.Dialect {
 		case POSTGRES, SQLITE:
 			placeholdersSlice = append(placeholdersSlice, "$"+strconv.Itoa(count+1))
 		case MYSQL, MARIA:
@@ -517,12 +498,13 @@ func (b *BuilderM) InsertR(rowData map[string]any) (map[string]any, error) {
 		lg.InfoC("debug", "statement", statement, "args", values)
 	}
 	var id int
-	if db.Dialect != POSTGRES {
+	if b.db.Dialect != POSTGRES {
 		var res sql.Result
+		var err error
 		if b.ctx != nil {
-			res, err = db.Conn.ExecContext(b.ctx, statement, values...)
+			res, err = b.db.Conn.ExecContext(b.ctx, statement, values...)
 		} else {
-			res, err = db.Conn.Exec(statement, values...)
+			res, err = b.db.Conn.Exec(statement, values...)
 		}
 		if err != nil {
 			return nil, err
@@ -534,10 +516,11 @@ func (b *BuilderM) InsertR(rowData map[string]any) (map[string]any, error) {
 			id = int(rows)
 		}
 	} else {
+		var err error
 		if b.ctx != nil {
-			err = db.Conn.QueryRowContext(b.ctx, statement+" RETURNING "+pk, values...).Scan(&id)
+			err = b.db.Conn.QueryRowContext(b.ctx, statement+" RETURNING "+pk, values...).Scan(&id)
 		} else {
-			err = db.Conn.QueryRow(statement+" RETURNING "+pk, values...).Scan(&id)
+			err = b.db.Conn.QueryRow(statement+" RETURNING "+pk, values...).Scan(&id)
 		}
 		if err != nil {
 			return nil, err
@@ -556,19 +539,14 @@ func (b *BuilderM) BulkInsert(rowsData ...map[string]any) ([]int, error) {
 		return nil, ErrTableNotFound
 	}
 
-	db, err := GetMemoryDatabase(b.database)
-	if err != nil {
-		return nil, err
-	}
-
-	tx, err := db.Conn.BeginTx(context.Background(), &sql.TxOptions{})
+	tx, err := b.db.Conn.BeginTx(context.Background(), &sql.TxOptions{})
 	if err != nil {
 		return nil, err
 	}
 	ids := []int{}
 	pk := ""
 	var tbmem TableEntity
-	for _, t := range db.Tables {
+	for _, t := range b.db.Tables {
 		if t.Name == b.tableName {
 			pk = t.Pk
 			tbmem = t
@@ -576,7 +554,7 @@ func (b *BuilderM) BulkInsert(rowsData ...map[string]any) ([]int, error) {
 	}
 	for ii := range rowsData {
 		if onInsert != nil {
-			err := onInsert(b.database, b.tableName, rowsData[ii])
+			err := onInsert(b.db.Name, b.tableName, rowsData[ii])
 			if err != nil {
 				return nil, err
 			}
@@ -586,7 +564,7 @@ func (b *BuilderM) BulkInsert(rowsData ...map[string]any) ([]int, error) {
 		values := []any{}
 		count := 0
 		for k, v := range rowsData[ii] {
-			switch db.Dialect {
+			switch b.db.Dialect {
 			case POSTGRES, SQLITE:
 				placeholdersSlice = append(placeholdersSlice, "$"+strconv.Itoa(count+1))
 			case MYSQL, MARIA:
@@ -623,12 +601,13 @@ func (b *BuilderM) BulkInsert(rowsData ...map[string]any) ([]int, error) {
 		if b.debug {
 			lg.InfoC("debug", "statement", statement, "args", values)
 		}
-		if db.Dialect != POSTGRES {
+		if b.db.Dialect != POSTGRES {
 			var res sql.Result
+			var err error
 			if b.ctx != nil {
-				res, err = db.Conn.ExecContext(b.ctx, statement, values...)
+				res, err = b.db.Conn.ExecContext(b.ctx, statement, values...)
 			} else {
-				res, err = db.Conn.Exec(statement, values...)
+				res, err = b.db.Conn.Exec(statement, values...)
 			}
 			if err != nil {
 				errRoll := tx.Rollback()
@@ -645,9 +624,9 @@ func (b *BuilderM) BulkInsert(rowsData ...map[string]any) ([]int, error) {
 		} else {
 			var idInserted int
 			if b.ctx != nil {
-				err = db.Conn.QueryRowContext(b.ctx, statement+" RETURNING "+pk, values...).Scan(&idInserted)
+				err = b.db.Conn.QueryRowContext(b.ctx, statement+" RETURNING "+pk, values...).Scan(&idInserted)
 			} else {
-				err = db.Conn.QueryRow(statement+" RETURNING "+pk, values...).Scan(&idInserted)
+				err = b.db.Conn.QueryRow(statement+" RETURNING "+pk, values...).Scan(&idInserted)
 			}
 			if err != nil {
 				return ids, err
@@ -667,10 +646,6 @@ func (b *BuilderM) Set(query string, args ...any) (int, error) {
 	if b == nil || b.tableName == "" {
 		return 0, ErrTableNotFound
 	}
-	db, err := GetMemoryDatabase(b.database)
-	if err != nil {
-		return 0, err
-	}
 	if onSet != nil {
 		mToSet := map[string]any{}
 		sp := strings.Split(query, ",")
@@ -684,7 +659,7 @@ func (b *BuilderM) Set(query string, args ...any) (int, error) {
 				mToSet[strings.TrimSpace(sp[i])] = args[i]
 			}
 		}
-		err := onSet(b.database, b.tableName, mToSet)
+		err := onSet(b.db.Name, b.tableName, mToSet)
 		if err != nil {
 			return 0, err
 		}
@@ -695,17 +670,18 @@ func (b *BuilderM) Set(query string, args ...any) (int, error) {
 	adaptSetQuery(&query)
 	b.statement = "UPDATE " + b.tableName + " SET " + query + " WHERE " + b.whereQuery
 	adaptTimeToUnixArgs(&args)
-	adaptPlaceholdersToDialect(&b.statement, db.Dialect)
+	adaptPlaceholdersToDialect(&b.statement, b.db.Dialect)
 	args = append(args, b.args...)
 	if b.debug {
 		lg.InfoC("debug", "statement", b.statement, "args", args)
 	}
 
 	var res sql.Result
+	var err error
 	if b.ctx != nil {
-		res, err = db.Conn.ExecContext(b.ctx, b.statement, args...)
+		res, err = b.db.Conn.ExecContext(b.ctx, b.statement, args...)
 	} else {
-		res, err = db.Conn.Exec(b.statement, args...)
+		res, err = b.db.Conn.Exec(b.statement, args...)
 	}
 	if err != nil {
 		return 0, err
@@ -723,32 +699,28 @@ func (b *BuilderM) Delete() (int, error) {
 		return 0, ErrTableNotFound
 	}
 	if onDelete != nil {
-		err := onDelete(b.database, b.tableName, b.whereQuery, b.args...)
+		err := onDelete(b.db.Name, b.tableName, b.whereQuery, b.args...)
 		if err != nil {
 			return 0, err
 		}
 	}
-	db, err := GetMemoryDatabase(b.database)
-	if err != nil {
-		return 0, err
-	}
-
 	b.statement = "DELETE FROM " + b.tableName
 	if b.whereQuery != "" {
 		b.statement += " WHERE " + b.whereQuery
 	} else {
 		return 0, errors.New("no Where was given for this query:" + b.whereQuery)
 	}
-	adaptPlaceholdersToDialect(&b.statement, db.Dialect)
+	adaptPlaceholdersToDialect(&b.statement, b.db.Dialect)
 	if b.debug {
 		lg.InfoC("debug", "statement", b.statement, "args", b.args)
 	}
 
 	var res sql.Result
+	var err error
 	if b.ctx != nil {
-		res, err = db.Conn.ExecContext(b.ctx, b.statement, b.args...)
+		res, err = b.db.Conn.ExecContext(b.ctx, b.statement, b.args...)
 	} else {
-		res, err = db.Conn.Exec(b.statement, b.args...)
+		res, err = b.db.Conn.Exec(b.statement, b.args...)
 	}
 	if err != nil {
 		return 0, err
@@ -766,22 +738,18 @@ func (b *BuilderM) Drop() (int, error) {
 		return 0, ErrTableNotFound
 	}
 	if onDrop != nil {
-		err := onDrop(b.database, b.tableName)
+		err := onDrop(b.db.Name, b.tableName)
 		if err != nil {
 			return 0, err
 		}
 	}
-	db, err := GetMemoryDatabase(b.database)
-	if err != nil {
-		return 0, err
-	}
-
 	b.statement = "DROP TABLE IF EXISTS " + b.tableName
 	var res sql.Result
+	var err error
 	if b.ctx != nil {
-		res, err = db.Conn.ExecContext(b.ctx, b.statement)
+		res, err = b.db.Conn.ExecContext(b.ctx, b.statement)
 	} else {
-		res, err = db.Conn.Exec(b.statement)
+		res, err = b.db.Conn.Exec(b.statement)
 	}
 	if err != nil {
 		return 0, err
@@ -798,12 +766,11 @@ func (b *BuilderM) AddRelated(relatedTable string, whereRelatedTable string, whe
 	if b == nil || b.tableName == "" {
 		return 0, errors.New("unable to find model, try korm.AutoMigrate before")
 	}
-	db, _ := GetMemoryDatabase(b.database)
 
-	relationTableName := "m2m_" + b.tableName + "-" + b.database + "-" + relatedTable
-	if _, ok := relationsMap.Get("m2m_" + b.tableName + "-" + b.database + "-" + relatedTable); !ok {
-		relationTableName = "m2m_" + relatedTable + "-" + b.database + "-" + b.tableName
-		if _, ok2 := relationsMap.Get("m2m_" + relatedTable + "-" + b.database + "-" + b.tableName); !ok2 {
+	relationTableName := "m2m_" + b.tableName + "-" + b.db.Name + "-" + relatedTable
+	if _, ok := relationsMap.Get("m2m_" + b.tableName + "-" + b.db.Name + "-" + relatedTable); !ok {
+		relationTableName = "m2m_" + relatedTable + "-" + b.db.Name + "-" + b.tableName
+		if _, ok2 := relationsMap.Get("m2m_" + relatedTable + "-" + b.db.Name + "-" + b.tableName); !ok2 {
 			return 0, fmt.Errorf("no relations many to many between theses 2 tables: %s, %s", b.tableName, relatedTable)
 		}
 	}
@@ -832,7 +799,7 @@ func (b *BuilderM) AddRelated(relatedTable string, whereRelatedTable string, whe
 	}
 	ids := make([]any, 4)
 	adaptTimeToUnixArgs(&whereRelatedArgs)
-	whereRelatedTable = adaptConcatAndLen(whereRelatedTable, db.Dialect)
+	whereRelatedTable = adaptConcatAndLen(whereRelatedTable, b.db.Dialect)
 	data, err := Table(relatedTable).Where(whereRelatedTable, whereRelatedArgs...).One()
 	if err != nil {
 		return 0, err
@@ -876,17 +843,17 @@ func (b *BuilderM) AddRelated(relatedTable string, whereRelatedTable string, whe
 				relatedTable + "_id": ids[0],
 			}
 		}
-		err := onInsert(db.Name, relationTableName, mInsert)
+		err := onInsert(b.db.Name, relationTableName, mInsert)
 		if err != nil {
 			return 0, err
 		}
 	}
 	stat := "INSERT INTO " + relationTableName + "(" + cols + ") select ?,? WHERE NOT EXISTS (select * FROM " + relationTableName + " WHERE " + wherecols + ");"
-	adaptPlaceholdersToDialect(&stat, db.Dialect)
+	adaptPlaceholdersToDialect(&stat, b.db.Dialect)
 	if b.debug {
 		lg.InfoC("debug", "statement", stat, "args", ids)
 	}
-	err = Exec(b.database, stat, ids...)
+	err = Exec(b.db.Name, stat, ids...)
 	if err != nil {
 		return 0, err
 	}
@@ -898,10 +865,10 @@ func (b *BuilderM) GetRelated(relatedTable string, dest *[]map[string]any) error
 	if b == nil || b.tableName == "" {
 		return errors.New("unable to find model, try db.Table before")
 	}
-	relationTableName := "m2m_" + b.tableName + "-" + b.database + "-" + relatedTable
-	if _, ok := relationsMap.Get("m2m_" + b.tableName + "-" + b.database + "-" + relatedTable); !ok {
-		relationTableName = "m2m_" + relatedTable + "-" + b.database + "-" + b.tableName
-		if _, ok2 := relationsMap.Get("m2m_" + relatedTable + "-" + b.database + "-" + b.tableName); !ok2 {
+	relationTableName := "m2m_" + b.tableName + "-" + b.db.Name + "-" + relatedTable
+	if _, ok := relationsMap.Get("m2m_" + b.tableName + "-" + b.db.Name + "-" + relatedTable); !ok {
+		relationTableName = "m2m_" + relatedTable + "-" + b.db.Name + "-" + b.tableName
+		if _, ok2 := relationsMap.Get("m2m_" + relatedTable + "-" + b.db.Name + "-" + b.tableName); !ok2 {
 			return fmt.Errorf("no relations many to many between theses 2 tables: %s, %s", b.tableName, relatedTable)
 		}
 	}
@@ -955,7 +922,7 @@ func (b *BuilderM) GetRelated(relatedTable string, dest *[]map[string]any) error
 		lg.InfoC("debug", "statement", b.statement, "args", b.args)
 	}
 	var err error
-	*dest, err = Table(relationTableName).QueryM(b.statement, b.args...)
+	*dest, err = Table(relationTableName).Database(b.db.Name).QueryM(b.statement, b.args...)
 	if err != nil {
 		return err
 	}
@@ -968,10 +935,10 @@ func (b *BuilderM) JoinRelated(relatedTable string, dest *[]map[string]any) erro
 	if b == nil || b.tableName == "" {
 		return errors.New("unable to find model, try db.Table before")
 	}
-	relationTableName := "m2m_" + b.tableName + "-" + b.database + "-" + relatedTable
-	if _, ok := relationsMap.Get("m2m_" + b.tableName + "-" + b.database + "-" + relatedTable); !ok {
-		relationTableName = "m2m_" + relatedTable + "-" + b.database + "-" + b.tableName
-		if _, ok2 := relationsMap.Get("m2m_" + relatedTable + "-" + b.database + "-" + b.tableName); !ok2 {
+	relationTableName := "m2m_" + b.tableName + "-" + b.db.Name + "-" + relatedTable
+	if _, ok := relationsMap.Get("m2m_" + b.tableName + "-" + b.db.Name + "-" + relatedTable); !ok {
+		relationTableName = "m2m_" + relatedTable + "-" + b.db.Name + "-" + b.tableName
+		if _, ok2 := relationsMap.Get("m2m_" + relatedTable + "-" + b.db.Name + "-" + b.tableName); !ok2 {
 			return fmt.Errorf("no relations many to many between theses 2 tables: %s, %s", b.tableName, relatedTable)
 		}
 	}
@@ -1037,10 +1004,10 @@ func (b *BuilderM) DeleteRelated(relatedTable string, whereRelatedTable string, 
 	if b == nil || b.tableName == "" {
 		return 0, errors.New("unable to find model, try db.Table before")
 	}
-	relationTableName := "m2m_" + b.tableName + "-" + b.database + "-" + relatedTable
-	if _, ok := relationsMap.Get("m2m_" + b.tableName + "-" + b.database + "-" + relatedTable); !ok {
-		relationTableName = "m2m_" + relatedTable + "-" + b.database + "-" + b.tableName
-		if _, ok2 := relationsMap.Get("m2m_" + relatedTable + "-" + b.database + "-" + b.tableName); !ok2 {
+	relationTableName := "m2m_" + b.tableName + "-" + b.db.Name + "-" + relatedTable
+	if _, ok := relationsMap.Get("m2m_" + b.tableName + "-" + b.db.Name + "-" + relatedTable); !ok {
+		relationTableName = "m2m_" + relatedTable + "-" + b.db.Name + "-" + b.tableName
+		if _, ok2 := relationsMap.Get("m2m_" + relatedTable + "-" + b.db.Name + "-" + b.tableName); !ok2 {
 			return 0, fmt.Errorf("no relations many to many between theses 2 tables: %s, %s", b.tableName, relatedTable)
 		}
 	}
@@ -1065,14 +1032,7 @@ func (b *BuilderM) DeleteRelated(relatedTable string, whereRelatedTable string, 
 	}
 	ids := make([]any, 2)
 	adaptTimeToUnixArgs(&whereRelatedArgs)
-	if b.database == "" && len(databases) == 1 {
-		whereRelatedTable = adaptConcatAndLen(whereRelatedTable, databases[0].Dialect)
-	} else if b.database != "" {
-		db, err := GetMemoryDatabase(b.database)
-		if err == nil {
-			whereRelatedTable = adaptConcatAndLen(whereRelatedTable, db.Dialect)
-		}
-	}
+	whereRelatedTable = adaptConcatAndLen(whereRelatedTable, b.db.Dialect)
 
 	data, err := Table(relatedTable).Where(whereRelatedTable, whereRelatedArgs...).One()
 	if err != nil {
@@ -1109,21 +1069,11 @@ func (b *BuilderM) DeleteRelated(relatedTable string, whereRelatedTable string, 
 
 // QueryM query sql and return result as slice maps
 func (b *BuilderM) QueryM(statement string, args ...any) ([]map[string]any, error) {
-	var db *DatabaseEntity
-	if b.database != "" {
-		var err error
-		db, err = GetMemoryDatabase(b.database)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		db = &databases[0]
-	}
-	if db.Conn == nil {
+	if b.db.Conn == nil {
 		return nil, errors.New("no connection")
 	}
 	c := dbCache{
-		database:  db.Name,
+		database:  b.db.Name,
 		statement: statement,
 		args:      fmt.Sprint(args...),
 	}
@@ -1132,14 +1082,14 @@ func (b *BuilderM) QueryM(statement string, args ...any) ([]map[string]any, erro
 			return v.([]map[string]any), nil
 		}
 	}
-	adaptPlaceholdersToDialect(&statement, db.Dialect)
+	adaptPlaceholdersToDialect(&statement, b.db.Dialect)
 	adaptTimeToUnixArgs(&args)
 	var rows *sql.Rows
 	var err error
 	if b.ctx != nil {
-		rows, err = db.Conn.QueryContext(b.ctx, statement, args...)
+		rows, err = b.db.Conn.QueryContext(b.ctx, statement, args...)
 	} else {
-		rows, err = db.Conn.Query(statement, args...)
+		rows, err = b.db.Conn.Query(statement, args...)
 	}
 	if err == sql.ErrNoRows {
 		return nil, ErrNoData
@@ -1174,7 +1124,7 @@ func (b *BuilderM) QueryM(statement string, args ...any) ([]map[string]any, erro
 
 		m := map[string]any{}
 		for i := range columns {
-			if db.Dialect == MYSQL || db.Dialect == MARIA {
+			if b.db.Dialect == MYSQL || b.db.Dialect == MARIA {
 				if v, ok := modelsPtrs[i].([]byte); ok {
 					modelsPtrs[i] = string(v)
 				}
@@ -1200,19 +1150,7 @@ func (b *BuilderM) QueryM(statement string, args ...any) ([]map[string]any, erro
 //			"email":"email@mail.com",
 //	    })
 func (b *BuilderM) QueryMNamed(statement string, args map[string]any, unsafe ...bool) ([]map[string]any, error) {
-	var db *DatabaseEntity
-	dbn := databases[0].Name
-	if b.database != "" {
-		var err error
-		dbn = b.database
-		db, err = GetMemoryDatabase(dbn)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		db = &databases[0]
-	}
-	if db.Conn == nil {
+	if b.db.Conn == nil {
 		return nil, errors.New("no connection")
 	}
 	rgs := ""
@@ -1220,7 +1158,7 @@ func (b *BuilderM) QueryMNamed(statement string, args map[string]any, unsafe ...
 		rgs += fmt.Sprint(v)
 	}
 	c := dbCache{
-		database:  dbn,
+		database:  b.db.Name,
 		statement: statement,
 		args:      rgs,
 	}
@@ -1239,7 +1177,7 @@ func (b *BuilderM) QueryMNamed(statement string, args map[string]any, unsafe ...
 		}
 	} else {
 		var err error
-		query, newargs, err = AdaptNamedParams(db.Dialect, statement, args)
+		query, newargs, err = AdaptNamedParams(b.db.Dialect, statement, args)
 		if err != nil {
 			return nil, err
 		}
@@ -1247,9 +1185,9 @@ func (b *BuilderM) QueryMNamed(statement string, args map[string]any, unsafe ...
 	var rows *sql.Rows
 	var err error
 	if b.ctx != nil {
-		rows, err = db.Conn.QueryContext(b.ctx, query, newargs...)
+		rows, err = b.db.Conn.QueryContext(b.ctx, query, newargs...)
 	} else {
-		rows, err = db.Conn.Query(query, newargs...)
+		rows, err = b.db.Conn.Query(query, newargs...)
 	}
 	if err == sql.ErrNoRows {
 		return nil, ErrNoData
@@ -1284,7 +1222,7 @@ func (b *BuilderM) QueryMNamed(statement string, args map[string]any, unsafe ...
 
 		m := map[string]any{}
 		for i := range columns {
-			if db.Dialect == MYSQL || db.Dialect == MARIA {
+			if b.db.Dialect == MYSQL || b.db.Dialect == MARIA {
 				if v, ok := modelsPtrs[i].([]byte); ok {
 					modelsPtrs[i] = string(v)
 				}
@@ -1306,20 +1244,17 @@ func (b *BuilderM) queryS(ptrStrctSlice any, statement string, args ...any) erro
 	if b == nil || b.tableName == "" {
 		return ErrTableNotFound
 	}
-	db, err := GetMemoryDatabase(b.database)
-	if err != nil {
-		return err
-	}
-	adaptPlaceholdersToDialect(&statement, db.Dialect)
+	adaptPlaceholdersToDialect(&statement, b.db.Dialect)
 	adaptTimeToUnixArgs(&args)
-	if db.Conn == nil {
+	if b.db.Conn == nil {
 		return errors.New("no connection")
 	}
 	var rows *sql.Rows
+	var err error
 	if b.ctx != nil {
-		rows, err = db.Conn.QueryContext(b.ctx, statement, args...)
+		rows, err = b.db.Conn.QueryContext(b.ctx, statement, args...)
 	} else {
-		rows, err = db.Conn.Query(statement, args...)
+		rows, err = b.db.Conn.Query(statement, args...)
 	}
 	if err == sql.ErrNoRows {
 		return ErrNoData
@@ -1363,7 +1298,7 @@ func (b *BuilderM) queryS(ptrStrctSlice any, statement string, args ...any) erro
 		m := map[string]any{}
 		if b.selected != "" && b.selected != "*" {
 			for i, key := range strings.Split(b.selected, ",") {
-				if db.Dialect == MYSQL || db.Dialect == MARIA {
+				if b.db.Dialect == MYSQL || b.db.Dialect == MARIA {
 					if v, ok := modelsPtrs[i].([]byte); ok {
 						modelsPtrs[i] = string(v)
 					}
@@ -1372,7 +1307,7 @@ func (b *BuilderM) queryS(ptrStrctSlice any, statement string, args ...any) erro
 			}
 		} else {
 			for i, key := range columns {
-				if db.Dialect == MYSQL || db.Dialect == MARIA {
+				if b.db.Dialect == MYSQL || b.db.Dialect == MARIA {
 					if v, ok := modelsPtrs[i].([]byte); ok {
 						modelsPtrs[i] = string(v)
 					}

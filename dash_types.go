@@ -7,18 +7,18 @@ import (
 )
 
 var (
-	PaginationPer      = 10
-	EmbededDashboard   = false
-	IsDocsUsed         = false
-	IsDashboardCloned  = false
-	MediaDir           = "media"
-	DocsUrl            = "/docs"
-	StaticUrl          = "/static"
-	AssetsDir          = "assets"
-	StaticDir          = path.Join(AssetsDir, "/", "static")
-	TemplatesDir       = path.Join(AssetsDir, "/", "templates")
-	RepoUser           = "kamalshkeir"
-	RepoName           = "korm-dashboard"
+	paginationPer      = 10
+	embededDashboard   = false
+	isDocsUsed         = false
+	isDashboardCloned  = false
+	mediaDir           = "media"
+	docsUrl            = "/docs"
+	staticUrl          = "/static"
+	assetsDir          = "assets"
+	staticDir          = path.Join(assetsDir, "/", "static")
+	templatesDir       = path.Join(assetsDir, "/", "templates")
+	repoUser           = "kamalshkeir"
+	repoName           = "korm-dashboard"
 	adminPathNameGroup = "/admin"
 	// Debug when true show extra useful logs for queries executed for migrations and queries statements
 	Debug = false

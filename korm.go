@@ -252,20 +252,75 @@ func ManyToMany(table1, table2 string, dbName ...string) error {
 }
 
 // WithBus return ksbus.NewServer() that can be Run, RunTLS, RunAutoTLS
-func WithBus() *ksbus.Server {
+func WithBus(options ...ksbus.ServerOpts) *ksbus.Server {
 	if serverBus == nil {
-		serverBus = ksbus.NewServer()
+		serverBus = ksbus.NewServer(options...)
 	}
 	return serverBus
 }
 
+type DashOpts struct {
+	ServerOpts       *ksbus.ServerOpts
+	EmbededStatic    embed.FS
+	EmbededTemplates embed.FS
+	PaginatePer      int    // default 10
+	DocsUrl          string // default docs
+	MediaDir         string // default media
+	BaseDir          string // default assets
+	StaticDir        string // default BaseDir/static
+	TemplatesDir     string // default BaseDir/templates
+	Path             string // default /admin
+	RepoUser         string // default kamalshkeir
+	RepoName         string // default korm-dashboard
+}
+
 // WithDashboard enable admin dashboard
-func WithDashboard(staticAndTemplatesEmbeded ...embed.FS) *ksbus.Server {
-	EmbededDashboard = len(staticAndTemplatesEmbeded) > 0
-	if serverBus == nil {
-		serverBus = WithBus()
+func WithDashboard(opts DashOpts) *ksbus.Server {
+	embededDashboard = opts.EmbededStatic != embed.FS{} || opts.EmbededTemplates != embed.FS{}
+	staticAndTemplatesEmbeded := []embed.FS{}
+	if embededDashboard {
+		staticAndTemplatesEmbeded = append(staticAndTemplatesEmbeded, opts.EmbededStatic, opts.EmbededTemplates)
 	}
-	lg.UsePublisher(serverBus, "klog:logs")
+	if opts.PaginatePer > 0 {
+		paginationPer = opts.PaginatePer
+	}
+	if opts.DocsUrl != "" {
+		docsUrl = opts.DocsUrl
+	}
+	if opts.MediaDir != "" {
+		mediaDir = opts.MediaDir
+	}
+	if opts.BaseDir != "" {
+		assetsDir = opts.BaseDir
+	}
+	if opts.StaticDir != "" {
+		staticDir = opts.StaticDir
+	}
+	if opts.TemplatesDir != "" {
+		templatesDir = opts.TemplatesDir
+	}
+	if opts.RepoName != "" {
+		repoName = opts.RepoName
+	}
+	if opts.RepoUser != "" {
+		repoUser = opts.RepoUser
+	}
+
+	if opts.Path != "" {
+		if !strings.HasPrefix(opts.Path, "/") {
+			opts.Path = "/" + opts.Path
+		}
+		adminPathNameGroup = opts.Path
+	}
+
+	if serverBus == nil {
+		if opts.ServerOpts != nil {
+			serverBus = WithBus(*opts.ServerOpts)
+		} else {
+			serverBus = WithBus()
+		}
+	}
+	lg.UsePublisher(serverBus, "lg:logs")
 	cloneAndMigrateDashboard(true, staticAndTemplatesEmbeded...)
 	initAdminUrlPatterns(serverBus.App)
 	var razor = `
@@ -289,13 +344,13 @@ func WithDocs(generateJsonDocs bool, outJsonDocs string, handlerMiddlewares ...f
 	if outJsonDocs != "" {
 		ksmux.DocsOutJson = outJsonDocs
 	} else {
-		ksmux.DocsOutJson = StaticDir + "/docs"
+		ksmux.DocsOutJson = staticDir + "/docs"
 	}
 
-	IsDocsUsed = true
+	isDocsUsed = true
 	// check swag install and init docs.Routes slice
 	serverBus.App.WithDocs(generateJsonDocs)
-	webPath := DocsUrl
+	webPath := docsUrl
 	if webPath[0] != '/' {
 		webPath = "/" + webPath
 	}
@@ -320,9 +375,9 @@ func WithEmbededDocs(embeded embed.FS, embededDirPath string, handlerMiddlewares
 	if embededDirPath != "" {
 		ksmux.DocsOutJson = embededDirPath
 	} else {
-		ksmux.DocsOutJson = StaticDir + "/docs"
+		ksmux.DocsOutJson = staticDir + "/docs"
 	}
-	webPath := DocsUrl
+	webPath := docsUrl
 
 	ksmux.DocsOutJson = filepath.ToSlash(ksmux.DocsOutJson)
 	if webPath[0] != '/' {

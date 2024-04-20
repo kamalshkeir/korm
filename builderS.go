@@ -43,8 +43,13 @@ type BuilderS[T any] struct {
 // BuilderStruct empty query to struct starter, default db first connected
 func BuilderStruct[T any](model ...T) *BuilderS[T] {
 	return &BuilderS[T]{
-		db: &databases[0],
+		db: getDefaultDbEntity(),
 	}
+}
+
+func getDefaultDbEntity() *DatabaseEntity {
+	db, _ := GetMemoryDatabase(defaultDB)
+	return db
 }
 
 // Model is a starter for Buider
@@ -67,9 +72,10 @@ func Model[T any](model ...T) *BuilderS[T] {
 		}
 		return nil
 	}
+
 	return &BuilderS[T]{
 		tableName: tName,
-		db:        &databases[0],
+		db:        getDefaultDbEntity(),
 	}
 }
 
@@ -88,8 +94,9 @@ func ModelTable[T any](tableName string, model ...T) *BuilderS[T] {
 }
 
 // Database allow to choose database to execute query on
-func (b *BuilderS[T]) Database(dbName string, model ...T) *BuilderS[T] {
+func (b *BuilderS[T]) Database(dbName string) *BuilderS[T] {
 	if b == nil || b.tableName == "" {
+		lg.Error("korm.Model[T any]() first", "db", dbName)
 		return b
 	}
 	for i := range databases {

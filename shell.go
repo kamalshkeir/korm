@@ -212,7 +212,7 @@ func InitShell() bool {
 			ksmux.GenerateGoDocsComments()
 			ksmux.GenerateJsonDocs()
 		} else {
-			ksmux.DocsOutJson = "./" + StaticDir + "/docs"
+			ksmux.DocsOutJson = "./" + staticDir + "/docs"
 			_ = ksmux.CheckAndInstallSwagger()
 			ksmux.GenerateGoDocsComments()
 			ksmux.GenerateJsonDocs()

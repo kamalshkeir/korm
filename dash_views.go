@@ -31,7 +31,7 @@ func reverseSlice[T any](slice []T) []T {
 var LogsView = func(c *ksmux.Context) {
 	d := map[string]any{
 		"admin_path": adminPathNameGroup,
-		"static_url": StaticUrl,
+		"static_url": staticUrl,
 		"secure":     ksmux.IsTLS,
 	}
 	if v := lg.GetLogs(); v != nil {
@@ -41,10 +41,10 @@ var LogsView = func(c *ksmux.Context) {
 }
 
 var IndexView = func(c *ksmux.Context) {
-	allTables := GetAllTables()
+	allTables := GetAllTables(defaultDB)
 	c.Html("admin/admin_index.html", map[string]any{
 		"admin_path": adminPathNameGroup,
-		"static_url": StaticUrl,
+		"static_url": staticUrl,
 		"tables":     allTables,
 	})
 }
@@ -52,7 +52,7 @@ var IndexView = func(c *ksmux.Context) {
 var LoginView = func(c *ksmux.Context) {
 	c.Html("admin/admin_login.html", map[string]any{
 		"admin_path": adminPathNameGroup,
-		"static_url": StaticUrl,
+		"static_url": staticUrl,
 	})
 }
 
@@ -61,7 +61,7 @@ var LoginPOSTView = func(c *ksmux.Context) {
 	email := requestData["email"]
 	passRequest := requestData["password"]
 
-	data, err := Table("users").Where("email = ?", email).One()
+	data, err := Table("users").Database(defaultDB).Where("email = ?", email).One()
 	if err != nil {
 		c.Status(500).Json(map[string]any{
 			"error": err.Error(),
@@ -131,9 +131,9 @@ var AllModelsGet = func(c *ksmux.Context) {
 		}
 	}
 
-	rows, err := Table(model).OrderBy("-" + idString).Limit(PaginationPer).Page(1).All()
+	rows, err := Table(model).Database(defaultDB).OrderBy("-" + idString).Limit(paginationPer).Page(1).All()
 	if err != nil {
-		rows, err = Table(model).All()
+		rows, err = Table(model).Database(defaultDB).All()
 		if err != nil {
 			// usualy should not use error string because it divulge infkormation, but here only admin use it, so no worry
 			if err != ErrNoData {
@@ -187,7 +187,7 @@ var AllModelsGet = func(c *ksmux.Context) {
 			data["columns"] = dbCols
 		}
 		data["admin_path"] = adminPathNameGroup
-		data["static_url"] = StaticUrl
+		data["static_url"] = staticUrl
 		c.Html("admin/admin_all_models.html", data)
 	} else {
 		lg.ErrorC("table not found", "table", model)
@@ -206,7 +206,7 @@ var AllModelsSearch = func(c *ksmux.Context) {
 
 	body := c.BodyJson()
 
-	blder := Table(model)
+	blder := Table(model).Database(defaultDB)
 	if query, ok := body["query"]; ok {
 		if v, ok := query.(string); ok {
 			if v != "" {
@@ -221,7 +221,7 @@ var AllModelsSearch = func(c *ksmux.Context) {
 	}
 
 	oB := ""
-	t, err := GetMemoryTable(model)
+	t, err := GetMemoryTable(model, defaultDB)
 	if lg.CheckError(err) {
 		c.Json(map[string]any{
 			"error": err,
@@ -247,7 +247,7 @@ var AllModelsSearch = func(c *ksmux.Context) {
 		} else {
 			pagenum, err := strconv.Atoi(page)
 			if err == nil {
-				blder.Limit(PaginationPer).Page(pagenum)
+				blder.Limit(paginationPer).Page(pagenum)
 			} else {
 				c.Status(http.StatusBadRequest).Json(map[string]any{
 					"error": err.Error(),
@@ -256,7 +256,7 @@ var AllModelsSearch = func(c *ksmux.Context) {
 			}
 		}
 	} else {
-		blder.Limit(PaginationPer).Page(1)
+		blder.Limit(paginationPer).Page(1)
 	}
 
 	data, err := blder.All()
@@ -280,11 +280,11 @@ var DeleteRowPost = func(c *ksmux.Context) {
 		if model, ok := data["model_name"]; ok {
 			if mm, ok := model.(string); ok {
 				idString := "id"
-				t, _ := GetMemoryTable(mm)
+				t, _ := GetMemoryTable(mm, defaultDB)
 				if t.Pk != "" && t.Pk != "id" {
 					idString = t.Pk
 				}
-				modelDB, err := Table(mm).Where(idString+" = ?", data["id"]).One()
+				modelDB, err := Table(mm).Database(defaultDB).Where(idString+" = ?", data["id"]).One()
 				if lg.CheckError(err) {
 					lg.ErrorC("data received DeleteRowPost", "data", data)
 					c.Status(http.StatusBadRequest).Json(map[string]any{
@@ -299,7 +299,7 @@ var DeleteRowPost = func(c *ksmux.Context) {
 				}
 
 				if idS, ok := data["id"].(string); ok {
-					_, err = Table(mm).Where(idString+" = ?", idS).Delete()
+					_, err = Table(mm).Database(defaultDB).Where(idString+" = ?", idS).Delete()
 
 					if err != nil {
 						c.Status(http.StatusBadRequest).Json(map[string]any{
@@ -371,7 +371,7 @@ var CreateModelView = func(c *ksmux.Context) {
 			}
 		}
 	}
-	_, err := Table(model).Insert(m)
+	_, err := Table(model).Database(defaultDB).Insert(m)
 	if err != nil {
 		lg.ErrorC("CreateModelView error", "err", err)
 		c.Status(http.StatusBadRequest).Json(map[string]any{
@@ -401,12 +401,12 @@ var SingleModelGet = func(c *ksmux.Context) {
 		return
 	}
 	idString := "id"
-	t, _ := GetMemoryTable(model)
+	t, _ := GetMemoryTable(model, defaultDB)
 	if t.Pk != "" && t.Pk != "id" {
 		idString = t.Pk
 	}
 
-	modelRow, err := Table(model).Where(idString+" = ?", id).One()
+	modelRow, err := Table(model).Database(defaultDB).Where(idString+" = ?", id).One()
 	if lg.CheckError(err) {
 		c.Status(http.StatusBadRequest).Json(map[string]any{
 			"error": err.Error(),
@@ -421,7 +421,7 @@ var SingleModelGet = func(c *ksmux.Context) {
 			spTo := strings.Split(fkey.ToTableField, ".")
 			if len(spTo) == 2 {
 				q := "select " + spTo[1] + " from " + spTo[0] + " order by " + spTo[1]
-				mm, err := Table(spTo[0]).QueryM(q)
+				mm, err := Table(spTo[0]).Database(defaultDB).QueryM(q)
 				if !lg.CheckError(err) {
 					ress := []any{}
 					for _, res := range mm {
@@ -436,7 +436,7 @@ var SingleModelGet = func(c *ksmux.Context) {
 	}
 	c.Html("admin/admin_single_model.html", map[string]any{
 		"admin_path": adminPathNameGroup,
-		"static_url": StaticUrl,
+		"static_url": staticUrl,
 		"model":      modelRow,
 		"model_name": model,
 		"id":         id,
@@ -452,7 +452,7 @@ var UpdateRowPost = func(c *ksmux.Context) {
 	data, files := c.ParseMultipartForm()
 	id := data["row_id"][0]
 	idString := "id"
-	t, _ := GetMemoryTable(data["table"][0])
+	t, _ := GetMemoryTable(data["table"][0], defaultDB)
 	if t.Pk != "" && t.Pk != "id" {
 		idString = t.Pk
 	}
@@ -464,7 +464,7 @@ var UpdateRowPost = func(c *ksmux.Context) {
 		return
 	}
 
-	modelDB, err := Table(data["table"][0]).Where(idString+" = ?", id).One()
+	modelDB, err := Table(data["table"][0]).Database(defaultDB).Where(idString+" = ?", id).One()
 
 	if err != nil {
 		c.Status(http.StatusBadRequest).Json(map[string]any{
@@ -498,7 +498,7 @@ var UpdateRowPost = func(c *ksmux.Context) {
 		}
 	}
 	if s != "" {
-		_, err := Table(data["table"][0]).Where(idString+" = ?", id).Set(s, values...)
+		_, err := Table(data["table"][0]).Database(defaultDB).Where(idString+" = ?", id).Set(s, values...)
 		if err != nil {
 			c.Status(http.StatusBadRequest).Json(map[string]any{
 				"error": err.Error(),
@@ -535,11 +535,11 @@ func handleFilesUpload(files map[string][]*multipart.FileHeader, model string, i
 		for key, val := range files {
 			file, _ := val[0].Open()
 			defer file.Close()
-			uploadedImage, err := uploadMultipartFile(file, val[0].Filename, MediaDir+"/uploads/")
+			uploadedImage, err := uploadMultipartFile(file, val[0].Filename, mediaDir+"/uploads/")
 			if err != nil {
 				return err
 			}
-			row, err := Table(model).Where(idString+" = ?", id).One()
+			row, err := Table(model).Database(defaultDB).Where(idString+" = ?", id).One()
 			if err != nil {
 				return err
 			}
@@ -550,13 +550,13 @@ func handleFilesUpload(files map[string][]*multipart.FileHeader, model string, i
 				if v, ok := database_image.(string); ok || okDB {
 					err := c.DeleteFile(v)
 					if err != nil {
-						//le fichier existe pas
-						_, err := Table(model).Where(idString+" = ?", id).Set(key+" = ?", uploadedImage)
+						//le fichier n'existe pas
+						_, err := Table(model).Database(defaultDB).Where(idString+" = ?", id).Set(key+" = ?", uploadedImage)
 						lg.CheckError(err)
 						continue
 					} else {
 						//le fichier existe et donc supprimer
-						_, err := Table(model).Where(idString+" = ?", id).Set(key+" = ?", uploadedImage)
+						_, err := Table(model).Database(defaultDB).Where(idString+" = ?", id).Set(key+" = ?", uploadedImage)
 						lg.CheckError(err)
 						continue
 					}
@@ -572,7 +572,7 @@ var DropTablePost = func(c *ksmux.Context) {
 	data := c.BodyJson()
 	if table, ok := data["table"]; ok && table != "" {
 		if t, ok := data["table"].(string); ok {
-			_, err := Table(t).Drop()
+			_, err := Table(t).Database(defaultDB).Drop()
 			if lg.CheckError(err) {
 				c.Status(http.StatusBadRequest).Json(map[string]any{
 					"error": err.Error(),
@@ -602,7 +602,7 @@ var ExportView = func(c *ksmux.Context) {
 		})
 		return
 	}
-	data, err := Table(table).All()
+	data, err := Table(table).Database(defaultDB).All()
 	lg.CheckError(err)
 
 	data_bytes, err := json.Marshal(data)
@@ -619,13 +619,13 @@ var ExportCSVView = func(c *ksmux.Context) {
 		})
 		return
 	}
-	data, err := Table(table).All()
+	data, err := Table(table).Database(defaultDB).All()
 	lg.CheckError(err)
 	var buff bytes.Buffer
 	writer := csv.NewWriter(&buff)
 
 	cols := []string{}
-	tab, _ := GetMemoryTable(table)
+	tab, _ := GetMemoryTable(table, defaultDB)
 	if len(tab.Columns) > 0 {
 		cols = tab.Columns
 	} else if len(data) > 0 {
@@ -678,7 +678,7 @@ var ImportView = func(c *ksmux.Context) {
 		})
 		return
 	}
-	t, err := GetMemoryTable(table)
+	t, err := GetMemoryTable(table, defaultDB)
 	if lg.CheckError(err) {
 		c.Status(http.StatusBadRequest).Json(map[string]any{
 			"error": err.Error(),
@@ -696,12 +696,12 @@ var ImportView = func(c *ksmux.Context) {
 	isCsv := strings.HasSuffix(fname, ".csv")
 
 	// get old data and backup
-	modelsOld, _ := Table(table).All()
+	modelsOld, _ := Table(table).Database(defaultDB).All()
 	if len(modelsOld) > 0 {
 		modelsOldBytes, err := json.Marshal(modelsOld)
 		if !lg.CheckError(err) {
-			_ = os.MkdirAll(MediaDir+"/backup/", 0770)
-			dst, err := os.Create(MediaDir + "/backup/" + table + "-" + time.Now().Format("2006-01-02") + ".json")
+			_ = os.MkdirAll(mediaDir+"/backup/", 0770)
+			dst, err := os.Create(mediaDir + "/backup/" + table + "-" + time.Now().Format("2006-01-02") + ".json")
 			lg.CheckError(err)
 			defer dst.Close()
 			_, err = dst.Write(modelsOldBytes)
@@ -741,7 +741,7 @@ var ImportView = func(c *ksmux.Context) {
 	// create models in database
 	var retErr []error
 	for _, m := range list_map {
-		_, err = Table(table).Insert(m)
+		_, err = Table(table).Database(defaultDB).Insert(m)
 		if err != nil {
 			retErr = append(retErr, err)
 		}
@@ -754,38 +754,38 @@ var ImportView = func(c *ksmux.Context) {
 	}
 
 	c.Json(map[string]any{
-		"success": "Import Done , you can see uploaded backups at ./" + MediaDir + "/backup folder",
+		"success": "Import Done , you can see uploaded backups at ./" + mediaDir + "/backup folder",
 	})
 }
 
 var ManifestView = func(c *ksmux.Context) {
-	if EmbededDashboard {
-		f, err := staticAndTemplatesFS[0].ReadFile(StaticDir + "/manifest.json")
+	if embededDashboard {
+		f, err := staticAndTemplatesFS[0].ReadFile(staticDir + "/manifest.json")
 		if err != nil {
 			lg.ErrorC("cannot embed manifest.json", "err", err)
 			return
 		}
 		c.ServeEmbededFile("application/json; charset=utf-8", f)
 	} else {
-		c.ServeFile("application/json; charset=utf-8", StaticDir+"/manifest.json")
+		c.ServeFile("application/json; charset=utf-8", staticDir+"/manifest.json")
 	}
 }
 
 var ServiceWorkerView = func(c *ksmux.Context) {
-	if EmbededDashboard {
-		f, err := staticAndTemplatesFS[0].ReadFile(StaticDir + "/sw.js")
+	if embededDashboard {
+		f, err := staticAndTemplatesFS[0].ReadFile(staticDir + "/sw.js")
 		if err != nil {
 			lg.ErrorC("cannot embed sw.js", "err", err)
 			return
 		}
 		c.ServeEmbededFile("application/javascript; charset=utf-8", f)
 	} else {
-		c.ServeFile("application/javascript; charset=utf-8", StaticDir+"/sw.js")
+		c.ServeFile("application/javascript; charset=utf-8", staticDir+"/sw.js")
 	}
 }
 
 var RobotsTxtView = func(c *ksmux.Context) {
-	c.ServeFile("text/plain; charset=utf-8", "."+StaticUrl+"/robots.txt")
+	c.ServeFile("text/plain; charset=utf-8", "."+staticUrl+"/robots.txt")
 }
 
 var OfflineView = func(c *ksmux.Context) {
@@ -795,7 +795,7 @@ var OfflineView = func(c *ksmux.Context) {
 func uploadMultipartFile(file multipart.File, filename string, outPath string, acceptedFormats ...string) (string, error) {
 	//create destination file making sure the path is writeable.
 	if outPath == "" {
-		outPath = MediaDir + "/uploads/"
+		outPath = mediaDir + "/uploads/"
 	} else {
 		if !strings.HasSuffix(outPath, "/") {
 			outPath += "/"

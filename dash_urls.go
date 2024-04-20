@@ -22,9 +22,9 @@ func init() {
 }
 
 func initAdminUrlPatterns(r *ksmux.Router) {
-	media_root := http.FileServer(http.Dir("./" + MediaDir))
-	r.Get(`/`+MediaDir+`/*path`, func(c *ksmux.Context) {
-		http.StripPrefix("/"+MediaDir+"/", media_root).ServeHTTP(c.ResponseWriter, c.Request)
+	media_root := http.FileServer(http.Dir("./" + mediaDir))
+	r.Get(`/`+mediaDir+`/*path`, func(c *ksmux.Context) {
+		http.StripPrefix("/"+mediaDir+"/", media_root).ServeHTTP(c.ResponseWriter, c.Request)
 	})
 	r.Get("/mon/ping", func(c *ksmux.Context) { c.Status(200).Text("pong") })
 	r.Get("/offline", OfflineView)
