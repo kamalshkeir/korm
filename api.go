@@ -8,6 +8,7 @@ import (
 
 	"github.com/kamalshkeir/ksbus"
 	"github.com/kamalshkeir/ksmux"
+	"github.com/kamalshkeir/lg"
 )
 
 var (
@@ -46,6 +47,7 @@ var ApiIndexHandler = func(c *ksmux.Context) {
 
 func WithAPI(rootPath string, middws ...func(handler ksmux.Handler) ksmux.Handler) *ksbus.Server {
 	if serverBus == nil {
+		lg.DebugC("using default bus :9313")
 		serverBus = WithBus()
 	}
 	if rootPath != "" {

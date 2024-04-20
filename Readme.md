@@ -92,7 +92,7 @@
 
 - Compatible with official database/sql,  so you can do your queries yourself using sql.DB  `korm.GetConnection()``, and overall a painless integration of your existing codebases using database/sql
 
-- [Router/Mux](https://github.com/kamalshkeir/ksmux) accessible from the serverBus after calling `korm.WithBus(opts)` or `korm.WithDashboard(opts)`
+- [Router/Mux](https://github.com/kamalshkeir/ksmux) accessible from the serverBus after calling `korm.WithBus(...opts)` or `korm.WithDashboard(addr, ...opts)`
 
 - [Hooks](#hooks) : OnInsert OnSet OnDelete and OnDrop
 
@@ -121,7 +121,7 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@latest // v1.92.8
+go get -u github.com/kamalshkeir/korm@latest // v1.92.9
 ```
 
 # Drivers moved outside this package to not get them all in your go.mod file
@@ -195,11 +195,7 @@ func main() {
 	}
 	defer korm.Shutdown()
 
-	server := korm.WithDashboard(korm.DashOpts{
-		ServerOpts: &ksbus.ServerOpts{
-			Address: ":9313",
-		},
-	})
+	server := korm.WithDashboard(":9313")
 	korm.WithShell()
 
 	err = korm.AutoMigrate[Class]("classes")
@@ -353,8 +349,8 @@ korm.To[T any](dest *[]T, nestedSlice ...bool) *Selector[T] // scan query to any
 (sl *Selector[T]) Ctx(ct context.Context) *Selector[T]
 (sl *Selector[T]) Query(statement string, args ...any) error
 (sl *Selector[T]) Named(statement string, args map[string]any, unsafe ...bool) error
-korm.WithBus() *ksbus.Server // Usage: WithBus() or share an existing one
-korm.WithDashboard(staticAndTemplatesEmbeded ...embed.FS) *ksbus.Server
+korm.WithBus(...opts) *ksbus.Server // Usage: WithBus(...opts) or share an existing one
+korm.WithDashboard(address, ...opts) *ksbus.Server
 korm.WithShell()
 korm.WithDocs(generateJsonDocs bool, outJsonDocs string, handlerMiddlewares ...func(handler kmux.Handler) kmux.Handler) *ksbus.Server
 korm.WithEmbededDocs(embeded embed.FS, embededDirPath string, handlerMiddlewares ...func(handler kmux.Handler) kmux.Handler) *ksbus.Server
@@ -575,11 +571,7 @@ func main() {
 
 
 
-	serverBus := korm.WithDashboard(korm.DashOpts{
-		ServerOpts: &ksbus.ServerOpts{
-			Address: "localhost:9313",
-		},
-	})
+	serverBus := korm.WithDashboard("localhost:9313")
 	korm.WithShell()
 	// you can overwrite Admin and Auth middleware used for dashboard (dash_middlewares.go) 
 	//korm.Auth = func(handler ksmux.Handler) ksmux.Handler {}
@@ -627,11 +619,7 @@ func main() {
 	}
 	defer korm.Shutdown()
 	
-	srv := korm.WithDashboard(korm.DashOpts{
-		ServerOpts: &ksbus.ServerOpts{
-			Address: "localhost:9313",
-		},
-	})
+	srv := korm.WithDashboard("localhost:9313")
 	korm.WithShell()
 	lg.Printfs("mgrunning on http://localhost:9313\n")
 	app := srv.App
@@ -789,11 +777,7 @@ func main() {
 	}
 	defer korm.Shutdown()
 
-	serverBus := korm.WithDashboard(korm.DashOpts{
-		ServerOpts: &ksbus.ServerOpts{
-			Address: "localhost:9313",
-		},
-	})
+	serverBus := korm.WithDashboard("localhost:9313")
 	korm.WithShell() // to enable shell
 	app := bus.App
 	lg.Printfs("mgrunning on http://localhost:9313\n")
@@ -861,7 +845,18 @@ func main() {
 	if lg.CheckError(err) {return}
 
 	korm.WithShell()
-	serverBus := korm.WithBus(ksbus.NewServer())
+	serverBus := korm.WithBus(ksbus.ServerOpts{
+		ID              string
+		Address         string
+		Path            string
+		OnWsClose       func(connID string)
+		OnDataWS        func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) error
+		OnServerData    func(data any, conn *ws.Conn)
+		OnId            func(data map[string]any)
+		OnUpgradeWs     func(r *http.Request) bool
+		WithOtherRouter *ksmux.Router
+		WithOtherBus    *Bus
+	})
 	// handler authentication	
 	korm.BeforeDataWS(func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) bool {
 		lg.Info("handle authentication here")
@@ -907,7 +902,18 @@ func main() {
 	if lg.CheckError(err) {return}
 
 	korm.WithShell() // if dashboard used, this line should be after it
-	serverBus := korm.WithBus(ksbus.NewServer())
+	serverBus := korm.WithBus(ksbus.ServerOpts{
+		ID              string
+		Address         string
+		Path            string
+		OnWsClose       func(connID string)
+		OnDataWS        func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) error
+		OnServerData    func(data any, conn *ws.Conn)
+		OnId            func(data map[string]any)
+		OnUpgradeWs     func(r *http.Request) bool
+		WithOtherRouter *ksmux.Router
+		WithOtherBus    *Bus
+	})
 
 	korm.BeforeServersData(func(data any, conn *ws.Conn) {
         lg.Info("recv", "data", data)
@@ -990,11 +996,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	serverBus := korm.WithDashboard(korm.DashOpts{
-		ServerOpts: &ksbus.ServerOpts{
-			Address: "localhost:9313",
-		},
-	})
+	serverBus := korm.WithDashboard("localhost:9313")
 	korm.WithShell()
 	mux := serverBus.App
 	// add global middlewares
@@ -1007,11 +1009,7 @@ func main() {
 ### Pprof
 ```go
 
-serverBus := korm.WithDashboard(korm.DashOpts{
-	ServerOpts: &ksbus.ServerOpts{
-		Address: "localhost:9313",
-	},
-})
+serverBus := korm.WithDashboard("localhost:9313")
 // or srv := korm.WithBus()
 serverBus.WithPprof(path ...string) // path is 'debug' by default
 
@@ -1321,11 +1319,7 @@ func main() {
 	}
 	defer korm.Shutdown()
 
-	server := korm.WithDashboard(korm.DashOpts{
-		ServerOpts: &ksbus.ServerOpts{
-			Address: "localhost:9313",
-		},
-	})
+	server := korm.WithDashboard("localhost:9313")
 	korm.WithShell()
 
 	err = korm.AutoMigrate[Class]("classes")

@@ -255,6 +255,8 @@ func ManyToMany(table1, table2 string, dbName ...string) error {
 func WithBus(options ...ksbus.ServerOpts) *ksbus.Server {
 	if serverBus == nil {
 		serverBus = ksbus.NewServer(options...)
+	} else {
+		lg.DebugC("another bus already registered, returning it")
 	}
 	return serverBus
 }
@@ -275,53 +277,74 @@ type DashOpts struct {
 }
 
 // WithDashboard enable admin dashboard
-func WithDashboard(opts DashOpts) *ksbus.Server {
-	embededDashboard = opts.EmbededStatic != embed.FS{} || opts.EmbededTemplates != embed.FS{}
+func WithDashboard(addr string, options ...DashOpts) *ksbus.Server {
+	var opts *DashOpts
 	staticAndTemplatesEmbeded := []embed.FS{}
-	if embededDashboard {
-		staticAndTemplatesEmbeded = append(staticAndTemplatesEmbeded, opts.EmbededStatic, opts.EmbededTemplates)
-	}
-	if opts.PaginatePer > 0 {
-		paginationPer = opts.PaginatePer
-	}
-	if opts.DocsUrl != "" {
-		docsUrl = opts.DocsUrl
-	}
-	if opts.MediaDir != "" {
-		mediaDir = opts.MediaDir
-	}
-	if opts.BaseDir != "" {
-		assetsDir = opts.BaseDir
-	}
-	if opts.StaticDir != "" {
-		staticDir = opts.StaticDir
-	}
-	if opts.TemplatesDir != "" {
-		templatesDir = opts.TemplatesDir
-	}
-	if opts.RepoName != "" {
-		repoName = opts.RepoName
-	}
-	if opts.RepoUser != "" {
-		repoUser = opts.RepoUser
-	}
-
-	if opts.Path != "" {
-		if !strings.HasPrefix(opts.Path, "/") {
-			opts.Path = "/" + opts.Path
+	if len(options) > 0 {
+		opts = &options[0]
+		embededDashboard = opts.EmbededStatic != embed.FS{} || opts.EmbededTemplates != embed.FS{}
+		if embededDashboard {
+			staticAndTemplatesEmbeded = append(staticAndTemplatesEmbeded, opts.EmbededStatic, opts.EmbededTemplates)
 		}
-		adminPathNameGroup = opts.Path
+		if opts.PaginatePer > 0 {
+			paginationPer = opts.PaginatePer
+		}
+		if opts.DocsUrl != "" {
+			docsUrl = opts.DocsUrl
+		}
+		if opts.MediaDir != "" {
+			mediaDir = opts.MediaDir
+		}
+		if opts.BaseDir != "" {
+			assetsDir = opts.BaseDir
+		}
+		if opts.StaticDir != "" {
+			staticDir = opts.StaticDir
+		}
+		if opts.TemplatesDir != "" {
+			templatesDir = opts.TemplatesDir
+		}
+		if opts.RepoName != "" {
+			repoName = opts.RepoName
+		}
+		if opts.RepoUser != "" {
+			repoUser = opts.RepoUser
+		}
+		if opts.Path != "" {
+			if !strings.HasPrefix(opts.Path, "/") {
+				opts.Path = "/" + opts.Path
+			}
+			adminPathNameGroup = opts.Path
+		}
+		if serverBus == nil {
+			if opts.ServerOpts != nil {
+				if addr != "" && opts.ServerOpts.Address != addr {
+					opts.ServerOpts.Address = addr
+				} else if addr == "" && opts.ServerOpts.Address == "" {
+					lg.InfoC("no address specified, using :9313")
+				}
+			} else {
+				if addr != "" {
+					opts.ServerOpts = &ksbus.ServerOpts{
+						Address: addr,
+					}
+				} else {
+					lg.InfoC("no address specified, using :9313")
+				}
+			}
+		}
 	}
 
 	if serverBus == nil {
-		if opts.ServerOpts != nil {
+		if opts != nil {
 			serverBus = WithBus(*opts.ServerOpts)
 		} else {
 			serverBus = WithBus()
 		}
 	}
-	lg.UsePublisher(serverBus, "lg:logs")
 	cloneAndMigrateDashboard(true, staticAndTemplatesEmbeded...)
+	lg.Debug("DEBUG WithDashboard", "embeded", embededDashboard)
+	lg.UsePublisher(serverBus, "lg:logs")
 	initAdminUrlPatterns(serverBus.App)
 	var razor = `
                                __
@@ -338,6 +361,7 @@ func WithDashboard(opts DashOpts) *ksbus.Server {
 // WithDocs enable swagger docs at DocsUrl default to '/docs/'
 func WithDocs(generateJsonDocs bool, outJsonDocs string, handlerMiddlewares ...func(handler ksmux.Handler) ksmux.Handler) *ksbus.Server {
 	if serverBus == nil {
+		lg.DebugC("using default bus :9313")
 		serverBus = WithBus()
 	}
 
@@ -370,6 +394,7 @@ func WithDocs(generateJsonDocs bool, outJsonDocs string, handlerMiddlewares ...f
 // WithEmbededDocs same as WithDocs but embeded, enable swagger docs at DocsUrl default to '/docs/'
 func WithEmbededDocs(embeded embed.FS, embededDirPath string, handlerMiddlewares ...func(handler ksmux.Handler) ksmux.Handler) *ksbus.Server {
 	if serverBus == nil {
+		lg.DebugC("using default bus :9313")
 		serverBus = WithBus()
 	}
 	if embededDirPath != "" {
@@ -405,7 +430,10 @@ func WithEmbededDocs(embeded embed.FS, embededDirPath string, handlerMiddlewares
 // WithMetrics enable path /metrics (default), it take http.Handler like promhttp.Handler()
 func WithMetrics(httpHandler http.Handler) *ksbus.Server {
 	if serverBus == nil {
+		lg.DebugC("using default bus :9313")
 		serverBus = WithBus()
+		serverBus.WithMetrics(httpHandler)
+		return serverBus
 	}
 	serverBus.WithMetrics(httpHandler)
 	return serverBus
@@ -414,7 +442,10 @@ func WithMetrics(httpHandler http.Handler) *ksbus.Server {
 // WithPprof enable std library pprof at /debug/pprof, prefix default to 'debug'
 func WithPprof(path ...string) *ksbus.Server {
 	if serverBus == nil {
+		lg.DebugC("using default bus :9313")
 		serverBus = WithBus()
+		serverBus.WithPprof(path...)
+		return serverBus
 	}
 	serverBus.WithPprof(path...)
 	return serverBus

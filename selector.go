@@ -13,30 +13,32 @@ import (
 )
 
 type Selector[T any] struct {
-	dbName  string
 	nested  bool
 	debug   bool
 	ctx     context.Context
+	db      *DatabaseEntity
 	dest    *[]T
 	nocache bool
 }
 
 func To[T any](dest *[]T, nestedSlice ...bool) *Selector[T] {
-	if len(nestedSlice) > 0 && nestedSlice[0] {
-		return &Selector[T]{
-			nested: true,
-			dest:   dest,
-		}
-	} else {
-		return &Selector[T]{
-			nested: false,
-			dest:   dest,
-		}
+	s := &Selector[T]{
+		dest: dest,
+		db:   &databases[0],
 	}
+	if len(nestedSlice) > 0 && nestedSlice[0] {
+		s.nested = true
+	}
+	return s
 }
 
 func (sl *Selector[T]) Database(dbName string) *Selector[T] {
-	sl.dbName = dbName
+	db, err := GetMemoryDatabase(dbName)
+	if err == nil {
+		sl.db = db
+	} else {
+		lg.ErrorC("db not found", "dbname", dbName)
+	}
 	return sl
 }
 
@@ -56,17 +58,7 @@ func (sl *Selector[T]) NoCache() *Selector[T] {
 }
 
 func (sl *Selector[T]) Query(statement string, args ...any) error {
-	var db *DatabaseEntity
 	var stt string
-	if sl.dbName != "" {
-		var err error
-		db, err = GetMemoryDatabase(sl.dbName)
-		if err != nil {
-			return err
-		}
-	} else {
-		db = &databases[0]
-	}
 	if useCache && !sl.nocache {
 		stt = statement + fmt.Sprint(args...)
 		if v, ok := cacheQ.Get(stt); ok {
@@ -80,17 +72,17 @@ func (sl *Selector[T]) Query(statement string, args ...any) error {
 	typ := fmt.Sprintf("%T", *new(T))
 	ref := reflect.ValueOf(*new(T))
 
-	adaptPlaceholdersToDialect(&statement, db.Dialect)
+	adaptPlaceholdersToDialect(&statement, sl.db.Dialect)
 	adaptTimeToUnixArgs(&args)
 	var rows *sql.Rows
 	var err error
 	if sl.debug {
-		lg.Printfs("yl%s , args: %v", statement, args)
+		lg.Info("DEBUG SELECTOR", "statement", statement, "args", args)
 	}
 	if sl.ctx != nil {
-		rows, err = db.Conn.QueryContext(sl.ctx, statement, args...)
+		rows, err = sl.db.Conn.QueryContext(sl.ctx, statement, args...)
 	} else {
-		rows, err = db.Conn.Query(statement, args...)
+		rows, err = sl.db.Conn.Query(statement, args...)
 	}
 	if err != nil {
 		return err
@@ -140,7 +132,7 @@ loop:
 		if err != nil {
 			return err
 		}
-		if db.Dialect == MYSQL {
+		if sl.db.Dialect == MYSQL {
 			for i, kvv := range kv {
 				if v, ok := kvv.Value.([]byte); ok {
 					kv[i] = kstrct.KV{Key: kvv.Key, Value: string(v)}
@@ -359,17 +351,7 @@ loop:
 }
 
 func (sl *Selector[T]) Named(statement string, args map[string]any, unsafe ...bool) error {
-	var db *DatabaseEntity
 	var stt string
-	if sl.dbName != "" {
-		var err error
-		db, err = GetMemoryDatabase(sl.dbName)
-		if err != nil {
-			return err
-		}
-	} else {
-		db = &databases[0]
-	}
 	if useCache && !sl.nocache {
 		stt = statement + fmt.Sprint(args)
 		if v, ok := cacheQ.Get(stt); ok {
@@ -401,7 +383,7 @@ func (sl *Selector[T]) Named(statement string, args map[string]any, unsafe ...bo
 		}
 	} else {
 		var err error
-		query, newargs, err = AdaptNamedParams(db.Dialect, statement, args)
+		query, newargs, err = AdaptNamedParams(sl.db.Dialect, statement, args)
 		if err != nil {
 			return err
 		}
@@ -412,9 +394,9 @@ func (sl *Selector[T]) Named(statement string, args map[string]any, unsafe ...bo
 		lg.Printfs("yl%s , args: %v", query, newargs)
 	}
 	if sl.ctx != nil {
-		rows, err = db.Conn.QueryContext(sl.ctx, query, newargs...)
+		rows, err = sl.db.Conn.QueryContext(sl.ctx, query, newargs...)
 	} else {
-		rows, err = db.Conn.Query(query, newargs...)
+		rows, err = sl.db.Conn.Query(query, newargs...)
 	}
 	if err != nil {
 		return err
@@ -464,7 +446,7 @@ loop:
 		if err != nil {
 			return err
 		}
-		if db.Dialect == MYSQL {
+		if sl.db.Dialect == MYSQL {
 			for i, kvv := range kv {
 				if v, ok := kvv.Value.([]byte); ok {
 					kv[i] = kstrct.KV{Key: kvv.Key, Value: string(v)}
