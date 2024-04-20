@@ -13,9 +13,9 @@ import (
 
 var checkEnabled = false
 
-// EnableCheck disable struct changes check
+// EnableCheck enable struct changes check
 func EnableCheck() {
-	checkEnabled = false
+	checkEnabled = true
 }
 
 type kormFkey struct {
