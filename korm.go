@@ -333,6 +333,12 @@ func WithDashboard(addr string, options ...DashOpts) *ksbus.Server {
 				}
 			}
 		}
+	} else if addr != "" {
+		opts = &DashOpts{
+			ServerOpts: &ksbus.ServerOpts{
+				Address: addr,
+			},
+		}
 	}
 
 	if serverBus == nil {
