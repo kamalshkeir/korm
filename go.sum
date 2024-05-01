@@ -2,8 +2,8 @@ github.com/kamalshkeir/aes v1.1.1 h1:yJVPUQX7ImIq6Y5lMRHJHv4qrNiR9sn9i2TD75ctJCk
 github.com/kamalshkeir/aes v1.1.1/go.mod h1:2rVePNivOuSZ2UGYhO3mKLzVYWhflOLbcsj6ZynJV1Q=
 github.com/kamalshkeir/argon v1.0.1 h1:8KET6+qoytHVSIg47N8Wefy0PWdUszyIxe9S748zsIU=
 github.com/kamalshkeir/argon v1.0.1/go.mod h1:1yzi4VtpOY6S10rfO5gZ19iachH9CSO2THcu4HIsJHQ=
-github.com/kamalshkeir/certmagic v0.0.2 h1:nN6o0Jel/aJvGxebzI7l26PIie/hBg8H4RcZv3BKT9w=
-github.com/kamalshkeir/certmagic v0.0.2/go.mod h1:QEX5H/7P360VSPJoI0N/39klkyy0nJpEtc1sWuw6oCQ=
+github.com/kamalshkeir/certmagic v0.0.3 h1:781GTAytjhqZ9koMxCyhZeeIlEQQne1N0IIeDXeBFaU=
+github.com/kamalshkeir/certmagic v0.0.3/go.mod h1:QEX5H/7P360VSPJoI0N/39klkyy0nJpEtc1sWuw6oCQ=
 github.com/kamalshkeir/kasm v0.0.1/go.mod h1:aB7Vg8R+kx104qe7Nz5nPPGKCvNYKFQsioinlTY1V1Q=
 github.com/kamalshkeir/kasm v0.0.2 h1:2OsJa39ZVFFFzxoGjVWIvpZzSutS5Vh3MHBj9Ya4VDU=
 github.com/kamalshkeir/kasm v0.0.2/go.mod h1:aB7Vg8R+kx104qe7Nz5nPPGKCvNYKFQsioinlTY1V1Q=

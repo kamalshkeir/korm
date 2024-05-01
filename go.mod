@@ -14,7 +14,7 @@ require (
 )
 
 require (
-	github.com/kamalshkeir/certmagic v0.0.2 // indirect
+	github.com/kamalshkeir/certmagic v0.0.3 // indirect
 	github.com/kamalshkeir/kasm v0.0.2 // indirect
 	github.com/kamalshkeir/kencoding v0.0.1 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.7 // indirect
