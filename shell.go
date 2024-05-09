@@ -24,8 +24,13 @@ const (
 
 var usedDB DatabaseEntity
 
-const helpS string = `Commands :  
-[databases, use, tables, columns, migrate, createsuperuser, createuser, query, getall, get, drop, delete, clear/cls, q/quit/exit, help/commands]
+const helpS string = `
+[
+	databases, use, tables, columns, migrate, createsuperuser, createuser
+	query, getall, get, drop, delete, clear/cls, q/quit/exit, help/commands   
+	 																		   ]
+  
+
   'databases':
 	  list all connected databases
 
@@ -50,7 +55,6 @@ const helpS string = `Commands :
   'query': 
 	  query data from database 
 	  (accept but not required extra param like : 'query' or 'query select * from users where ...')
-
 
   'getall': 
 	  get all rows given a table name

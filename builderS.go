@@ -112,14 +112,32 @@ func (b *BuilderS[T]) NoCache() *BuilderS[T] {
 	return b
 }
 
-// Insert insert a row into a table and return inserted PK
+func SliceToString(slice interface{}) string {
+	v := reflect.ValueOf(slice)
+
+	// Check if the value is a slice
+	if v.Kind() != reflect.Slice {
+		return ""
+	}
+
+	var result []string
+	for i := 0; i < v.Len(); i++ {
+		result = append(result, fmt.Sprint(v.Index(i).Interface()))
+	}
+
+	return strings.Join(result, ", ")
+}
+
 func (b *BuilderS[T]) Insert(model *T) (int, error) {
 	if b == nil || b.tableName == "" {
 		return 0, ErrTableNotFound
 	}
-	var err error
+
+	t, err := GetMemoryTable(b.tableName)
+	if lg.CheckError(err) {
+		return 0, err
+	}
 	names, mvalues, mTypes, mtags := getStructInfos(model, true)
-	values := []any{}
 	if len(names) < len(mvalues) {
 		return 0, errors.New("more values than fields")
 	}
@@ -129,205 +147,60 @@ func (b *BuilderS[T]) Insert(model *T) (int, error) {
 			return 0, err
 		}
 	}
-	placeholdersSlice := []string{}
-	ignored := []int{}
-	pk := ""
-	for i, name := range names {
-		if v, ok := mvalues[name]; ok {
-			if v == true {
-				v = 1
-			} else if v == false {
-				v = 0
+
+	for k, v := range mvalues {
+		typ := mTypes[k]
+		tags := mtags[k]
+		for _, t := range tags {
+			if t == "-" || t == "pk" || strings.Contains(t, "generated") || t == "autoinc" {
+				delete(mvalues, k)
+				continue
 			}
-			if vvv, ok := mTypes[name]; ok {
-				if strings.HasSuffix(vvv, "Time") {
-					switch tyV := v.(type) {
-					case time.Time:
-						v = tyV.Unix()
-					case string:
-						v = strings.ReplaceAll(tyV, "T", " ")
-					}
-				} else if vvv[0] == '[' && !strings.Contains(vvv, ".") {
-					switch vvv {
-					case "[]string":
-						if vSlice, ok := v.([]string); ok {
-							v = strings.Join(vSlice, ",")
-						} else if pvSlice, ok := v.(*[]string); ok {
-							dst := make([]string, 0, len(*pvSlice))
-							dst = append(dst, *pvSlice...)
-							v = strings.Join(dst, ",")
-						}
-					case "[]bool":
-						if vSlice, ok := v.([]bool); ok {
-							v := ""
-							for _, vs := range vSlice {
-								if v != "" {
-									v += ","
-								}
-								v += strconv.FormatBool(vs)
-							}
-						} else if pvSlice, ok := v.(*[]bool); ok {
-							v := ""
-							for _, vs := range *pvSlice {
-								if v != "" {
-									v += ","
-								}
-								v += strconv.FormatBool(vs)
-							}
-						}
-					case "[]int":
-						if vSlice, ok := v.([]int); ok {
-							v := ""
-							for _, vs := range vSlice {
-								if v != "" {
-									v += ","
-								}
-								v += strconv.Itoa(vs)
-							}
-						} else if pvSlice, ok := v.(*[]int); ok {
-							v := ""
-							for _, vs := range *pvSlice {
-								if v != "" {
-									v += ","
-								}
-								v += strconv.Itoa(vs)
-							}
-						}
-					case "[]uint":
-						if vSlice, ok := v.([]uint); ok {
-							v := ""
-							for _, vs := range vSlice {
-								if v != "" {
-									v += ","
-								}
-								v += strconv.Itoa(int(vs))
-							}
-						} else if pvSlice, ok := v.(*[]uint); ok {
-							v := ""
-							for _, vs := range *pvSlice {
-								if v != "" {
-									v += ","
-								}
-								v += strconv.Itoa(int(vs))
-							}
-						}
-					case "[]int64":
-						if vSlice, ok := v.([]int64); ok {
-							v := ""
-							for _, vs := range vSlice {
-								if v != "" {
-									v += ","
-								}
-								v += strconv.Itoa(int(vs))
-							}
-						} else if pvSlice, ok := v.(*[]int64); ok {
-							v := ""
-							for _, vs := range *pvSlice {
-								if v != "" {
-									v += ","
-								}
-								v += strconv.Itoa(int(vs))
-							}
-						}
-					case "[]float64":
-						if vSlice, ok := v.([]float64); ok {
-							v := ""
-							for _, vs := range vSlice {
-								if v != "" {
-									v += ","
-								}
-								v += strconv.FormatFloat(vs, 'E', -1, 64)
-							}
-						} else if pvSlice, ok := v.(*[]float64); ok {
-							v := ""
-							for _, vs := range *pvSlice {
-								if v != "" {
-									v += ","
-								}
-								v += strconv.FormatFloat(vs, 'E', -1, 64)
-							}
-						}
-					case "[]float32":
-						if vSlice, ok := v.([]float64); ok {
-							v := ""
-							for _, vs := range vSlice {
-								if v != "" {
-									v += ","
-								}
-								v += strconv.FormatFloat(vs, 'E', -1, 32)
-							}
-						} else if pvSlice, ok := v.(*[]float64); ok {
-							v := ""
-							for _, vs := range *pvSlice {
-								if v != "" {
-									v += ","
-								}
-								v += strconv.FormatFloat(vs, 'E', -1, 32)
-							}
-						}
-					case "[]any":
-						if vSlice, ok := v.([]any); ok {
-							v := ""
-							for _, vs := range vSlice {
-								if v != "" {
-									v += ","
-								}
-								v += fmt.Sprint(vs)
-							}
-						} else if pvSlice, ok := v.(*[]any); ok {
-							v := ""
-							for _, vs := range *pvSlice {
-								if v != "" {
-									v += ","
-								}
-								v += fmt.Sprint(vs)
-							}
-						}
-					}
-				}
-			}
-			values = append(values, v)
-		} else {
-			lg.ErrorC("not found in fields", "f", name)
-			return 0, errors.New("field not found")
+		}
+		if k == t.Pk {
+			delete(mvalues, k)
+			continue
+		}
+		if v == true {
+			mvalues[k] = 1
+			continue
+		} else if v == false {
+			mvalues[k] = 0
+			continue
 		}
 
-		if tags, ok := mtags[name]; ok {
-			ig := false
-			for _, tag := range tags {
-				switch tag {
-				case "autoinc", "pk", "-":
-					pk = name
-					ig = true
-				default:
-					if strings.Contains(tag, "generated") {
-						ig = true
-					}
-				}
+		if typ == "time.Time" || typ == "*time.Time" {
+			switch timestamp := v.(type) {
+			case time.Time:
+				mvalues[k] = timestamp.Unix()
+			case *time.Time:
+				mvalues[k] = timestamp.Unix()
+			case string:
+				mvalues[k] = strings.ReplaceAll(timestamp, "T", " ")
+			case *string:
+				mvalues[k] = strings.ReplaceAll(*timestamp, "T", " ")
+			default:
+				lg.ErrorC("type not handled", "type", typ)
+				continue
 			}
-			if ig {
-				ignored = append(ignored, i)
-			} else {
-				placeholdersSlice = append(placeholdersSlice, "?")
-			}
-		} else {
-			placeholdersSlice = append(placeholdersSlice, "?")
-		}
-		if !strings.HasPrefix(names[i], "`") && !strings.HasPrefix(names[i], "'") {
-			names[i] = "`" + names[i] + "`"
+		} else if strings.Contains(typ, ".") {
+			delete(mvalues, k)
+			continue
 		}
 
+		if typ[0] == '[' && typ != "[]uint8" && typ != "*[]uint8" {
+			mvalues[k] = SliceToString(v)
+		}
 	}
-	cum := 0
-	for _, ign := range ignored {
-		ii := ign - cum
-		delete(mvalues, names[ii])
-		names = append(names[:ii], names[ii+1:]...)
-		values = append(values[:ii], values[ii+1:]...)
-		cum++
+
+	placeholders := strings.Repeat("?,", len(mvalues))[:len(mvalues)*2-1]
+	newkeys := make([]string, 0, len(mvalues))
+	newvalues := make([]any, 0, len(mvalues))
+	for k, v := range mvalues {
+		newkeys = append(newkeys, k)
+		newvalues = append(newvalues, v)
 	}
-	placeholders := strings.Join(placeholdersSlice, ",")
-	fields_comma_separated := strings.Join(names, ",")
+	fields_comma_separated := strings.Join(newkeys, ",")
 
 	stat := strings.Builder{}
 	stat.WriteString("INSERT INTO `" + b.tableName + "` (")
@@ -341,12 +214,12 @@ func (b *BuilderS[T]) Insert(model *T) (int, error) {
 	if b.db.Dialect != POSTGRES {
 		var res sql.Result
 		if b.debug {
-			lg.InfoC("debug", "stat", b.statement, "args", values)
+			lg.InfoC("debug", "stat", b.statement, "args", newvalues)
 		}
 		if b.ctx != nil {
-			res, err = b.db.Conn.ExecContext(b.ctx, b.statement, values...)
+			res, err = b.db.Conn.ExecContext(b.ctx, b.statement, newvalues...)
 		} else {
-			res, err = b.db.Conn.Exec(b.statement, values...)
+			res, err = b.db.Conn.Exec(b.statement, newvalues...)
 		}
 		if err != nil {
 			return 0, err
@@ -359,12 +232,12 @@ func (b *BuilderS[T]) Insert(model *T) (int, error) {
 	} else {
 		var id int
 		if b.debug {
-			lg.InfoC("debug", "stat", b.statement+" RETURNING "+pk, "args", values)
+			lg.InfoC("debug", "stat", b.statement+" RETURNING "+t.Pk, "args", newvalues)
 		}
 		if b.ctx != nil {
-			err = b.db.Conn.QueryRowContext(b.ctx, b.statement+" RETURNING "+pk, values...).Scan(&id)
+			err = b.db.Conn.QueryRowContext(b.ctx, b.statement+" RETURNING "+t.Pk, newvalues...).Scan(&id)
 		} else {
-			err = b.db.Conn.QueryRow(b.statement+" RETURNING "+pk, values...).Scan(&id)
+			err = b.db.Conn.QueryRow(b.statement+" RETURNING "+t.Pk, newvalues...).Scan(&id)
 		}
 		if err != nil {
 			return id, err
@@ -379,8 +252,11 @@ func (b *BuilderS[T]) InsertR(model *T) (T, error) {
 		return *new(T), ErrTableNotFound
 	}
 
+	t, err := GetMemoryTable(b.tableName)
+	if lg.CheckError(err) {
+		return *new(T), err
+	}
 	names, mvalues, mTypes, mtags := getStructInfos(model, true)
-	values := []any{}
 	if len(names) < len(mvalues) {
 		return *new(T), errors.New("more values than fields")
 	}
@@ -390,205 +266,60 @@ func (b *BuilderS[T]) InsertR(model *T) (T, error) {
 			return *new(T), err
 		}
 	}
-	placeholdersSlice := []string{}
-	ignored := []int{}
-	pk := ""
-	for i, name := range names {
-		if v, ok := mvalues[name]; ok {
-			if v == true {
-				v = 1
-			} else if v == false {
-				v = 0
+
+	for k, v := range mvalues {
+		typ := mTypes[k]
+		tags := mtags[k]
+		for _, t := range tags {
+			if t == "-" || t == "pk" || strings.Contains(t, "generated") || t == "autoinc" {
+				delete(mvalues, k)
+				continue
 			}
-			if vvv, ok := mTypes[name]; ok {
-				if strings.HasSuffix(vvv, "Time") {
-					switch tyV := v.(type) {
-					case time.Time:
-						v = tyV.Unix()
-					case string:
-						v = strings.ReplaceAll(tyV, "T", " ")
-					}
-				} else if vvv[0] == '[' && !strings.Contains(vvv, ".") {
-					switch vvv {
-					case "[]string":
-						if vSlice, ok := v.([]string); ok {
-							v = strings.Join(vSlice, ",")
-						} else if pvSlice, ok := v.(*[]string); ok {
-							dst := make([]string, 0, len(*pvSlice))
-							dst = append(dst, *pvSlice...)
-							v = strings.Join(dst, ",")
-						}
-					case "[]bool":
-						if vSlice, ok := v.([]bool); ok {
-							v := ""
-							for _, vs := range vSlice {
-								if v != "" {
-									v += ","
-								}
-								v += strconv.FormatBool(vs)
-							}
-						} else if pvSlice, ok := v.(*[]bool); ok {
-							v := ""
-							for _, vs := range *pvSlice {
-								if v != "" {
-									v += ","
-								}
-								v += strconv.FormatBool(vs)
-							}
-						}
-					case "[]int":
-						if vSlice, ok := v.([]int); ok {
-							v := ""
-							for _, vs := range vSlice {
-								if v != "" {
-									v += ","
-								}
-								v += strconv.Itoa(vs)
-							}
-						} else if pvSlice, ok := v.(*[]int); ok {
-							v := ""
-							for _, vs := range *pvSlice {
-								if v != "" {
-									v += ","
-								}
-								v += strconv.Itoa(vs)
-							}
-						}
-					case "[]uint":
-						if vSlice, ok := v.([]uint); ok {
-							v := ""
-							for _, vs := range vSlice {
-								if v != "" {
-									v += ","
-								}
-								v += strconv.Itoa(int(vs))
-							}
-						} else if pvSlice, ok := v.(*[]uint); ok {
-							v := ""
-							for _, vs := range *pvSlice {
-								if v != "" {
-									v += ","
-								}
-								v += strconv.Itoa(int(vs))
-							}
-						}
-					case "[]int64":
-						if vSlice, ok := v.([]int64); ok {
-							v := ""
-							for _, vs := range vSlice {
-								if v != "" {
-									v += ","
-								}
-								v += strconv.Itoa(int(vs))
-							}
-						} else if pvSlice, ok := v.(*[]int64); ok {
-							v := ""
-							for _, vs := range *pvSlice {
-								if v != "" {
-									v += ","
-								}
-								v += strconv.Itoa(int(vs))
-							}
-						}
-					case "[]float64":
-						if vSlice, ok := v.([]float64); ok {
-							v := ""
-							for _, vs := range vSlice {
-								if v != "" {
-									v += ","
-								}
-								v += strconv.FormatFloat(vs, 'E', -1, 64)
-							}
-						} else if pvSlice, ok := v.(*[]float64); ok {
-							v := ""
-							for _, vs := range *pvSlice {
-								if v != "" {
-									v += ","
-								}
-								v += strconv.FormatFloat(vs, 'E', -1, 64)
-							}
-						}
-					case "[]float32":
-						if vSlice, ok := v.([]float64); ok {
-							v := ""
-							for _, vs := range vSlice {
-								if v != "" {
-									v += ","
-								}
-								v += strconv.FormatFloat(vs, 'E', -1, 32)
-							}
-						} else if pvSlice, ok := v.(*[]float64); ok {
-							v := ""
-							for _, vs := range *pvSlice {
-								if v != "" {
-									v += ","
-								}
-								v += strconv.FormatFloat(vs, 'E', -1, 32)
-							}
-						}
-					case "[]any":
-						if vSlice, ok := v.([]any); ok {
-							v := ""
-							for _, vs := range vSlice {
-								if v != "" {
-									v += ","
-								}
-								v += fmt.Sprint(vs)
-							}
-						} else if pvSlice, ok := v.(*[]any); ok {
-							v := ""
-							for _, vs := range *pvSlice {
-								if v != "" {
-									v += ","
-								}
-								v += fmt.Sprint(vs)
-							}
-						}
-					}
-				}
-			}
-			values = append(values, v)
-		} else {
-			lg.ErrorC("not found in fields", "f", name)
-			return *model, fmt.Errorf("field not found")
+		}
+		if k == t.Pk {
+			delete(mvalues, k)
+			continue
+		}
+		if v == true {
+			mvalues[k] = 1
+			continue
+		} else if v == false {
+			mvalues[k] = 0
+			continue
 		}
 
-		if tags, ok := mtags[name]; ok {
-			ig := false
-			for _, tag := range tags {
-				switch tag {
-				case "autoinc", "pk", "-":
-					pk = name
-					ig = true
-				default:
-					if strings.Contains(tag, "generated") {
-						ig = true
-					}
-				}
+		if typ == "time.Time" || typ == "*time.Time" {
+			switch timestamp := v.(type) {
+			case time.Time:
+				mvalues[k] = timestamp.Unix()
+			case *time.Time:
+				mvalues[k] = timestamp.Unix()
+			case string:
+				mvalues[k] = strings.ReplaceAll(timestamp, "T", " ")
+			case *string:
+				mvalues[k] = strings.ReplaceAll(*timestamp, "T", " ")
+			default:
+				lg.ErrorC("type not handled", "type", typ)
+				continue
 			}
-			if ig {
-				ignored = append(ignored, i)
-			} else {
-				placeholdersSlice = append(placeholdersSlice, "?")
-			}
-		} else {
-			placeholdersSlice = append(placeholdersSlice, "?")
+		} else if strings.Contains(typ, ".") {
+			delete(mvalues, k)
+			continue
 		}
-		if !strings.HasPrefix(names[i], "`") && !strings.HasPrefix(names[i], "'") {
-			names[i] = "`" + names[i] + "`"
+
+		if typ[0] == '[' && typ != "[]uint8" && typ != "*[]uint8" {
+			mvalues[k] = SliceToString(v)
 		}
 	}
 
-	cum := 0
-	for _, ign := range ignored {
-		ii := ign - cum
-		delete(mvalues, names[ii])
-		names = append(names[:ii], names[ii+1:]...)
-		values = append(values[:ii], values[ii+1:]...)
-		cum++
+	placeholders := strings.Repeat("?,", len(mvalues))[:len(mvalues)*2-1]
+	newkeys := make([]string, 0, len(mvalues))
+	newvalues := make([]any, 0, len(mvalues))
+	for k, v := range mvalues {
+		newkeys = append(newkeys, k)
+		newvalues = append(newvalues, v)
 	}
-	placeholders := strings.Join(placeholdersSlice, ",")
-	fields_comma_separated := strings.Join(names, ",")
+	fields_comma_separated := strings.Join(newkeys, ",")
 
 	stat := strings.Builder{}
 	stat.WriteString("INSERT INTO `" + b.tableName + "` (")
@@ -599,16 +330,15 @@ func (b *BuilderS[T]) InsertR(model *T) (T, error) {
 	b.statement = stat.String()
 	adaptPlaceholdersToDialect(&b.statement, b.db.Dialect)
 	if b.debug {
-		lg.InfoC("debug", "stat", b.statement, "args", values)
+		lg.InfoC("debug", "stat", b.statement, "args", newvalues)
 	}
 	var id int
-	var err error
 	if b.db.Dialect != POSTGRES {
 		var res sql.Result
 		if b.ctx != nil {
-			res, err = b.db.Conn.ExecContext(b.ctx, b.statement, values...)
+			res, err = b.db.Conn.ExecContext(b.ctx, b.statement, newvalues...)
 		} else {
-			res, err = b.db.Conn.Exec(b.statement, values...)
+			res, err = b.db.Conn.Exec(b.statement, newvalues...)
 		}
 		if err != nil {
 			return *new(T), err
@@ -620,15 +350,15 @@ func (b *BuilderS[T]) InsertR(model *T) (T, error) {
 		id = int(rows)
 	} else {
 		if b.ctx != nil {
-			err = b.db.Conn.QueryRowContext(b.ctx, b.statement+" RETURNING "+pk, values...).Scan(&id)
+			err = b.db.Conn.QueryRowContext(b.ctx, b.statement+" RETURNING "+t.Pk, newvalues...).Scan(&id)
 		} else {
-			err = b.db.Conn.QueryRow(b.statement+" RETURNING "+pk, values...).Scan(&id)
+			err = b.db.Conn.QueryRow(b.statement+" RETURNING "+t.Pk, newvalues...).Scan(&id)
 		}
 		if err != nil {
 			return *new(T), err
 		}
 	}
-	m, err := Model[T]().Where(pk+"=?", id).One()
+	m, err := Model[T]().Where(t.Pk+"=?", id).One()
 	if err != nil {
 		return *new(T), err
 	}
@@ -1374,7 +1104,8 @@ func (b *BuilderS[T]) All() ([]T, error) {
 		lg.InfoC("debug", "stat", b.statement, "args", b.args)
 	}
 
-	models, err := b.QueryS(b.statement, b.args...)
+	var models []T
+	err := To(&models).Query(b.statement, b.args...)
 	if err != nil {
 		return nil, err
 	}
@@ -1745,6 +1476,7 @@ func (b *BuilderS[T]) QueryS(statement string, args ...any) ([]T, error) {
 			}
 			m[key] = values[i]
 		}
+
 		if len(lastData) == 0 {
 			lastData = m
 			res = append(res, *new(T))
@@ -1818,7 +1550,8 @@ func (b *BuilderS[T]) One() (T, error) {
 	if b.debug {
 		lg.InfoC("debug", "stat", b.statement, "args", b.args)
 	}
-	model, err := b.QueryS(b.statement, b.args...)
+	var model []T
+	err := To(&model).Query(b.statement, b.args...)
 	if err != nil {
 		return *new(T), err
 	} else if len(model) == 0 {

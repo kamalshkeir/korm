@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,6 +20,597 @@ type Selector[T any] struct {
 	db      *DatabaseEntity
 	dest    *[]T
 	nocache bool
+}
+
+type JsonOption struct {
+	As       string
+	Dialect  string
+	Database string
+	Params   []any
+}
+
+func JSON_EXTRACT(dataJson string, opt ...JsonOption) string {
+	var opts JsonOption
+	if len(opt) > 0 {
+		opts = opt[0]
+	} else {
+		return JSON_CAST(dataJson, "")
+	}
+	if opts.Dialect == "" {
+		if opts.Database != "" {
+			// db specified
+			db, err := GetMemoryDatabase(opts.Database)
+			if err != nil {
+				db = &databases[0]
+			}
+			if opts.Dialect == "" {
+				opts.Dialect = db.Dialect
+			}
+		} else {
+			opts.Dialect = databases[0].Dialect
+		}
+	}
+
+	isData := ""
+	if strings.HasPrefix(dataJson, "'") {
+		isData = "'"
+	} else if strings.HasPrefix(dataJson, "{") {
+		isData = "{"
+	}
+
+	switch opts.Dialect {
+	case SQLITE, MYSQL, "sqlite":
+		st := "JSON_EXTRACT("
+		if isData == "{" {
+			st += "'" + dataJson + "'"
+		} else {
+			st += dataJson
+		}
+		if len(opts.Params) == 0 {
+			st += "),'$'"
+			return st
+		}
+		st += ","
+
+		for i, pp := range opts.Params {
+			jsonParam := ""
+			if v, ok := pp.(string); ok {
+				jsonParam = v
+			} else {
+				jsonParam = fmt.Sprint(pp)
+			}
+			if i > 0 {
+				st += ","
+			}
+			if strings.HasPrefix(jsonParam, "'") || strings.HasPrefix(jsonParam, "`") {
+				jsonParam = jsonParam[1 : len(jsonParam)-2]
+			}
+			st += "'$"
+			if strings.Contains(jsonParam, ".") {
+				sp := strings.Split(jsonParam, ".")
+				for _, s := range sp {
+					// check if s is a number
+					if _, err := strconv.Atoi(s); err == nil {
+						st += "[" + s + "]"
+					} else {
+						st += "." + s
+					}
+				}
+				st += "'"
+			} else {
+				st += "." + jsonParam + "'"
+			}
+			if i == len(opts.Params)-1 {
+				st += ")"
+			}
+		}
+		if opts.As != "" {
+			st += " AS " + opts.As
+		}
+		return st
+	case POSTGRES, "pg":
+		if len(opts.Params) == 0 {
+			return dataJson
+		}
+		if isData == "'" || isData == "{" {
+			if isData == "{" {
+				dataJson = "'" + dataJson + "'::jsonb"
+			} else {
+				dataJson = dataJson + "::jsonb"
+			}
+		}
+
+		if len(opts.Params) == 1 {
+			ss := ""
+			if param, ok := opts.Params[0].(string); ok {
+				for _, s := range strings.Split(param, ".") {
+					ss += ", '" + s + "'"
+				}
+				return "JSONB_EXTRACT_PATH_TEXT(" + dataJson + ss + ")"
+			} else {
+				lg.ErrorC("param must be string", "param", param)
+				return dataJson
+			}
+		}
+		paramsString := ""
+		// opts.ParamsToExtract "a.2.name", "b.email", "b"
+		for i, extractParam := range opts.Params {
+			ep := ""
+			var ok bool
+			if ep, ok = extractParam.(string); !ok {
+				lg.ErrorC("param must be string", "param", extractParam)
+				return dataJson
+			}
+			if i > 0 {
+				paramsString += ", "
+			}
+			paramsString += "JSONB_EXTRACT_PATH_TEXT(" + dataJson
+			for _, s := range strings.Split(ep, ".") {
+				paramsString += ", '" + s + "'"
+			}
+			paramsString += ")"
+		}
+		if len(opts.Params) > 1 {
+			paramsString = "JSONB_BUILD_ARRAY(" + paramsString + ")"
+		}
+		if opts.As != "" {
+			paramsString += " AS " + opts.As
+		}
+		return paramsString
+	default:
+		lg.ErrorC("case not handled", "dialect", opts.Dialect)
+		return ""
+	}
+}
+
+func JSON_REMOVE(dataJson string, opt ...JsonOption) string {
+	var opts JsonOption
+	if len(opt) > 0 {
+		opts = opt[0]
+	} else {
+		return JSON_CAST(dataJson, "")
+	}
+	if opts.Dialect == "" {
+		if opts.Database != "" {
+			// db specified
+			db, err := GetMemoryDatabase(opts.Database)
+			if err != nil {
+				db = &databases[0]
+			}
+			if opts.Dialect == "" {
+				opts.Dialect = db.Dialect
+			}
+		} else {
+			opts.Dialect = databases[0].Dialect
+		}
+	}
+
+	isData := ""
+	if strings.HasPrefix(dataJson, "'") {
+		isData = "'"
+	} else if strings.HasPrefix(dataJson, "{") {
+		isData = "{"
+	}
+
+	switch opts.Dialect {
+	case SQLITE, MYSQL, "sqlite":
+		st := "JSON_REMOVE("
+		if isData == "{" {
+			st += "'" + dataJson + "'"
+		} else {
+			st += dataJson
+		}
+		if len(opts.Params) == 0 {
+			st += "),'$'"
+			return st
+		}
+		st += ","
+
+		for i, pp := range opts.Params {
+			if i > 0 {
+				st += ","
+			}
+			var jsonParam string
+			var ok bool
+			if jsonParam, ok = pp.(string); !ok {
+				lg.ErrorC("expected string", "param", pp)
+				return st
+			}
+
+			if i%2 == 0 {
+				st += "'$"
+				if strings.Contains(jsonParam, ".") {
+					sp := strings.Split(jsonParam, ".")
+					for _, s := range sp {
+						// check if s is a number
+						if _, err := strconv.Atoi(s); err == nil {
+							st += "[" + s + "]"
+						} else {
+							st += "." + s
+						}
+					}
+					st += "'"
+				} else {
+					jsonParam = strings.ReplaceAll(jsonParam, "'", "")
+					st += "." + jsonParam + "'"
+				}
+				if i == len(opts.Params)-1 {
+					st += ")"
+				}
+			} else {
+				st += "'$"
+				if _, err := strconv.Atoi(jsonParam); err == nil {
+					st += "[" + jsonParam + "]"
+				} else {
+					st += "." + jsonParam + "'"
+				}
+				if i == len(opts.Params)-1 {
+					st += ")"
+				}
+			}
+
+		}
+		if opts.As != "" {
+			st += " AS " + opts.As
+		}
+		return st
+	case POSTGRES, "pg":
+		// your_column_name #- '{a, 2, name}' #- '{b, email}'
+		if isData == "'" || isData == "{" {
+			if isData == "{" {
+				dataJson = "'" + dataJson + "'::jsonb"
+			} else {
+				dataJson = dataJson + "::jsonb"
+			}
+		}
+		st := dataJson
+		if len(opts.Params) == 0 {
+			return st
+		}
+		for i, pp := range opts.Params {
+			var jsonParam string
+			var ok bool
+			if jsonParam, ok = pp.(string); !ok && i%2 == 0 {
+				lg.ErrorC("expected string", "param", jsonParam)
+				return st
+			}
+			if i%2 == 0 && strings.Contains(jsonParam, ".") {
+				sp := strings.Split(jsonParam, ".")
+				tt := ""
+				for i, s := range sp {
+					if i > 0 {
+						tt += ","
+					}
+					tt += s
+				}
+				st += " #- '{" + tt + "}'"
+			} else {
+				st += " - " + jsonParam
+			}
+		}
+		if opts.As != "" {
+			st += " AS " + opts.As
+		}
+		return st
+
+	default:
+		lg.ErrorC("case not handled", "dialect", opts.Dialect)
+		return ""
+	}
+}
+
+func JSON_SET(dataJson string, opt ...JsonOption) string {
+	var opts JsonOption
+	if len(opt) > 0 {
+		opts = opt[0]
+	} else {
+		return JSON_CAST(dataJson, "data")
+	}
+	if len(opts.Params)%2 != 0 {
+		lg.ErrorC("expected even number of params", "params", opts.Params)
+		return dataJson
+	}
+	if opts.Dialect == "" {
+		if opts.Database != "" {
+			// db specified
+			db, err := GetMemoryDatabase(opts.Database)
+			if err != nil {
+				db = &databases[0]
+			}
+			if opts.Dialect == "" {
+				opts.Dialect = db.Dialect
+			}
+		} else {
+			opts.Dialect = databases[0].Dialect
+		}
+	}
+
+	isData := ""
+	if strings.HasPrefix(dataJson, "'") {
+		isData = "'"
+	} else if strings.HasPrefix(dataJson, "{") {
+		isData = "{"
+	}
+
+	switch opts.Dialect {
+	case SQLITE, MYSQL, "sqlite":
+		st := "JSON_SET("
+		if isData == "{" {
+			st += "'" + dataJson + "'"
+		} else {
+			st += dataJson
+		}
+		if len(opts.Params) == 0 {
+			st += "),'$'"
+			return st
+		}
+		st += ","
+
+		for i, pp := range opts.Params {
+			if i > 0 {
+				st += ","
+			}
+			var jsonParam string
+			var ok bool
+			if i%2 == 0 {
+				if jsonParam, ok = pp.(string); !ok {
+					lg.ErrorC("expected string", "param", pp)
+					return st
+				}
+				jsonParam = strings.ReplaceAll(jsonParam, "'", "")
+				st += "'$"
+				if strings.Contains(jsonParam, ".") {
+					sp := strings.Split(jsonParam, ".")
+					for _, s := range sp {
+						// check if s is a number
+						if _, err := strconv.Atoi(s); err == nil {
+							st += "[" + s + "]"
+						} else {
+							st += "." + s
+						}
+					}
+					st += "'"
+				} else {
+					st += "." + jsonParam + "'"
+				}
+			} else {
+				if jp, ok := pp.(string); ok {
+					if !strings.Contains(jp, "'") {
+						jp = "'" + jp + "'"
+					}
+					st += jp
+				} else {
+					st += fmt.Sprint(pp)
+				}
+			}
+
+			if i == len(opts.Params)-1 {
+				st += ")"
+			}
+		}
+		if opts.As != "" {
+			st += " AS " + opts.As
+		}
+		return st
+	case POSTGRES, "pg":
+		if isData == "'" || isData == "{" {
+			if isData == "{" {
+				dataJson = "'" + dataJson + "'::jsonb"
+			} else {
+				dataJson = dataJson + "::jsonb"
+			}
+		}
+		newws := make([]string, 0, len(opts.Params)/2)
+		st := "JSONB_SET(" + dataJson
+		if len(opts.Params) == 0 {
+			return st + ")"
+		} else if len(opts.Params) == 2 {
+			for i, pp := range opts.Params {
+				var jsonParam string
+				var ok bool
+				if i == 0 {
+					if jsonParam, ok = pp.(string); !ok {
+						lg.ErrorC("expected string", "param", pp)
+						return dataJson
+					}
+				}
+				st += ", "
+				if i%2 == 0 && strings.Contains(jsonParam, ".") {
+					tt := strings.ReplaceAll(jsonParam, ".", ",")
+					tt = strings.ReplaceAll(tt, "'", "")
+					st += " '{" + tt + "}'"
+				} else {
+					if v, ok := pp.(string); ok {
+						if !strings.Contains(v, "'") {
+							st += " '" + v + "'"
+						} else {
+							st += v
+						}
+					} else {
+						st += fmt.Sprint(pp)
+					}
+				}
+			}
+			st += ", 'true'"
+		} else {
+			new := "JSONB_SET(" + dataJson
+			for i, pp := range opts.Params {
+				var jsonParam string
+				var ok bool
+				if i%2 == 0 {
+					new = "JSONB_SET(%s"
+					if jsonParam, ok = pp.(string); !ok {
+						lg.ErrorC("expected string", "param", pp)
+						return dataJson
+					} else {
+						pp = strings.ReplaceAll(jsonParam, "'", "")
+					}
+				}
+				new += ", "
+				if i%2 == 0 {
+					tt := strings.ReplaceAll(jsonParam, ".", ",")
+					new += " '{" + tt + "}'"
+				} else {
+					if v, ok := pp.(string); ok && i%2 == 1 {
+						if !strings.Contains(v, "'") {
+							new += " '" + v + "', 'true'"
+						} else {
+							new += " " + v + ", 'true'"
+						}
+					} else {
+						new += fmt.Sprint(pp) + ", 'true'"
+					}
+					new += ")"
+					newws = append(newws, new)
+				}
+			}
+			res := newws[0]
+			for i, v := range newws {
+				if i == 0 {
+					continue
+				}
+				res = fmt.Sprintf(res, v)
+				if i == len(newws)-1 {
+					res = fmt.Sprintf(res, dataJson)
+				}
+			}
+			if opts.As != "" {
+				res += " AS " + opts.As
+			}
+			return res
+		}
+		st += ")"
+		if opts.As != "" {
+			st += " AS " + opts.As
+		}
+		return st
+	default:
+		lg.ErrorC("case not handled", "dialect", opts.Dialect)
+		return ""
+	}
+}
+
+func JSON_ARRAY(values []any, as string, dialect ...string) string {
+	dbDialect := databases[0].Dialect
+	if len(dialect) > 0 {
+		dbDialect = dialect[0]
+	}
+	valuesString := make([]string, 0, len(values))
+	for _, v := range values {
+		switch vType := v.(type) {
+		case string:
+			if strings.Contains(vType, "'") {
+				valuesString = append(valuesString, vType)
+			} else {
+				valuesString = append(valuesString, "'"+vType+"'")
+			}
+		case time.Time:
+			valuesString = append(valuesString, fmt.Sprint(vType.Unix()))
+		case *time.Time:
+			valuesString = append(valuesString, fmt.Sprint(vType.Unix()))
+		default:
+			valuesString = append(valuesString, fmt.Sprint(v))
+		}
+	}
+
+	switch dbDialect {
+	case SQLITE, MYSQL, "sqlite":
+		st := "JSON_ARRAY(" + strings.Join(valuesString, ", ") + ")"
+		if as != "" {
+			st += " AS " + as
+		}
+		return st
+	case POSTGRES, "pg":
+		st := "JSONB_BUILD_ARRAY(" + strings.Join(valuesString, ", ") + ")"
+		if as != "" {
+			st += " AS " + as
+		}
+		return st
+	default:
+		lg.ErrorC("case not handled", "dialect", dbDialect)
+		return ""
+	}
+}
+
+func JSON_OBJECT(values []any, as string, dialect ...string) string {
+	dbDialect := databases[0].Dialect
+	if len(dialect) > 0 {
+		dbDialect = dialect[0]
+	}
+	valuesString := make([]string, 0, len(values))
+	for i, v := range values {
+		var vv string
+		if i%2 == 0 {
+			var ok bool
+			if vv, ok = v.(string); ok {
+				if !strings.HasPrefix(vv, "'") {
+					vv = "'" + vv + "'"
+				}
+			} else {
+				lg.ErrorC("expected string", "value", v)
+				return ""
+			}
+		} else {
+			switch val := v.(type) {
+			case string:
+				if !strings.HasPrefix(val, "'") {
+					vv = "'" + val + "'"
+				} else {
+					vv = val
+				}
+			case time.Time:
+				vv = fmt.Sprint(val.Unix())
+			case *time.Time:
+				vv = fmt.Sprint(val.Unix())
+			default:
+				vv = fmt.Sprint(v)
+			}
+		}
+
+		valuesString = append(valuesString, vv)
+	}
+
+	switch dbDialect {
+	case SQLITE, MYSQL, "sqlite":
+		st := "JSON_OBJECT(" + strings.Join(valuesString, ", ") + ")"
+		if as != "" {
+			st += " AS " + as
+		}
+		return st
+	case POSTGRES, "pg":
+		st := "JSONB_BUILD_OBJECT(" + strings.Join(valuesString, ", ") + ")"
+		if as != "" {
+			st += " AS " + as
+		}
+		return st
+	default:
+		lg.ErrorC("case not handled", "dialect", dbDialect)
+		return ""
+	}
+}
+
+func JSON_CAST(value string, as string, dialect ...string) string {
+	value = strings.ReplaceAll(value, "'", "\"")
+	dbDialect := databases[0].Dialect
+	if len(dialect) > 0 {
+		dbDialect = dialect[0]
+	}
+	if !strings.HasPrefix(value, "'") {
+		value = "'" + value + "'"
+	}
+	var st string
+	switch dbDialect {
+	case SQLITE, "sqlite":
+		st = "JSON(" + value + ")"
+	case POSTGRES, "pg":
+		st = value + "::jsonb"
+	case MYSQL:
+		st = "JSON_EXTRACT(" + value + ", '$')"
+	}
+	if as != "" {
+		st += " AS " + as
+	}
+	return st
 }
 
 func To[T any](dest *[]T, nestedSlice ...bool) *Selector[T] {

@@ -578,7 +578,7 @@ func handleMigrationBool(mi *migrationInput) {
 }
 
 func handleMigrationString(mi *migrationInput) {
-	unique, notnull, text, defaultt, genas, size, pk, checks := "", "", "", "", "", "", "", []string{}
+	unique, notnull, text, json, defaultt, genas, size, pk, checks := "", "", "", "", "", "", "", "", []string{}
 	tags := (*mi.fTags)[mi.fName]
 	if len(tags) == 1 && tags[0] == "-" {
 		(*mi.res)[mi.fName] = ""
@@ -589,6 +589,11 @@ func handleMigrationString(mi *migrationInput) {
 			switch tag {
 			case "text":
 				text = "TEXT"
+			case "json":
+				json = "TEXT"
+				if mi.dialect != SQLITE {
+					json = "JSONB"
+				}
 			case "notnull":
 				notnull = " NOT NULL"
 			case "index", "+index", "index+":
@@ -693,6 +698,8 @@ func handleMigrationString(mi *migrationInput) {
 
 	if text != "" {
 		(*mi.res)[mi.fName] = text
+	} else if json != "" {
+		(*mi.res)[mi.fName] = json
 	} else {
 		if size != "" {
 			(*mi.res)[mi.fName] = "VARCHAR(" + size + ")"
@@ -726,7 +733,7 @@ func handleMigrationString(mi *migrationInput) {
 }
 
 func handleMigrationSliceByte(mi *migrationInput) {
-	unique, notnull, defaultt, genas, size, pk, checks := "", "", "", "", "", "", []string{}
+	unique, notnull, defaultt, genas, size, json, pk, checks := "", "", "", "", "", "", "", []string{}
 	tags := (*mi.fTags)[mi.fName]
 	if len(tags) == 1 && tags[0] == "-" {
 		(*mi.res)[mi.fName] = ""
@@ -735,6 +742,13 @@ func handleMigrationSliceByte(mi *migrationInput) {
 	for _, tag := range tags {
 		if !strings.Contains(tag, ":") {
 			switch tag {
+			case "text":
+				json = "TEXT"
+			case "json":
+				json = "TEXT"
+				if mi.dialect != SQLITE {
+					json = "JSONB"
+				}
 			case "notnull":
 				notnull = " NOT NULL"
 			case "index", "+index", "index+":
@@ -837,21 +851,25 @@ func handleMigrationSliceByte(mi *migrationInput) {
 		}
 	}
 
-	if size == "" {
-		if mi.dialect == "postgres" || mi.dialect == "pg" {
-			(*mi.res)[mi.fName] = "BYTEA"
+	if json == "" {
+		if size == "" {
+			if mi.dialect == "postgres" || mi.dialect == "pg" {
+				(*mi.res)[mi.fName] = "BYTEA"
+			} else {
+				(*mi.res)[mi.fName] = "BLOB"
+			}
 		} else {
-			(*mi.res)[mi.fName] = "BLOB"
+			switch mi.dialect {
+			case "mysql":
+				(*mi.res)[mi.fName] = "VARBINARY(" + size + ")"
+			case "postgres", "pg":
+				(*mi.res)[mi.fName] = "BIT VARYING(" + size + ")"
+			default:
+				(*mi.res)[mi.fName] = "BLOB"
+			}
 		}
 	} else {
-		switch mi.dialect {
-		case "mysql":
-			(*mi.res)[mi.fName] = "VARBINARY(" + size + ")"
-		case "postgres", "pg":
-			(*mi.res)[mi.fName] = "BIT VARYING(" + size + ")"
-		default:
-			(*mi.res)[mi.fName] = "BLOB"
-		}
+		(*mi.res)[mi.fName] = json
 	}
 
 	if unique != "" && pk == "" {
