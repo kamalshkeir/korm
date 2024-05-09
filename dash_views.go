@@ -413,7 +413,7 @@ var SingleModelGet = func(c *ksmux.Context) {
 		})
 		return
 	}
-	dbCols, _ := GetAllColumnsTypes(model)
+	dbCols, colsOrdered := GetAllColumnsTypes(model)
 	mmfkeys := map[string][]any{}
 	for _, fkey := range t.Fkeys {
 		spFrom := strings.Split(fkey.FromTableField, ".")
@@ -435,15 +435,16 @@ var SingleModelGet = func(c *ksmux.Context) {
 		}
 	}
 	c.Html("admin/admin_single_model.html", map[string]any{
-		"admin_path": adminPathNameGroup,
-		"static_url": staticUrl,
-		"model":      modelRow,
-		"model_name": model,
-		"id":         id,
-		"fkeys":      mmfkeys,
-		"columns":    t.ModelTypes,
-		"dbcolumns":  dbCols,
-		"pk":         t.Pk,
+		"admin_path":     adminPathNameGroup,
+		"static_url":     staticUrl,
+		"model":          modelRow,
+		"model_name":     model,
+		"id":             id,
+		"fkeys":          mmfkeys,
+		"columns":        t.ModelTypes,
+		"dbcolumns":      dbCols,
+		"pk":             t.Pk,
+		"columnsOrdered": colsOrdered,
 	})
 }
 
