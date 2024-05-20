@@ -29,15 +29,15 @@ var (
 	databases           = []DatabaseEntity{}
 	mutexModelTablename sync.RWMutex
 	mModelTablename     = map[string]any{}
-	cacheAllTables      = kmap.New[string, []string](false)
-	cacheAllCols        = kmap.New[string, map[string]string](false)
-	cacheAllColsOrdered = kmap.New[string, []string](false)
-	relationsMap        = kmap.New[string, struct{}](false)
+	cacheAllTables      = kmap.New[string, []string]()
+	cacheAllCols        = kmap.New[string, map[string]string]()
+	cacheAllColsOrdered = kmap.New[string, []string]()
+	relationsMap        = kmap.New[string, struct{}]()
 	onceDone            = false
 	serverBus           *ksbus.Server
-	cacheQueryS         = kmap.New[dbCache, any](false, cacheMaxMemoryMb)
-	cacheQueryM         = kmap.New[dbCache, any](false, cacheMaxMemoryMb)
-	cacheQ              = kmap.New[string, any](false, cacheMaxMemoryMb)
+	cacheQueryS         = kmap.New[dbCache, any](cacheMaxMemoryMb)
+	cacheQueryM         = kmap.New[dbCache, any](cacheMaxMemoryMb)
+	cacheQ              = kmap.New[string, any](cacheMaxMemoryMb)
 	ErrTableNotFound    = errors.New("unable to find tableName")
 	ErrBigData          = kmap.ErrLargeData
 	logQueries          = false

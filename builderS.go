@@ -16,8 +16,8 @@ import (
 )
 
 var (
-	cacheOneS       = kmap.New[dbCache, any](false)
-	cacheAllS       = kmap.New[dbCache, any](false, cacheMaxMemoryMb)
+	cacheOneS       = kmap.New[dbCache, any]()
+	cacheAllS       = kmap.New[dbCache, any](cacheMaxMemoryMb)
 	ErrNoConnection = errors.New("no connection")
 	ErrNoData       = errors.New("no data")
 )

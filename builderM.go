@@ -16,8 +16,8 @@ import (
 )
 
 var (
-	cachesOneM  = kmap.New[dbCache, map[string]any](false)
-	cacheAllM   = kmap.New[dbCache, []map[string]any](false, cacheMaxMemoryMb)
+	cachesOneM  = kmap.New[dbCache, map[string]any]()
+	cacheAllM   = kmap.New[dbCache, []map[string]any](cacheMaxMemoryMb)
 	setReplacer = strings.NewReplacer("=", "", "?", "")
 )
 
