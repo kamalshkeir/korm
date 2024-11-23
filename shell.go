@@ -101,6 +101,10 @@ func InitShell() bool {
 		fmt.Printf(yellow, helpS)
 		return true
 	case "shell":
+		if len(args) > 1 {
+			handleCommand(args[1:])
+			return true
+		}
 		databases := GetMemoryDatabases()
 		usedDB = databases[0]
 		defer usedDB.Conn.Close()
@@ -114,99 +118,8 @@ func InitShell() bool {
 				return true
 			}
 			spCommand := strings.Split(command, " ")
-			if len(spCommand) > 1 {
-				command = spCommand[0]
-			}
-			switch command {
-			case "quit", "exit", "q", "q!":
+			if handleCommand(spCommand) {
 				return true
-			case "clear", "cls":
-				kinput.Clear()
-				fmt.Printf(yellow, commandsS)
-			case "help":
-				fmt.Printf(yellow, helpS)
-			case "commands":
-				fmt.Printf(yellow, commandsS)
-			case "migrate":
-				var path string
-				if len(spCommand) > 1 {
-					path = spCommand[1]
-				} else {
-					path = kinput.Input(kinput.Blue, "path to sql file: ")
-				}
-				err := migratefromfile(path)
-				if !lg.CheckError(err) {
-					fmt.Printf(green, "migrated successfully")
-				}
-			case "databases":
-				fmt.Printf(green, GetMemoryDatabases())
-			case "use":
-				var dbName string
-				if len(spCommand) > 1 {
-					dbName = spCommand[1]
-				} else {
-					dbName = kinput.Input(kinput.Blue, "database name: ")
-				}
-				db, err := GetMemoryDatabase(dbName)
-				if err != nil {
-					lg.Printfs("rd%v\n", err)
-				}
-				usedDB = *db
-				fmt.Printf(green, "you are using database "+usedDB.Name)
-			case "tables":
-				fmt.Printf(green, GetAllTables(usedDB.Name))
-			case "columns":
-				var tb string
-				if len(spCommand) > 1 {
-					tb = spCommand[1]
-				} else {
-					tb = kinput.Input(kinput.Blue, "Table name: ")
-				}
-				if tb == "" {
-					fmt.Printf(red, "you should specify a table that exist !")
-				}
-				mcols, _ := GetAllColumnsTypes(tb, usedDB.Name)
-				cols := []string{}
-				for k := range mcols {
-					cols = append(cols, k)
-				}
-				fmt.Printf(green, cols)
-			case "getall":
-				if len(spCommand) > 1 {
-					getAll(spCommand[1])
-				} else {
-					getAll("")
-				}
-			case "get":
-				if len(spCommand) > 2 {
-					getRow(spCommand[1], strings.Join(spCommand[2:], " "))
-				} else {
-					getRow("", "")
-				}
-			case "query":
-				if len(spCommand) > 1 {
-					query(strings.Join(spCommand[1:], " "))
-				} else {
-					query("")
-				}
-			case "drop":
-				if len(spCommand) > 1 {
-					dropTable(spCommand[1])
-				} else {
-					dropTable("")
-				}
-			case "delete":
-				if len(spCommand) > 2 {
-					deleteRow(spCommand[1], strings.Join(spCommand[2:], " "))
-				} else {
-					deleteRow("", "")
-				}
-			case "createuser":
-				createuser()
-			case "createsuperuser":
-				createsuperuser()
-			default:
-				fmt.Printf(red, "command not handled, use 'help' or 'commands' to list available commands ")
 			}
 		}
 	case "gendocs", "gendoc":
@@ -225,6 +138,105 @@ func InitShell() bool {
 	default:
 		return false
 	}
+}
+
+func handleCommand(commands []string) bool {
+	command := ""
+	if len(commands) > 0 {
+		command = commands[0]
+	}
+	switch command {
+	case "quit", "exit", "q", "q!":
+		return true
+	case "clear", "cls":
+		kinput.Clear()
+		fmt.Printf(yellow, commandsS)
+	case "help":
+		fmt.Printf(yellow, helpS)
+	case "commands":
+		fmt.Printf(yellow, commandsS)
+	case "migrate":
+		var path string
+		if len(commands) > 1 {
+			path = commands[1]
+		} else {
+			path = kinput.Input(kinput.Blue, "path to sql file: ")
+		}
+		err := migratefromfile(path)
+		if !lg.CheckError(err) {
+			fmt.Printf(green, "migrated successfully")
+		}
+	case "databases":
+		fmt.Printf(green, GetMemoryDatabases())
+	case "use":
+		var dbName string
+		if len(commands) > 1 {
+			dbName = commands[1]
+		} else {
+			dbName = kinput.Input(kinput.Blue, "database name: ")
+		}
+		db, err := GetMemoryDatabase(dbName)
+		if err != nil {
+			lg.Printfs("rd%v\n", err)
+		}
+		usedDB = *db
+		fmt.Printf(green, "you are using database "+usedDB.Name)
+	case "tables":
+		fmt.Printf(green, GetAllTables(usedDB.Name))
+	case "columns":
+		var tb string
+		if len(commands) > 1 {
+			tb = commands[1]
+		} else {
+			tb = kinput.Input(kinput.Blue, "Table name: ")
+		}
+		if tb == "" {
+			fmt.Printf(red, "you should specify a table that exist !")
+		}
+		mcols, _ := GetAllColumnsTypes(tb, usedDB.Name)
+		cols := []string{}
+		for k := range mcols {
+			cols = append(cols, k)
+		}
+		fmt.Printf(green, cols)
+	case "getall":
+		if len(commands) > 1 {
+			getAll(commands[1])
+		} else {
+			getAll("")
+		}
+	case "get":
+		if len(commands) > 2 {
+			getRow(commands[1], strings.Join(commands[2:], " "))
+		} else {
+			getRow("", "")
+		}
+	case "query":
+		if len(commands) > 1 {
+			query(strings.Join(commands[1:], " "))
+		} else {
+			query("")
+		}
+	case "drop":
+		if len(commands) > 1 {
+			dropTable(commands[1])
+		} else {
+			dropTable("")
+		}
+	case "delete":
+		if len(commands) > 2 {
+			deleteRow(commands[1], strings.Join(commands[2:], " "))
+		} else {
+			deleteRow("", "")
+		}
+	case "createuser":
+		createuser()
+	case "createsuperuser":
+		createsuperuser()
+	default:
+		fmt.Printf(red, "command not handled, use 'help' or 'commands' to list available commands"+command)
+	}
+	return false
 }
 
 func createuser() {

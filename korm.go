@@ -164,7 +164,6 @@ func New(dbType Dialect, dbName string, dbDriver driver.Driver, dbDSN ...string)
 			Tables:  []TableEntity{},
 		})
 	}
-
 	return nil
 }
 
@@ -278,6 +277,7 @@ type DashOpts struct {
 
 // WithDashboard enable admin dashboard
 func WithDashboard(addr string, options ...DashOpts) *ksbus.Server {
+
 	var opts *DashOpts
 	staticAndTemplatesEmbeded := []embed.FS{}
 	if len(options) > 0 {
@@ -352,7 +352,8 @@ func WithDashboard(addr string, options ...DashOpts) *ksbus.Server {
 	lg.Debug("DEBUG WithDashboard", "embeded", embededDashboard)
 	lg.UsePublisher(serverBus, "lg:logs")
 	initAdminUrlPatterns(serverBus.App)
-	var razor = `
+	if len(os.Args) == 0 {
+		const razor = `
                                __
   .'|   .'|   .'|=|'.     .'|=|  |   .'|\/|'.
 .'  | .' .' .'  | |  '. .'  | |  | .'  |  |  '.
@@ -360,7 +361,8 @@ func WithDashboard(addr string, options ...DashOpts) *ksbus.Server {
 |   |   |'. '.  | |  .' |   |  |'. |   |  |   |
 |___|   |_|   '.|=|.'   |___|  |_| |___|  |___|
 `
-	lg.Printfs("yl%s\n", razor)
+		lg.Printfs("yl%s\n", razor)
+	}
 	return serverBus
 }
 

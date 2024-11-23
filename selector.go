@@ -3,6 +3,7 @@ package korm
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -649,6 +650,38 @@ func (sl *Selector[T]) NoCache() *Selector[T] {
 	return sl
 }
 
+// The input can be a struct, a pointer to a struct, or a pointer to a pointer to a struct.
+func ResetStruct(input interface{}) error {
+	v := reflect.ValueOf(input)
+
+	// Handle double pointer
+	if v.Kind() == reflect.Ptr && v.Elem().Kind() == reflect.Ptr {
+		if v.IsNil() || v.Elem().IsNil() || v.Elem().Elem().Kind() != reflect.Struct {
+			return errors.New("input must be a non-nil pointer to a struct or a struct")
+		}
+		v = v.Elem().Elem() // Dereference to get to the struct
+	} else if v.Kind() == reflect.Ptr {
+		// Handle single pointer
+		if v.IsNil() || v.Elem().Kind() != reflect.Struct {
+			return errors.New("input must be a non-nil pointer to a struct or a struct")
+		}
+		v = v.Elem()
+	} else if v.Kind() != reflect.Struct {
+		// Handle non-pointer struct
+		return errors.New("input must be a struct or a pointer to a struct")
+	}
+
+	// Iterate through the fields and reset them
+	for i := 0; i < v.NumField(); i++ {
+		field := v.Field(i)
+		if field.CanSet() {
+			field.Set(reflect.Zero(field.Type()))
+		}
+	}
+
+	return nil
+}
+
 func (sl *Selector[T]) Query(statement string, args ...any) error {
 	var stt string
 	if useCache && !sl.nocache {
@@ -748,6 +781,7 @@ loop:
 						return err
 					}
 					*sl.dest = append(*sl.dest, *temp)
+					ResetStruct(temp)
 				}
 				continue loop
 			}
