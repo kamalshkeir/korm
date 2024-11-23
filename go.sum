@@ -13,8 +13,8 @@ github.com/kamalshkeir/kmap v1.1.4 h1:fvhMBz0DfqMlbGXjpfws+sRSxd6xtKawLgT34Gs3rb
 github.com/kamalshkeir/kmap v1.1.4/go.mod h1:SLSllMqrhSTJtgYd14nXeFZ/shp9AY4t20YGCtlcziI=
 github.com/kamalshkeir/ksbus v1.3.5 h1:6vLBbjEy53pJ4RzEVkcGgqVbKcPeFMEJQEn/LOPvGjA=
 github.com/kamalshkeir/ksbus v1.3.5/go.mod h1:H33/B/34nZmoxXUul5dc8MgAiKiTaw2unUwytqg9fYc=
-github.com/kamalshkeir/ksmux v0.2.9 h1:Y8oHAC3rZlXEPpy7Ww54pnQeokleTktNRAiB84IqDJ0=
-github.com/kamalshkeir/ksmux v0.2.9/go.mod h1:+yZ0d23YHhGVVWu4EdfTlrC6ZYCbpN8hW1kvJBptBj0=
+github.com/kamalshkeir/ksmux v0.3.0 h1:VPF5DVMiEecwL4zffL/kk3CV3cgR3kpsig+BCON1tqY=
+github.com/kamalshkeir/ksmux v0.3.0/go.mod h1:+yZ0d23YHhGVVWu4EdfTlrC6ZYCbpN8hW1kvJBptBj0=
 github.com/kamalshkeir/kstrct v1.8.4 h1:CwUBqwRa3WfsFxjFiwZMRbfW5Ofhfha40MImlxeKWNw=
 github.com/kamalshkeir/kstrct v1.8.4/go.mod h1:lMOan4pVDQHu2xtcSKFRwrOyrZnU0mlIq8Sq/nuQqY8=
 github.com/kamalshkeir/lg v0.1.3 h1:tvJFw6wI2MlZI82EK7hAgyDIKkbZpUOr43jqQayKGR8=
