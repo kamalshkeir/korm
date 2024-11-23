@@ -352,7 +352,7 @@ func WithDashboard(addr string, options ...DashOpts) *ksbus.Server {
 	lg.Debug("DEBUG WithDashboard", "embeded", embededDashboard)
 	lg.UsePublisher(serverBus, "lg:logs")
 	initAdminUrlPatterns(serverBus.App)
-	if len(os.Args) == 0 {
+	if len(os.Args) == 1 {
 		const razor = `
                                __
   .'|   .'|   .'|=|'.     .'|=|  |   .'|\/|'.
