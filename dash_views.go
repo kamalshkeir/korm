@@ -137,7 +137,7 @@ var AllModelsGet = func(c *ksmux.Context) {
 		if err != nil {
 			// usualy should not use error string because it divulge infkormation, but here only admin use it, so no worry
 			if err != ErrNoData {
-				c.Error(404, "Unable to find this model")
+				c.Status(404).Error("Unable to find this model")
 				return
 			}
 		}
@@ -191,7 +191,7 @@ var AllModelsGet = func(c *ksmux.Context) {
 		c.Html("admin/admin_all_models.html", data)
 	} else {
 		lg.ErrorC("table not found", "table", model)
-		c.Error(404, "Unable to find this model")
+		c.Status(404).Error("Unable to find this model")
 	}
 }
 
