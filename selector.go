@@ -770,13 +770,13 @@ loop:
 				if isPtr {
 					t := ref.Type().Elem()
 					newElem := reflect.New(t).Interface().(T)
-					err := kstrct.FillFromKV(newElem, kv)
+					err := kstrct.Fill(newElem, kv)
 					if lg.CheckError(err) {
 						return err
 					}
 					*sl.dest = append(*sl.dest, newElem)
 				} else {
-					err := kstrct.FillFromKV(temp, kv)
+					err := kstrct.Fill(temp, kv)
 					if lg.CheckError(err) {
 						return err
 					}
@@ -793,14 +793,14 @@ loop:
 					newElem := reflect.New(t).Interface().(T)
 					*sl.dest = append(*sl.dest, newElem)
 					temp = &(*sl.dest)[0]
-					err := kstrct.FillFromKV(*temp, kv, true)
+					err := kstrct.Fill(*temp, kv, true)
 					if lg.CheckError(err) {
 						return err
 					}
 				} else {
 					*sl.dest = append(*sl.dest, *new(T))
 					temp = &(*sl.dest)[0]
-					err := kstrct.FillFromKV(temp, kv, true)
+					err := kstrct.Fill(temp, kv, true)
 					if lg.CheckError(err) {
 						return err
 					}
@@ -823,14 +823,14 @@ loop:
 								newElem := reflect.New(t).Interface().(T)
 								*sl.dest = append(*sl.dest, newElem)
 								temp = &(*sl.dest)[index]
-								err := kstrct.FillFromKV(*temp, kv, true)
+								err := kstrct.Fill(*temp, kv, true)
 								if lg.CheckError(err) {
 									return err
 								}
 							} else {
 								*sl.dest = append(*sl.dest, *new(T))
 								temp = &(*sl.dest)[index]
-								err := kstrct.FillFromKV(temp, kv, true)
+								err := kstrct.Fill(temp, kv, true)
 								if lg.CheckError(err) {
 									return err
 								}
@@ -838,12 +838,12 @@ loop:
 						} else {
 							lastData = append(lastData, kvv)
 							if !isPtr {
-								err := kstrct.FillFromKV(&(*sl.dest)[index], kv, true)
+								err := kstrct.Fill(&(*sl.dest)[index], kv, true)
 								if lg.CheckError(err) {
 									return err
 								}
 							} else {
-								err := kstrct.FillFromKV((*sl.dest)[index], kv, true)
+								err := kstrct.Fill((*sl.dest)[index], kv, true)
 								if lg.CheckError(err) {
 									return err
 								}
@@ -913,13 +913,13 @@ loop:
 					return fmt.Errorf("channel of pointers not allowed in case of structs")
 				}
 				if !isNested {
-					err := kstrct.FillFromKV((*sl.dest)[0], kv)
+					err := kstrct.Fill((*sl.dest)[0], kv)
 					if lg.CheckError(err) {
 						return err
 					}
 					continue loop
 				} else {
-					err := kstrct.FillFromKV((*sl.dest)[0], kv, true)
+					err := kstrct.Fill((*sl.dest)[0], kv, true)
 					if lg.CheckError(err) {
 						return err
 					}
@@ -1085,13 +1085,13 @@ loop:
 				if isPtr {
 					t := ref.Type().Elem()
 					newElem := reflect.New(t).Interface().(T)
-					err := kstrct.FillFromKV(newElem, kv)
+					err := kstrct.Fill(newElem, kv)
 					if lg.CheckError(err) {
 						return err
 					}
 					*sl.dest = append(*sl.dest, newElem)
 				} else {
-					err := kstrct.FillFromKV(temp, kv)
+					err := kstrct.Fill(temp, kv)
 					if lg.CheckError(err) {
 						return err
 					}
@@ -1107,14 +1107,14 @@ loop:
 					newElem := reflect.New(t).Interface().(T)
 					*sl.dest = append(*sl.dest, newElem)
 					temp = &(*sl.dest)[0]
-					err := kstrct.FillFromKV(*temp, kv, true)
+					err := kstrct.Fill(*temp, kv, true)
 					if lg.CheckError(err) {
 						return err
 					}
 				} else {
 					*sl.dest = append(*sl.dest, *new(T))
 					temp = &(*sl.dest)[0]
-					err := kstrct.FillFromKV(temp, kv, true)
+					err := kstrct.Fill(temp, kv, true)
 					if lg.CheckError(err) {
 						return err
 					}
@@ -1137,14 +1137,14 @@ loop:
 								newElem := reflect.New(t).Interface().(T)
 								*sl.dest = append(*sl.dest, newElem)
 								temp = &(*sl.dest)[index]
-								err := kstrct.FillFromKV(*temp, kv, true)
+								err := kstrct.Fill(*temp, kv, true)
 								if lg.CheckError(err) {
 									return err
 								}
 							} else {
 								*sl.dest = append(*sl.dest, *new(T))
 								temp = &(*sl.dest)[index]
-								err := kstrct.FillFromKV(temp, kv, true)
+								err := kstrct.Fill(temp, kv, true)
 								if lg.CheckError(err) {
 									return err
 								}
@@ -1152,12 +1152,12 @@ loop:
 						} else {
 							lastData = append(lastData, kvv)
 							if !isPtr {
-								err := kstrct.FillFromKV(&(*sl.dest)[index], kv, true)
+								err := kstrct.Fill(&(*sl.dest)[index], kv, true)
 								if lg.CheckError(err) {
 									return err
 								}
 							} else {
-								err := kstrct.FillFromKV((*sl.dest)[index], kv, true)
+								err := kstrct.Fill((*sl.dest)[index], kv, true)
 								if lg.CheckError(err) {
 									return err
 								}
@@ -1228,13 +1228,13 @@ loop:
 					return fmt.Errorf("channel of pointers not allowed in case of structs")
 				}
 				if !isNested {
-					err := kstrct.FillFromKV((*sl.dest)[0], kv)
+					err := kstrct.Fill((*sl.dest)[0], kv)
 					if lg.CheckError(err) {
 						return err
 					}
 					continue loop
 				} else {
-					err := kstrct.FillFromKV((*sl.dest)[0], kv, true)
+					err := kstrct.Fill((*sl.dest)[0], kv, true)
 					if lg.CheckError(err) {
 						return err
 					}

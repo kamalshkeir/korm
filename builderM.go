@@ -1316,7 +1316,7 @@ func (b *BuilderM) queryS(ptrStrctSlice any, statement string, args ...any) erro
 			}
 		}
 		ptr := reflect.New(value.Type().Elem()).Interface()
-		err = kstrct.FillFromMap(ptr, m)
+		err = kstrct.FillM(ptr, m)
 		if err != nil {
 			return err
 		}
