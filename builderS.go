@@ -209,7 +209,7 @@ func (b *BuilderS[T]) Insert(model *T) (int, error) {
 	stat.WriteString(placeholders)
 	stat.WriteString(")")
 	b.statement = stat.String()
-	adaptPlaceholdersToDialect(&b.statement, b.db.Dialect)
+	AdaptPlaceholdersToDialect(&b.statement, b.db.Dialect)
 
 	if b.db.Dialect != POSTGRES {
 		var res sql.Result
@@ -328,7 +328,7 @@ func (b *BuilderS[T]) InsertR(model *T) (T, error) {
 	stat.WriteString(placeholders)
 	stat.WriteString(")")
 	b.statement = stat.String()
-	adaptPlaceholdersToDialect(&b.statement, b.db.Dialect)
+	AdaptPlaceholdersToDialect(&b.statement, b.db.Dialect)
 	if b.debug {
 		lg.InfoC("debug", "stat", b.statement, "args", newvalues)
 	}
@@ -449,7 +449,7 @@ func (b *BuilderS[T]) BulkInsert(models ...*T) ([]int, error) {
 		stat.WriteString(ph)
 		stat.WriteString(");")
 		statem := stat.String()
-		adaptPlaceholdersToDialect(&statem, b.db.Dialect)
+		AdaptPlaceholdersToDialect(&statem, b.db.Dialect)
 		if b.debug {
 			lg.InfoC("debug", "stat", statem, "args", values)
 		}
@@ -580,7 +580,7 @@ func (b *BuilderS[T]) AddRelated(relatedTable string, whereRelatedTable string, 
 		}
 	}
 	stat := "INSERT INTO " + relationTableName + "(" + cols + ") select ?,? WHERE NOT EXISTS (select * FROM " + relationTableName + " WHERE " + wherecols + ");"
-	adaptPlaceholdersToDialect(&stat, b.db.Dialect)
+	AdaptPlaceholdersToDialect(&stat, b.db.Dialect)
 	if b.debug {
 		lg.InfoC("debug", "stat", stat, "args", ids)
 	}
@@ -824,7 +824,7 @@ func (b *BuilderS[T]) Set(query string, args ...any) (int, error) {
 	adaptSetQuery(&query)
 	adaptTimeToUnixArgs(&args)
 	b.statement = "UPDATE " + b.tableName + " SET " + query + " WHERE " + b.whereQuery
-	adaptPlaceholdersToDialect(&b.statement, b.db.Dialect)
+	AdaptPlaceholdersToDialect(&b.statement, b.db.Dialect)
 	args = append(args, b.args...)
 	if b.debug {
 		lg.InfoC("debug", "stat", b.statement, "args", args)
@@ -867,7 +867,7 @@ func (b *BuilderS[T]) Delete() (int, error) {
 	} else {
 		return 0, errors.New("no Where was given for this query:" + b.whereQuery)
 	}
-	adaptPlaceholdersToDialect(&b.statement, b.db.Dialect)
+	AdaptPlaceholdersToDialect(&b.statement, b.db.Dialect)
 	if b.debug {
 		lg.InfoC("debug", "stat", b.statement, "args", b.args)
 	}
@@ -936,7 +936,7 @@ func (b *BuilderS[T]) Select(columns ...string) *BuilderS[T] {
 	return b
 }
 
-// Where can be like : Where("id > ?",1) or Where("id",1) = Where("id = ?",1)
+// Where can be like : Where("id > ? AND age IN (?)",[]uint{18,19,20}) or Where("id",1) = Where("id = ?",1)
 func (b *BuilderS[T]) Where(query string, args ...any) *BuilderS[T] {
 	if b == nil || b.tableName == "" {
 		return nil
@@ -946,9 +946,76 @@ func (b *BuilderS[T]) Where(query string, args ...any) *BuilderS[T] {
 	} else if b.db != nil {
 		query = adaptConcatAndLen(query, b.db.Dialect)
 	}
-	adaptTimeToUnixArgs(&args)
-	b.whereQuery = query
-	b.args = append(b.args, args...)
+
+	// Handle IN clauses
+	var expandedArgs []any
+	split := strings.Split(query, "?")
+	var result strings.Builder
+	argIndex := 0
+
+	for i := range split {
+		result.WriteString(split[i])
+		if i < len(split)-1 && argIndex < len(args) {
+			// Check if this placeholder is part of an IN clause
+			beforePlaceholder := strings.TrimSpace(strings.ToUpper(split[i]))
+			if strings.HasSuffix(beforePlaceholder, "IN") || strings.HasSuffix(beforePlaceholder, "IN (") {
+				// Handle slice for IN clause
+				switch v := args[argIndex].(type) {
+				case []int:
+					result.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+					for _, val := range v {
+						expandedArgs = append(expandedArgs, val)
+					}
+				case []int64:
+					result.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+					for _, val := range v {
+						expandedArgs = append(expandedArgs, val)
+					}
+				case []float32:
+					result.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+					for _, val := range v {
+						expandedArgs = append(expandedArgs, val)
+					}
+				case []float64:
+					result.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+					for _, val := range v {
+						expandedArgs = append(expandedArgs, val)
+					}
+				case []uint:
+					result.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+					for _, val := range v {
+						expandedArgs = append(expandedArgs, val)
+					}
+				case []uint8:
+					result.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+					for _, val := range v {
+						expandedArgs = append(expandedArgs, val)
+					}
+				case []string:
+					result.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+					for _, val := range v {
+						expandedArgs = append(expandedArgs, val)
+					}
+				case []any:
+					result.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+					expandedArgs = append(expandedArgs, v...)
+				default:
+					// Not a slice, treat as normal arg
+					result.WriteString("?")
+					expandedArgs = append(expandedArgs, args[argIndex])
+				}
+			} else {
+				// Normal argument
+				result.WriteString("?")
+				expandedArgs = append(expandedArgs, args[argIndex])
+			}
+			argIndex++
+		}
+	}
+
+	adaptTimeToUnixArgs(&expandedArgs)
+	b.whereQuery = result.String()
+	b.args = append(b.args, expandedArgs...)
 	b.order = append(b.order, "where")
 	return b
 }
@@ -1167,7 +1234,7 @@ func (b *BuilderS[T]) ToChan(ptrChan *chan T) ([]T, error) {
 	if b.debug {
 		lg.InfoC("debug", "stat", b.statement, "args", b.args)
 	}
-	adaptPlaceholdersToDialect(&b.statement, b.db.Dialect)
+	AdaptPlaceholdersToDialect(&b.statement, b.db.Dialect)
 	adaptTimeToUnixArgs(&b.args)
 	pk := ""
 	if b.tableName != "" {
@@ -1415,7 +1482,7 @@ func (b *BuilderS[T]) QueryS(statement string, args ...any) ([]T, error) {
 			return v.([]T), nil
 		}
 	}
-	adaptPlaceholdersToDialect(&statement, b.db.Dialect)
+	AdaptPlaceholdersToDialect(&statement, b.db.Dialect)
 	adaptTimeToUnixArgs(&args)
 	pk := ""
 	if b.tableName != "" {

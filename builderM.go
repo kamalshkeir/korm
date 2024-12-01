@@ -88,9 +88,76 @@ func (b *BuilderM) Where(query string, args ...any) *BuilderM {
 		return nil
 	}
 	query = adaptConcatAndLen(query, b.db.Dialect)
-	adaptTimeToUnixArgs(&args)
-	b.whereQuery = query
-	b.args = append(b.args, args...)
+
+	// Handle IN clauses
+	var expandedArgs []any
+	split := strings.Split(query, "?")
+	var result strings.Builder
+	argIndex := 0
+
+	for i := range split {
+		result.WriteString(split[i])
+		if i < len(split)-1 && argIndex < len(args) {
+			// Check if this placeholder is part of an IN clause
+			beforePlaceholder := strings.TrimSpace(strings.ToUpper(split[i]))
+			if strings.HasSuffix(beforePlaceholder, "IN") || strings.HasSuffix(beforePlaceholder, "IN (") {
+				// Handle slice for IN clause
+				switch v := args[argIndex].(type) {
+				case []int:
+					result.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+					for _, val := range v {
+						expandedArgs = append(expandedArgs, val)
+					}
+				case []int64:
+					result.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+					for _, val := range v {
+						expandedArgs = append(expandedArgs, val)
+					}
+				case []uint:
+					result.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+					for _, val := range v {
+						expandedArgs = append(expandedArgs, val)
+					}
+				case []uint8:
+					result.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+					for _, val := range v {
+						expandedArgs = append(expandedArgs, val)
+					}
+				case []float32:
+					result.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+					for _, val := range v {
+						expandedArgs = append(expandedArgs, val)
+					}
+				case []float64:
+					result.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+					for _, val := range v {
+						expandedArgs = append(expandedArgs, val)
+					}
+				case []string:
+					result.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+					for _, val := range v {
+						expandedArgs = append(expandedArgs, val)
+					}
+				case []any:
+					result.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+					expandedArgs = append(expandedArgs, v...)
+				default:
+					// Not a slice, treat as normal arg
+					result.WriteString("?")
+					expandedArgs = append(expandedArgs, args[argIndex])
+				}
+			} else {
+				// Normal argument
+				result.WriteString("?")
+				expandedArgs = append(expandedArgs, args[argIndex])
+			}
+			argIndex++
+		}
+	}
+
+	adaptTimeToUnixArgs(&expandedArgs)
+	b.whereQuery = result.String()
+	b.args = append(b.args, expandedArgs...)
 	b.order = append(b.order, "where")
 	return b
 }
@@ -670,7 +737,7 @@ func (b *BuilderM) Set(query string, args ...any) (int, error) {
 	adaptSetQuery(&query)
 	b.statement = "UPDATE " + b.tableName + " SET " + query + " WHERE " + b.whereQuery
 	adaptTimeToUnixArgs(&args)
-	adaptPlaceholdersToDialect(&b.statement, b.db.Dialect)
+	AdaptPlaceholdersToDialect(&b.statement, b.db.Dialect)
 	args = append(args, b.args...)
 	if b.debug {
 		lg.InfoC("debug", "statement", b.statement, "args", args)
@@ -710,7 +777,7 @@ func (b *BuilderM) Delete() (int, error) {
 	} else {
 		return 0, errors.New("no Where was given for this query:" + b.whereQuery)
 	}
-	adaptPlaceholdersToDialect(&b.statement, b.db.Dialect)
+	AdaptPlaceholdersToDialect(&b.statement, b.db.Dialect)
 	if b.debug {
 		lg.InfoC("debug", "statement", b.statement, "args", b.args)
 	}
@@ -849,7 +916,7 @@ func (b *BuilderM) AddRelated(relatedTable string, whereRelatedTable string, whe
 		}
 	}
 	stat := "INSERT INTO " + relationTableName + "(" + cols + ") select ?,? WHERE NOT EXISTS (select * FROM " + relationTableName + " WHERE " + wherecols + ");"
-	adaptPlaceholdersToDialect(&stat, b.db.Dialect)
+	AdaptPlaceholdersToDialect(&stat, b.db.Dialect)
 	if b.debug {
 		lg.InfoC("debug", "statement", stat, "args", ids)
 	}
@@ -1082,7 +1149,7 @@ func (b *BuilderM) QueryM(statement string, args ...any) ([]map[string]any, erro
 			return v.([]map[string]any), nil
 		}
 	}
-	adaptPlaceholdersToDialect(&statement, b.db.Dialect)
+	AdaptPlaceholdersToDialect(&statement, b.db.Dialect)
 	adaptTimeToUnixArgs(&args)
 	var rows *sql.Rows
 	var err error
@@ -1244,7 +1311,7 @@ func (b *BuilderM) queryS(ptrStrctSlice any, statement string, args ...any) erro
 	if b == nil || b.tableName == "" {
 		return ErrTableNotFound
 	}
-	adaptPlaceholdersToDialect(&statement, b.db.Dialect)
+	AdaptPlaceholdersToDialect(&statement, b.db.Dialect)
 	adaptTimeToUnixArgs(&args)
 	if b.db.Conn == nil {
 		return errors.New("no connection")

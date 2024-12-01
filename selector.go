@@ -697,7 +697,9 @@ func (sl *Selector[T]) Query(statement string, args ...any) error {
 	typ := fmt.Sprintf("%T", *new(T))
 	ref := reflect.ValueOf(*new(T))
 
-	adaptPlaceholdersToDialect(&statement, sl.db.Dialect)
+	// Expand IN clause arguments before dialect adaptation
+	statement, args = In(statement, args)
+	AdaptPlaceholdersToDialect(&statement, sl.db.Dialect)
 	adaptTimeToUnixArgs(&args)
 	var rows *sql.Rows
 	var err error
@@ -1096,6 +1098,7 @@ loop:
 						return err
 					}
 					*sl.dest = append(*sl.dest, *temp)
+					ResetStruct(temp)
 				}
 				continue loop
 			}
