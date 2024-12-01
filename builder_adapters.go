@@ -214,6 +214,11 @@ func adaptConcatAndLen(str string, dialect Dialect) string {
 
 // In expands slice arguments for IN clauses before dialect adaptation
 func In(query string, args ...any) (string, []any) {
+	if len(args) == 1 {
+		if v, ok := args[0].([]any); ok {
+			args = v
+		}
+	}
 	if !strings.Contains(query, "?") {
 		return query, args
 	}
