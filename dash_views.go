@@ -143,6 +143,7 @@ var AllModelsGet = func(c *ksmux.Context) {
 		}
 	}
 	dbCols, cols := GetAllColumnsTypes(model)
+	mmfkeysModels := map[string][]map[string]any{}
 	mmfkeys := map[string][]any{}
 	if t != nil {
 		for _, fkey := range t.Fkeys {
@@ -150,7 +151,7 @@ var AllModelsGet = func(c *ksmux.Context) {
 			if len(spFrom) == 2 {
 				spTo := strings.Split(fkey.ToTableField, ".")
 				if len(spTo) == 2 {
-					q := "select " + spTo[1] + " from " + spTo[0] + " order by " + spTo[1]
+					q := "select * from " + spTo[0] + " order by " + spTo[1]
 					mm := []map[string]any{}
 					err := To(&mm).Query(q)
 					if !lg.CheckError(err) {
@@ -160,6 +161,16 @@ var AllModelsGet = func(c *ksmux.Context) {
 						}
 						if len(ress) > 0 {
 							mmfkeys[spFrom[1]] = ress
+							mmfkeysModels[spFrom[1]] = mm
+							for _, v := range mmfkeysModels[spFrom[1]] {
+								for i, vv := range v {
+									if vvStr, ok := vv.(string); ok {
+										if len(vvStr) > 20 {
+											v[i] = vvStr[:20] + "..."
+										}
+									}
+								}
+							}
 						}
 					} else {
 						lg.ErrorC("error:", "q", q, "spTo", spTo)
@@ -179,6 +190,7 @@ var AllModelsGet = func(c *ksmux.Context) {
 			"dbcolumns":      dbCols,
 			"pk":             idString,
 			"fkeys":          mmfkeys,
+			"fkeysModels":    mmfkeysModels,
 			"columnsOrdered": cols,
 		}
 		if t != nil {
@@ -415,12 +427,13 @@ var SingleModelGet = func(c *ksmux.Context) {
 	}
 	dbCols, colsOrdered := GetAllColumnsTypes(model)
 	mmfkeys := map[string][]any{}
+	mmfkeysModels := map[string][]map[string]any{}
 	for _, fkey := range t.Fkeys {
 		spFrom := strings.Split(fkey.FromTableField, ".")
 		if len(spFrom) == 2 {
 			spTo := strings.Split(fkey.ToTableField, ".")
 			if len(spTo) == 2 {
-				q := "select " + spTo[1] + " from " + spTo[0] + " order by " + spTo[1]
+				q := "select * from " + spTo[0] + " order by " + spTo[1]
 				mm, err := Table(spTo[0]).Database(defaultDB).QueryM(q)
 				if !lg.CheckError(err) {
 					ress := []any{}
@@ -429,6 +442,16 @@ var SingleModelGet = func(c *ksmux.Context) {
 					}
 					if len(ress) > 0 {
 						mmfkeys[spFrom[1]] = ress
+						mmfkeysModels[spFrom[1]] = mm
+						for _, v := range mmfkeysModels[spFrom[1]] {
+							for i, vv := range v {
+								if vvStr, ok := vv.(string); ok {
+									if len(vvStr) > 20 {
+										v[i] = vvStr[:20] + "..."
+									}
+								}
+							}
+						}
 					}
 				}
 			}
@@ -444,6 +467,7 @@ var SingleModelGet = func(c *ksmux.Context) {
 		"columns":        t.ModelTypes,
 		"dbcolumns":      dbCols,
 		"pk":             t.Pk,
+		"fkeysModels":    mmfkeysModels,
 		"columnsOrdered": colsOrdered,
 	})
 }

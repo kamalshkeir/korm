@@ -121,7 +121,7 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@v1.94.1
+go get -u github.com/kamalshkeir/korm@v1.94.2
 ```
 
 # Drivers moved outside this package to not get them all in your go.mod file
@@ -1706,6 +1706,39 @@ Available 'on_delete' and 'on_update' options: cascade,(donothing,noaction),(set
 </td>
 </tr>
 </table>
+
+
+
+# JSON
+
+```go
+type JsonOption struct {
+	As       string
+	Dialect  string
+	Database string
+	Params   []any
+}
+func JSON_EXTRACT(dataJson string, opt ...JsonOption) string
+func JSON_REMOVE(dataJson string, opt ...JsonOption) string
+func JSON_SET(dataJson string, opt ...JsonOption) string
+func JSON_ARRAY(values []any, as string, dialect ...string) string
+func JSON_OBJECT(values []any, as string, dialect ...string) string
+func JSON_CAST(value string, as string, dialect ...string) string
+
+// create query json
+q := korm.JSON_EXTRACT(`{"a": {"c": 3}, "b": 2}`, korm.JsonOption{
+	As:     "data",
+	Params: []any{"a.c", "b"},
+})
+fmt.Println("q ==", q) // q == JSON_EXTRACT('{"a": {"c": 3}, "b": 2}','$.a.c','$.b') AS data
+
+var data []map[string]any
+err := korm.To(&data).Query("SELECT " + q)
+lg.CheckError(err)
+
+fmt.Println("data=", data) // data= [map[data:[3,2]]]
+```
+
 
 ---
 
