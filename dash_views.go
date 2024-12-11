@@ -240,6 +240,40 @@ var AllModelsSearch = func(c *ksmux.Context) {
 		})
 		return
 	}
+	mmfkeysModels := map[string][]map[string]any{}
+	mmfkeys := map[string][]any{}
+	for _, fkey := range t.Fkeys {
+		spFrom := strings.Split(fkey.FromTableField, ".")
+		if len(spFrom) == 2 {
+			spTo := strings.Split(fkey.ToTableField, ".")
+			if len(spTo) == 2 {
+				q := "select * from " + spTo[0] + " order by " + spTo[1]
+				mm := []map[string]any{}
+				err := To(&mm).Query(q)
+				if !lg.CheckError(err) {
+					ress := []any{}
+					for _, res := range mm {
+						ress = append(ress, res[spTo[1]])
+					}
+					if len(ress) > 0 {
+						mmfkeys[spFrom[1]] = ress
+						mmfkeysModels[spFrom[1]] = mm
+						for _, v := range mmfkeysModels[spFrom[1]] {
+							for i, vv := range v {
+								if vvStr, ok := vv.(string); ok {
+									if len(vvStr) > 20 {
+										v[i] = vvStr[:20] + "..."
+									}
+								}
+							}
+						}
+					}
+				} else {
+					lg.ErrorC("error:", "q", q, "spTo", spTo)
+				}
+			}
+		}
+	}
 	if orderby, ok := body["orderby"]; ok {
 		if v, ok := orderby.(string); ok && v != "" {
 			oB = v
@@ -280,9 +314,11 @@ var AllModelsSearch = func(c *ksmux.Context) {
 	}
 
 	c.Json(map[string]any{
-		"rows":  data,
-		"cols":  t.Columns,
-		"types": t.ModelTypes,
+		"rows":        data,
+		"cols":        t.Columns,
+		"types":       t.ModelTypes,
+		"fkeys":       mmfkeys,
+		"fkeysModels": mmfkeysModels,
 	})
 }
 
