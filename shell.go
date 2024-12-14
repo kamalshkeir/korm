@@ -240,10 +240,11 @@ func handleCommand(commands []string) bool {
 }
 
 func createuser() {
+	username := kinput.Input(kinput.Blue, "Username : ")
 	email := kinput.Input(kinput.Blue, "Email : ")
 	password := kinput.Hidden(kinput.Blue, "Password : ")
 	if email != "" && password != "" {
-		err := newuser(email, password, false)
+		err := newuser(username, email, password, false)
 		if err == nil {
 			fmt.Printf(green, "User "+email+" created successfully")
 		} else {
@@ -255,9 +256,10 @@ func createuser() {
 }
 
 func createsuperuser() {
+	username := kinput.Input(kinput.Blue, "Username: ")
 	email := kinput.Input(kinput.Blue, "Email: ")
 	password := kinput.Hidden(kinput.Blue, "Password: ")
-	err := newuser(email, password, true)
+	err := newuser(username, email, password, true)
 	if err == nil {
 		fmt.Printf(green, "Admin "+email+" created successfully")
 	} else {
@@ -291,7 +293,7 @@ func query(queryStatement string) {
 	}
 }
 
-func newuser(email, password string, admin bool) error {
+func newuser(username, email, password string, admin bool) error {
 	if email == "" || password == "" {
 		return fmt.Errorf("email or password empty")
 	}
@@ -307,6 +309,7 @@ func newuser(email, password string, admin bool) error {
 		"uuid":     GenerateUUID(),
 		"email":    email,
 		"password": hash,
+		"username": username,
 		"is_admin": admin,
 		"image":    "",
 	})

@@ -121,7 +121,7 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@v1.94.3
+go get -u github.com/kamalshkeir/korm@v1.94.4
 ```
 
 # Drivers moved outside this package to not get them all in your go.mod file
@@ -548,7 +548,7 @@ korm.AssetsDir          = "assets"
 korm.StaticDir          = path.Join(AssetsDir, "/", "static")
 korm.TemplatesDir       = path.Join(AssetsDir, "/", "templates")
 korm.RepoUser           = "kamalshkeir"
-korm.RepoName           = "korm-dashboard"
+korm.RepoName           = "korm-dash"
 korm.adminPathNameGroup = "/admin" // korm.SetAdminPath("/another")
 // so you can create a custom dashboard, upload it to your repos and change like like above korm.RepoUser and korm.RepoName
 ```
@@ -758,70 +758,6 @@ var BasicAuth = func(handler ksmux.Handler) ksmux.Handler {
 }
 
 ```
-
-### Example korm api
-```go
-package main
-
-import (
-	"github.com/kamalshkeir/lg"
-	"github.com/kamalshkeir/ksmux"
-	"github.com/kamalshkeir/korm"
-	"github.com/kamalshkeir/sqlitedriver"
-)
-
-func main() {
-	err := korm.New(korm.SQLITE, "db",sqlitedriver.Use())
-	if lg.CheckError(err) {
-		return
-	}
-	defer korm.Shutdown()
-
-	serverBus := korm.WithDashboard("localhost:9313")
-	korm.WithShell() // to enable shell
-	app := bus.App
-	lg.Printfs("mgrunning on http://localhost:9313\n")
-	app.Get("/", func(c *ksmux.Context) {
-		c.Text("hello")
-	})
-
-	korm.BASIC_AUTH_USER = "user"
-	korm.BASIC_AUTH_PASS = "pass"
-	err = korm.WithAPI("/api", korm.BasicAuth)
-	if lg.CheckError(err) {
-		return
-	}
-	// Register a table to the api
-
-	// err = korm.RegisterTable(korm.TableRegistration[korm.User]{} // use defaults , all methods, Auth middleware, and no filters for query 
-	// or , customize it : 
-	err = korm.RegisterTable(korm.TableRegistration[korm.User]{
-		//Methods: []string{"*"}, // default
-		Methods: []string{"get","post"}, 
-
-		//Middws: []func(handler kmux.Handler) kmux.Handler{korm.Auth}, // default
-		Middws: []func(handler kmux.Handler) kmux.Handler{korm.Admin}, // users only accessible by admin
-
-		BuilderGetAll: func(modelBuilder *korm.BuilderS[korm.User]) *korm.BuilderS[korm.User] { // for /users
-			modelBuilder.Select("id")
-			return modelBuilder
-		},
-		BuilderGetOne: func(modelBuilder *korm.BuilderS[korm.User]) *korm.BuilderS[korm.User] { // for /users/:pk
-			modelBuilder.Select("uuid","email")
-			return modelBuilder
-		},
-	})
-	if lg.CheckError(err) {
-		return
-	}
-
-	bus.Run()
-}
-```
-
-<img src="api.jpg">
-
-
 
 ### Example With Bus between 2 KORM
 KORM 1:

@@ -108,7 +108,7 @@ func New(dbType Dialect, dbName string, dbDriver driver.Driver, dbDSN ...string)
 		if options != "" {
 			dsn += "?" + options
 		} else {
-			dsn += "?_foreign_keys=true"
+			dsn += "?_pragma=foreign_keys(1)&_time_format=sqlite"
 		}
 	default:
 		dbType = "sqlite3"
@@ -120,7 +120,7 @@ func New(dbType Dialect, dbName string, dbDriver driver.Driver, dbDSN ...string)
 		if options != "" {
 			dsn += "?" + options
 		} else {
-			dsn += "?_foreign_keys=true"
+			dsn += "?_pragma=foreign_keys(1)&_time_format=sqlite"
 		}
 	}
 
@@ -261,23 +261,23 @@ func WithBus(options ...ksbus.ServerOpts) *ksbus.Server {
 }
 
 type DashOpts struct {
-	ServerOpts       *ksbus.ServerOpts
-	EmbededStatic    embed.FS
-	EmbededTemplates embed.FS
-	PaginatePer      int    // default 10
-	DocsUrl          string // default docs
-	MediaDir         string // default media
-	BaseDir          string // default assets
-	StaticDir        string // default BaseDir/static
-	TemplatesDir     string // default BaseDir/templates
-	Path             string // default /admin
-	RepoUser         string // default kamalshkeir
-	RepoName         string // default korm-dashboard
+	ServerOpts         *ksbus.ServerOpts
+	EmbededStatic      embed.FS
+	EmbededTemplates   embed.FS
+	PaginatePer        int    // default 10
+	DocsUrl            string // default docs
+	MediaDir           string // default media
+	BaseDir            string // default assets
+	StaticDir          string // default BaseDir/static
+	TemplatesDir       string // default BaseDir/templates
+	Path               string // default /admin
+	RepoUser           string // default kamalshkeir
+	RepoName           string // default korm-dash
+	WithRequestCounter bool   // add request counter dashboard,default false
 }
 
 // WithDashboard enable admin dashboard
 func WithDashboard(addr string, options ...DashOpts) *ksbus.Server {
-
 	var opts *DashOpts
 	staticAndTemplatesEmbeded := []embed.FS{}
 	if len(options) > 0 {
@@ -349,9 +349,13 @@ func WithDashboard(addr string, options ...DashOpts) *ksbus.Server {
 		}
 	}
 	cloneAndMigrateDashboard(true, staticAndTemplatesEmbeded...)
-	lg.Debug("DEBUG WithDashboard", "embeded", embededDashboard)
 	lg.UsePublisher(serverBus, "lg:logs")
-	initAdminUrlPatterns(serverBus.App)
+
+	reqqCounter := false
+	if opts != nil && opts.WithRequestCounter {
+		reqqCounter = opts.WithRequestCounter
+	}
+	initAdminUrlPatterns(reqqCounter, serverBus.App)
 	if len(os.Args) == 1 {
 		const razor = `
                                __
@@ -379,7 +383,6 @@ func WithDocs(generateJsonDocs bool, outJsonDocs string, handlerMiddlewares ...f
 		ksmux.DocsOutJson = staticDir + "/docs"
 	}
 
-	isDocsUsed = true
 	// check swag install and init docs.Routes slice
 	serverBus.App.WithDocs(generateJsonDocs)
 	webPath := docsUrl

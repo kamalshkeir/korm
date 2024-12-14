@@ -12,6 +12,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/kamalshkeir/aes"
@@ -19,6 +20,66 @@ import (
 	"github.com/kamalshkeir/ksmux"
 	"github.com/kamalshkeir/lg"
 )
+
+type LogEntry struct {
+	Type  string
+	At    string
+	Extra string
+}
+
+// Global atomic counter for requests
+var totalRequests uint64
+
+// GetTotalRequests returns the current total requests count
+func GetTotalRequests() uint64 {
+	return atomic.LoadUint64(&totalRequests)
+}
+
+func parseLogString(logStr string) LogEntry {
+	// Handle empty string case
+	if logStr == "" {
+		return LogEntry{}
+	}
+
+	// Split the time from the end
+	parts := strings.Split(logStr, "time=")
+	timeStr := ""
+	mainPart := logStr
+
+	if len(parts) > 1 {
+		timeStr = strings.TrimSpace(parts[1])
+		mainPart = strings.TrimSpace(parts[0])
+	}
+
+	// Get the log type (ERRO, INFO, etc)
+	logType := ""
+	if len(mainPart) >= 4 {
+		logType = strings.TrimSpace(mainPart[:4])
+		mainPart = mainPart[4:]
+	}
+
+	// Clean up the type
+	switch logType {
+	case "ERRO":
+		logType = "ERROR"
+	case "INFO":
+		logType = "INFO"
+	case "WARN":
+		logType = "WARNING"
+	case "DEBU":
+		logType = "DEBUG"
+	case "FATA":
+		logType = "FATAL"
+	default:
+		logType = "N/A"
+	}
+
+	return LogEntry{
+		Type:  logType,
+		At:    timeStr,
+		Extra: strings.TrimSpace(mainPart),
+	}
+}
 
 func reverseSlice[T any](slice []T) []T {
 	new := make([]T, 0, len(slice))
@@ -28,24 +89,148 @@ func reverseSlice[T any](slice []T) []T {
 	return new
 }
 
+// GetDatabaseSize returns the size of the database in GB or MB
+func GetDatabaseSize(dbName string) (string, error) {
+	db := databases[0] // default db
+	for _, d := range databases {
+		if d.Name == dbName {
+			db = d
+			break
+		}
+	}
+
+	var size float64
+	var err error
+
+	switch db.Dialect {
+	case "sqlite", "sqlite3":
+		// For SQLite, get the file size
+		info, err := os.Stat(dbName + ".sqlite3")
+		if err != nil {
+			return "0 MB", fmt.Errorf("error getting sqlite db size: %v", err)
+		}
+		size = float64(info.Size())
+
+	case "postgres", "postgresql":
+		// For PostgreSQL, query the pg_database_size function
+		var sizeBytes int64
+		query := `SELECT pg_database_size($1)`
+
+		err = GetConnection().QueryRow(query, db.Name).Scan(&sizeBytes)
+		if err != nil {
+			return "0 MB", fmt.Errorf("error getting postgres db size: %v", err)
+		}
+		size = float64(sizeBytes)
+
+	case "mysql", "mariadb":
+		// For MySQL/MariaDB, query information_schema
+		var sizeBytes int64
+		query := `
+			SELECT SUM(data_length + index_length) 
+			FROM information_schema.TABLES 
+			WHERE table_schema = ?`
+		err = GetConnection().QueryRow(query, db.Name).Scan(&sizeBytes)
+		if err != nil {
+			return "0 MB", fmt.Errorf("error getting mysql db size: %v", err)
+		}
+		size = float64(sizeBytes)
+
+	default:
+		return "0 MB", fmt.Errorf("unsupported database dialect: %s", db.Dialect)
+	}
+
+	// Convert bytes to GB (1 GB = 1024^3 bytes)
+	sizeGB := size / (1024 * 1024 * 1024)
+
+	// If size is less than 1 GB, convert to MB
+	if sizeGB < 1 {
+		sizeMB := size / (1024 * 1024)
+		return fmt.Sprintf("%.2f MB", sizeMB), nil
+	}
+
+	return fmt.Sprintf("%.2f GB", sizeGB), nil
+}
+
 var LogsView = func(c *ksmux.Context) {
 	d := map[string]any{
 		"admin_path": adminPathNameGroup,
 		"static_url": staticUrl,
 		"secure":     ksmux.IsTLS,
 	}
+	parsed := make([]LogEntry, 0)
 	if v := lg.GetLogs(); v != nil {
-		d["logs"] = reverseSlice[string](v.Slice)
+		for _, vv := range reverseSlice(v.Slice) {
+			parsed = append(parsed, parseLogString(vv))
+		}
 	}
-	c.Html("admin/logs.html", d)
+	d["parsed"] = parsed
+	c.Html("admin/admin_logs.html", d)
 }
 
-var IndexView = func(c *ksmux.Context) {
+var DashView = func(c *ksmux.Context) {
+	// Get database size
+	size, err := GetDatabaseSize(defaultDB)
+	if err != nil {
+		lg.Error(err)
+		size = "0 MB"
+	}
+
 	allTables := GetAllTables(defaultDB)
-	c.Html("admin/admin_index.html", map[string]any{
+	q := []string{}
+	for _, t := range allTables {
+		q = append(q, "SELECT '"+t+"' AS table_name,COUNT(*) AS count FROM "+t)
+	}
+	query := strings.Join(q, ` UNION ALL `)
+
+	var results []struct {
+		TableName string `db:"table_name"`
+		Count     int    `db:"count"`
+	}
+	if err := To(&results).Query(query); lg.CheckError(err) {
+		c.Error("something wrong happened")
+		return
+	}
+	count := 0
+	for _, r := range results {
+		count += r.Count
+	}
+
+	ddd := map[string]any{
+		"admin_path":         adminPathNameGroup,
+		"static_url":         staticUrl,
+		"db_size":            size,
+		"count":              count,
+		"withRequestCounter": withRequestCounter,
+	}
+	if withRequestCounter {
+		ddd["requests"] = GetTotalRequests()
+	}
+
+	c.Html("admin/admin_index.html", ddd)
+}
+
+var TablesView = func(c *ksmux.Context) {
+	allTables := GetAllTables(defaultDB)
+	q := []string{}
+	for _, t := range allTables {
+		q = append(q, "SELECT '"+t+"' AS table_name,COUNT(*) AS count FROM "+t)
+	}
+	query := strings.Join(q, ` UNION ALL `)
+
+	var results []struct {
+		TableName string `db:"table_name"`
+		Count     int    `db:"count"`
+	}
+	if err := To(&results).Query(query); lg.CheckError(err) {
+		c.Error("something wrong happened")
+		return
+	}
+
+	c.Html("admin/admin_tables.html", map[string]any{
 		"admin_path": adminPathNameGroup,
 		"static_url": staticUrl,
 		"tables":     allTables,
+		"results":    results,
 	})
 }
 
@@ -63,7 +248,7 @@ var LoginPOSTView = func(c *ksmux.Context) {
 
 	data, err := Table("users").Database(defaultDB).Where("email = ?", email).One()
 	if err != nil {
-		c.Status(500).Json(map[string]any{
+		c.Status(http.StatusUnauthorized).Json(map[string]any{
 			"error": err.Error(),
 		})
 		return
@@ -108,6 +293,125 @@ var LogoutView = func(c *ksmux.Context) {
 	c.Status(http.StatusTemporaryRedirect).Redirect("/")
 }
 
+var TableGetAll = func(c *ksmux.Context) {
+	model := c.Param("model")
+	if model == "" {
+		c.Json(map[string]any{
+			"error": "Error: No model given in params",
+		})
+		return
+	}
+	dbMem, _ := GetMemoryDatabase(defaultDB)
+	if dbMem == nil {
+		lg.ErrorC("unable to find db in mem", "db", defaultDB)
+		dbMem = &databases[0]
+	}
+	idString := "id"
+	var t *TableEntity
+	for i, tt := range dbMem.Tables {
+		if tt.Name == model {
+			idString = tt.Pk
+			t = &dbMem.Tables[i]
+		}
+	}
+
+	var body struct {
+		Page int `json:"page"`
+	}
+	if err := c.BodyStruct(&body); lg.CheckError(err) {
+		c.Error("something wrong happened")
+		return
+	}
+	if body.Page == 0 {
+		body.Page = 1
+	}
+	rows, err := Table(model).Database(defaultDB).OrderBy("-" + idString).Limit(paginationPer).Page(body.Page).All()
+	if err != nil {
+		if err != ErrNoData {
+			c.Status(404).Error("Unable to find this model")
+			return
+		}
+		rows = []map[string]any{}
+	}
+
+	// Get total count for pagination
+	var total int64
+	var totalRows []int64
+	err = To(&totalRows).Query("SELECT COUNT(*) FROM " + model)
+	if err == nil {
+		total = totalRows[0]
+	}
+
+	dbCols, cols := GetAllColumnsTypes(model)
+	mmfkeysModels := map[string][]map[string]any{}
+	mmfkeys := map[string][]any{}
+	if t != nil {
+		for _, fkey := range t.Fkeys {
+			spFrom := strings.Split(fkey.FromTableField, ".")
+			if len(spFrom) == 2 {
+				spTo := strings.Split(fkey.ToTableField, ".")
+				if len(spTo) == 2 {
+					q := "select * from " + spTo[0] + " order by " + spTo[1]
+					mm := []map[string]any{}
+					err := To(&mm).Query(q)
+					if !lg.CheckError(err) {
+						ress := []any{}
+						for _, res := range mm {
+							ress = append(ress, res[spTo[1]])
+						}
+						if len(ress) > 0 {
+							mmfkeys[spFrom[1]] = ress
+							mmfkeysModels[spFrom[1]] = mm
+							for _, v := range mmfkeysModels[spFrom[1]] {
+								for i, vv := range v {
+									if vvStr, ok := vv.(string); ok {
+										if len(vvStr) > 20 {
+											v[i] = vvStr[:20] + "..."
+										}
+									}
+								}
+							}
+						}
+					} else {
+						lg.ErrorC("error:", "q", q, "spTo", spTo)
+					}
+				}
+			}
+		}
+	} else {
+		idString = cols[0]
+	}
+
+	if dbMem != nil {
+		data := map[string]any{
+			"dbType":         dbMem.Dialect,
+			"table":          model,
+			"rows":           rows,
+			"total":          total,
+			"dbcolumns":      dbCols,
+			"pk":             idString,
+			"fkeys":          mmfkeys,
+			"fkeysModels":    mmfkeysModels,
+			"columnsOrdered": cols,
+		}
+		if t != nil {
+			data["columns"] = t.ModelTypes
+		} else {
+			data["columns"] = dbCols
+		}
+		data["admin_path"] = adminPathNameGroup
+		data["static_url"] = staticUrl
+		c.Json(map[string]any{
+			"success": data,
+		})
+	} else {
+		lg.ErrorC("table not found", "table", model)
+		c.Status(404).Json(map[string]any{
+			"error": "table not found",
+		})
+	}
+}
+
 var AllModelsGet = func(c *ksmux.Context) {
 	model := c.Param("model")
 	if model == "" {
@@ -135,7 +439,6 @@ var AllModelsGet = func(c *ksmux.Context) {
 	if err != nil {
 		rows, err = Table(model).Database(defaultDB).All()
 		if err != nil {
-			// usualy should not use error string because it divulge infkormation, but here only admin use it, so no worry
 			if err != ErrNoData {
 				c.Status(404).Error("Unable to find this model")
 				return
@@ -185,7 +488,7 @@ var AllModelsGet = func(c *ksmux.Context) {
 	if dbMem != nil {
 		data := map[string]any{
 			"dbType":         dbMem.Dialect,
-			"model_name":     model,
+			"table":          model,
 			"rows":           rows,
 			"dbcolumns":      dbCols,
 			"pk":             idString,
@@ -200,7 +503,7 @@ var AllModelsGet = func(c *ksmux.Context) {
 		}
 		data["admin_path"] = adminPathNameGroup
 		data["static_url"] = staticUrl
-		c.Html("admin/admin_all_models.html", data)
+		c.Html("admin/admin_single_table.html", data)
 	} else {
 		lg.ErrorC("table not found", "table", model)
 		c.Status(404).Error("Unable to find this model")
@@ -240,6 +543,7 @@ var AllModelsSearch = func(c *ksmux.Context) {
 		})
 		return
 	}
+
 	mmfkeysModels := map[string][]map[string]any{}
 	mmfkeys := map[string][]any{}
 	for _, fkey := range t.Fkeys {
@@ -274,123 +578,97 @@ var AllModelsSearch = func(c *ksmux.Context) {
 			}
 		}
 	}
-	if orderby, ok := body["orderby"]; ok {
-		if v, ok := orderby.(string); ok && v != "" {
-			oB = v
-		} else {
-			oB = "-" + t.Pk
-		}
+
+	if oB != "" {
+		blder.OrderBy(oB)
 	} else {
-		oB = "-" + t.Pk
+		blder.OrderBy("-" + t.Pk) // Default order by primary key desc
 	}
-	blder.OrderBy(oB)
-	if v, ok := body["page_num"]; ok && v != "" {
-		if page, ok := v.(string); !ok {
-			c.Status(http.StatusBadRequest).Json(map[string]any{
-				"error": "expecting page_num to be a sring",
-			})
-			return
-		} else {
-			pagenum, err := strconv.Atoi(page)
-			if err == nil {
-				blder.Limit(paginationPer).Page(pagenum)
-			} else {
-				c.Status(http.StatusBadRequest).Json(map[string]any{
-					"error": err.Error(),
-				})
-				return
+
+	// Get page from request body
+	pageNum := 1
+	if v, ok := body["page_num"]; ok {
+		if pn, ok := v.(string); ok {
+			if p, err := strconv.Atoi(pn); err == nil {
+				pageNum = p
 			}
 		}
-	} else {
-		blder.Limit(paginationPer).Page(1)
 	}
+	blder.Limit(paginationPer).Page(pageNum)
 
 	data, err := blder.All()
 	if err != nil {
-		c.Json(map[string]any{
-			"error": err.Error(),
-		})
-		return
+		if err != ErrNoData {
+			c.Status(http.StatusBadRequest).Json(map[string]any{
+				"error": err.Error(),
+			})
+			return
+		}
+		data = []map[string]any{}
+	}
+
+	// Get total count for pagination
+	var total int64
+	var totalRows []int64
+	query := "SELECT COUNT(*) FROM " + model
+	if v, ok := body["query"]; ok {
+		if vStr, ok := v.(string); ok && vStr != "" {
+			query += " WHERE " + vStr
+		}
+	}
+	err = To(&totalRows).Query(query)
+	if err == nil {
+		total = totalRows[0]
 	}
 
 	c.Json(map[string]any{
+		"table":       model,
 		"rows":        data,
 		"cols":        t.Columns,
 		"types":       t.ModelTypes,
 		"fkeys":       mmfkeys,
 		"fkeysModels": mmfkeysModels,
+		"total":       total,
 	})
 }
 
-var DeleteRowPost = func(c *ksmux.Context) {
-	data := c.BodyJson()
-	if data["mission"] == "delete_row" {
-		if model, ok := data["model_name"]; ok {
-			if mm, ok := model.(string); ok {
-				idString := "id"
-				t, _ := GetMemoryTable(mm, defaultDB)
-				if t.Pk != "" && t.Pk != "id" {
-					idString = t.Pk
-				}
-				modelDB, err := Table(mm).Database(defaultDB).Where(idString+" = ?", data["id"]).One()
-				if lg.CheckError(err) {
-					lg.ErrorC("data received DeleteRowPost", "data", data)
-					c.Status(http.StatusBadRequest).Json(map[string]any{
-						"error": err.Error(),
-					})
-					return
-				}
-				if val, ok := modelDB["image"]; ok {
-					if vv, ok := val.(string); ok && vv != "" {
-						_ = c.DeleteFile(vv)
-					}
-				}
-
-				if idS, ok := data["id"].(string); ok {
-					_, err = Table(mm).Database(defaultDB).Where(idString+" = ?", idS).Delete()
-
-					if err != nil {
-						c.Status(http.StatusBadRequest).Json(map[string]any{
-							"error": err.Error(),
-						})
-					} else {
-						c.Json(map[string]any{
-							"success": "Done !",
-							"id":      data["id"],
-						})
-						return
-					}
-				}
-			} else {
-				c.Status(http.StatusBadRequest).Json(map[string]any{
-					"error": "expecting model_name to be string",
-				})
-				return
-			}
-		} else {
-			c.Status(http.StatusBadRequest).Json(map[string]any{
-				"error": "no model_name found in request body",
-			})
-			return
-		}
+var BulkDeleteRowPost = func(c *ksmux.Context) {
+	data := struct {
+		Ids   []uint
+		Table string
+	}{}
+	if lg.CheckError(c.BodyStruct(&data)) {
+		c.Error("BAD REQUEST")
+		return
 	}
+	idString := "id"
+	t, err := GetMemoryTable(data.Table, defaultDB)
+	if err != nil {
+		c.Status(404).Json(map[string]any{
+			"error": "table not found",
+		})
+		return
+	}
+	if t.Pk != "" && t.Pk != "id" {
+		idString = t.Pk
+	}
+	_, err = Table(data.Table).Database(defaultDB).Where(idString+" IN (?)", data.Ids).Delete()
+	if lg.CheckError(err) {
+		c.Status(http.StatusBadRequest).Json(map[string]any{
+			"error": err.Error(),
+		})
+		return
+	}
+	c.Json(map[string]any{
+		"success": "DELETED WITH SUCCESS",
+		"ids":     data.Ids,
+	})
 }
 
 var CreateModelView = func(c *ksmux.Context) {
-	parseErr := c.Request.ParseMultipartForm(int64(ksmux.MultipartSize))
-	if parseErr != nil {
-		lg.ErrorC(parseErr.Error())
-		return
-	}
-	data := c.Request.Form
-
-	defer func() {
-		err := c.Request.MultipartForm.RemoveAll()
-		lg.CheckError(err)
-	}()
+	data, files := c.ParseMultipartForm()
 
 	model := data["table"][0]
-
 	m := map[string]any{}
 	for key, val := range data {
 		switch key {
@@ -419,7 +697,7 @@ var CreateModelView = func(c *ksmux.Context) {
 			}
 		}
 	}
-	_, err := Table(model).Database(defaultDB).Insert(m)
+	inserted, err := Table(model).Database(defaultDB).InsertR(m)
 	if err != nil {
 		lg.ErrorC("CreateModelView error", "err", err)
 		c.Status(http.StatusBadRequest).Json(map[string]any{
@@ -428,83 +706,25 @@ var CreateModelView = func(c *ksmux.Context) {
 		return
 	}
 
-	c.Json(map[string]any{
-		"success": "Done !",
-	})
-}
-
-var SingleModelGet = func(c *ksmux.Context) {
-	model := c.Param("model")
-	if model == "" {
-		c.Status(http.StatusBadRequest).Json(map[string]any{
-			"error": "param model not defined",
-		})
-		return
-	}
-	id := c.Param("id")
-	if id == "" {
-		c.Status(http.StatusBadRequest).Json(map[string]any{
-			"error": "param id not defined",
-		})
-		return
-	}
 	idString := "id"
-	t, _ := GetMemoryTable(model, defaultDB)
+	t, _ := GetMemoryTable(data["table"][0], defaultDB)
 	if t.Pk != "" && t.Pk != "id" {
 		idString = t.Pk
 	}
-
-	modelRow, err := Table(model).Database(defaultDB).Where(idString+" = ?", id).One()
-	if lg.CheckError(err) {
+	pathUploaded, formName, err := handleFilesUpload(files, data["table"][0], fmt.Sprintf("%v", inserted[idString]), c, idString)
+	if err != nil {
 		c.Status(http.StatusBadRequest).Json(map[string]any{
 			"error": err.Error(),
 		})
 		return
 	}
-	dbCols, colsOrdered := GetAllColumnsTypes(model)
-	mmfkeys := map[string][]any{}
-	mmfkeysModels := map[string][]map[string]any{}
-	for _, fkey := range t.Fkeys {
-		spFrom := strings.Split(fkey.FromTableField, ".")
-		if len(spFrom) == 2 {
-			spTo := strings.Split(fkey.ToTableField, ".")
-			if len(spTo) == 2 {
-				q := "select * from " + spTo[0] + " order by " + spTo[1]
-				mm, err := Table(spTo[0]).Database(defaultDB).QueryM(q)
-				if !lg.CheckError(err) {
-					ress := []any{}
-					for _, res := range mm {
-						ress = append(ress, res[spTo[1]])
-					}
-					if len(ress) > 0 {
-						mmfkeys[spFrom[1]] = ress
-						mmfkeysModels[spFrom[1]] = mm
-						for _, v := range mmfkeysModels[spFrom[1]] {
-							for i, vv := range v {
-								if vvStr, ok := vv.(string); ok {
-									if len(vvStr) > 20 {
-										v[i] = vvStr[:20] + "..."
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-		}
+	if len(pathUploaded) > 0 {
+		inserted[formName[0]] = pathUploaded[0]
 	}
-	c.Html("admin/admin_single_model.html", map[string]any{
-		"admin_path":     adminPathNameGroup,
-		"static_url":     staticUrl,
-		"model":          modelRow,
-		"model_name":     model,
-		"id":             id,
-		"fkeys":          mmfkeys,
-		"columns":        t.ModelTypes,
-		"dbcolumns":      dbCols,
-		"pk":             t.Pk,
-		"fkeysModels":    mmfkeysModels,
-		"columnsOrdered": colsOrdered,
+
+	c.Json(map[string]any{
+		"success":  "Done !",
+		"inserted": inserted,
 	})
 }
 
@@ -517,7 +737,7 @@ var UpdateRowPost = func(c *ksmux.Context) {
 	if t.Pk != "" && t.Pk != "id" {
 		idString = t.Pk
 	}
-	err := handleFilesUpload(files, data["table"][0], id, c, idString)
+	_, _, err := handleFilesUpload(files, data["table"][0], id, c, idString)
 	if err != nil {
 		c.Status(http.StatusBadRequest).Json(map[string]any{
 			"error": err.Error(),
@@ -542,7 +762,16 @@ var UpdateRowPost = func(c *ksmux.Context) {
 				// no changes for bool
 				continue
 			}
-			toUpdate["`"+key+"`"] = val[0]
+			if key == "password" || key == "pass" {
+				hash, err := argon.Hash(val[0])
+				if err != nil {
+					c.Error("unable to hash pass")
+					return
+				}
+				toUpdate["`"+key+"`"] = hash
+			} else {
+				toUpdate["`"+key+"`"] = val[0]
+			}
 		}
 	}
 
@@ -586,47 +815,55 @@ var UpdateRowPost = func(c *ksmux.Context) {
 			}
 		}
 	}
-	c.Json(map[string]string{
-		"success": s + " updated successfully",
+
+	ret, err := Table(data["table"][0]).Database(defaultDB).Where(idString+" = ?", id).One()
+	if err != nil {
+		c.Status(500).Error("something wrong happened")
+		return
+	}
+
+	c.Json(map[string]any{
+		"success": ret,
 	})
 }
 
-func handleFilesUpload(files map[string][]*multipart.FileHeader, model string, id string, c *ksmux.Context, idString string) error {
+func handleFilesUpload(files map[string][]*multipart.FileHeader, model string, id string, c *ksmux.Context, pkKey string) (uploadedPath []string, formName []string, err error) {
 	if len(files) > 0 {
 		for key, val := range files {
 			file, _ := val[0].Open()
 			defer file.Close()
 			uploadedImage, err := uploadMultipartFile(file, val[0].Filename, mediaDir+"/uploads/")
 			if err != nil {
-				return err
+				return uploadedPath, formName, err
 			}
-			row, err := Table(model).Database(defaultDB).Where(idString+" = ?", id).One()
+			row, err := Table(model).Database(defaultDB).Where(pkKey+" = ?", id).One()
 			if err != nil {
-				return err
+				return uploadedPath, formName, err
 			}
 			database_image, okDB := row[key]
+			uploadedPath = append(uploadedPath, uploadedImage)
+			formName = append(formName, key)
 			if database_image == uploadedImage {
-				return errors.New("uploadedImage is the same")
+				return uploadedPath, formName, errors.New("uploadedImage is the same")
 			} else {
 				if v, ok := database_image.(string); ok || okDB {
 					err := c.DeleteFile(v)
 					if err != nil {
 						//le fichier n'existe pas
-						_, err := Table(model).Database(defaultDB).Where(idString+" = ?", id).Set(key+" = ?", uploadedImage)
+						_, err := Table(model).Database(defaultDB).Where(pkKey+" = ?", id).Set(key+" = ?", uploadedImage)
 						lg.CheckError(err)
 						continue
 					} else {
 						//le fichier existe et donc supprimer
-						_, err := Table(model).Database(defaultDB).Where(idString+" = ?", id).Set(key+" = ?", uploadedImage)
+						_, err := Table(model).Database(defaultDB).Where(pkKey+" = ?", id).Set(key+" = ?", uploadedImage)
 						lg.CheckError(err)
 						continue
 					}
 				}
 			}
-
 		}
 	}
-	return nil
+	return uploadedPath, formName, nil
 }
 
 var DropTablePost = func(c *ksmux.Context) {

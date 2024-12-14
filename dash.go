@@ -39,7 +39,6 @@ func cloneAndMigrateDashboard(migrateUser bool, staticAndTemplatesEmbeded ...emb
 		err := serverBus.App.LocalTemplates(templatesDir)
 		lg.CheckError(err)
 	}
-	isDashboardCloned = true
 	if migrateUser {
 		err := AutoMigrate[User]("users")
 		if lg.CheckError(err) {

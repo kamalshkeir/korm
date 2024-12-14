@@ -9,8 +9,6 @@ import (
 var (
 	paginationPer      = 10
 	embededDashboard   = false
-	isDocsUsed         = false
-	isDashboardCloned  = false
 	mediaDir           = "media"
 	docsUrl            = "/docs"
 	staticUrl          = "/static"
@@ -18,7 +16,7 @@ var (
 	staticDir          = path.Join(assetsDir, "/", "static")
 	templatesDir       = path.Join(assetsDir, "/", "templates")
 	repoUser           = "kamalshkeir"
-	repoName           = "korm-dashboard"
+	repoName           = "korm-dash"
 	adminPathNameGroup = "/admin"
 	// Debug when true show extra useful logs for queries executed for migrations and queries statements
 	Debug = false
@@ -37,6 +35,7 @@ var (
 type User struct {
 	Id        int       `json:"id,omitempty" korm:"pk"`
 	Uuid      string    `json:"uuid,omitempty" korm:"size:40;iunique"`
+	Username  string    `json:"username,omitempty" korm:"size:40;iunique"`
 	Email     string    `json:"email,omitempty" korm:"size:50;iunique"`
 	Password  string    `json:"password,omitempty" korm:"size:150;default:''"`
 	IsAdmin   bool      `json:"is_admin,omitempty" korm:"default:false"`
