@@ -50,7 +50,11 @@ func initAdminUrlPatterns(withReqCounter bool, r *ksmux.Router) {
 			})
 		})
 	}
-
+	r.Get("/mon/ping", func(c *ksmux.Context) { c.Status(200).Text("pong") })
+	r.Get("/offline", OfflineView)
+	r.Get("/manifest.webmanifest", ManifestView)
+	r.Get("/sw.js", ServiceWorkerView)
+	r.Get("/robots.txt", RobotsTxtView)
 	adminGroup := r.Group(adminPathNameGroup)
 	adminGroup.Get("/", Admin(DashView))
 	adminGroup.Get("/login", Auth(LoginView))
