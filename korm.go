@@ -127,15 +127,6 @@ func New(dbType Dialect, dbName string, dbDriver driver.Driver, dbDSN ...string)
 		sql.Register(cstm, dbDriver)
 	}
 
-	if dbType == SQLITE {
-		// add foreign key support
-		query := `PRAGMA foreign_keys = ON;`
-		err := Exec(dbName, query)
-		if err != nil {
-			lg.ErrorC("failed to enable foreign keys", "err", err)
-		}
-	}
-
 	conn, err := sql.Open(cstm, dsn)
 	if lg.CheckError(err) {
 		return err
@@ -144,6 +135,14 @@ func New(dbType Dialect, dbName string, dbDriver driver.Driver, dbDSN ...string)
 	if lg.CheckError(err) {
 		lg.ErrorC("make sure env is loaded", "dsn", dsn)
 		return err
+	}
+	if dbType == SQLITE {
+		// add foreign key support
+		query := `PRAGMA foreign_keys = ON;`
+		err := Exec(dbName, query)
+		if err != nil {
+			lg.ErrorC("failed to enable foreign keys", "err", err)
+		}
 	}
 	if dbType == SQLITE {
 		conn.SetMaxOpenConns(1)
