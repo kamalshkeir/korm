@@ -107,8 +107,6 @@ func New(dbType Dialect, dbName string, dbDriver driver.Driver, dbDSN ...string)
 		}
 		if options != "" {
 			dsn += "?" + options
-		} else {
-			dsn += "?_pragma=foreign_keys(1)&_time_format=sqlite"
 		}
 	default:
 		dbType = "sqlite3"
@@ -119,8 +117,6 @@ func New(dbType Dialect, dbName string, dbDriver driver.Driver, dbDSN ...string)
 		}
 		if options != "" {
 			dsn += "?" + options
-		} else {
-			dsn += "?_pragma=foreign_keys(1)&_time_format=sqlite"
 		}
 	}
 
@@ -129,6 +125,15 @@ func New(dbType Dialect, dbName string, dbDriver driver.Driver, dbDSN ...string)
 		sql.Register(cstm, Wrap(dbDriver, &logAndCacheHook{}))
 	} else {
 		sql.Register(cstm, dbDriver)
+	}
+
+	if dbType == SQLITE {
+		// add foreign key support
+		query := `PRAGMA foreign_keys = ON;`
+		err := Exec(dbName, query)
+		if err != nil {
+			lg.ErrorC("failed to enable foreign keys", "err", err)
+		}
 	}
 
 	conn, err := sql.Open(cstm, dsn)
