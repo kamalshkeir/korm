@@ -139,7 +139,7 @@ func New(dbType Dialect, dbName string, dbDriver driver.Driver, dbDSN ...string)
 	if dbType == SQLITE {
 		// add foreign key support
 		query := `PRAGMA foreign_keys = ON;`
-		err := Exec(dbName, query)
+		_, err := conn.Exec(query)
 		if err != nil {
 			lg.ErrorC("failed to enable foreign keys", "err", err)
 		}
