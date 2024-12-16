@@ -330,7 +330,7 @@ type migrationInput struct {
 }
 
 func handleMigrationInt(mi *migrationInput) {
-	genas, primary, index, autoinc, notnull, defaultt, checks, unique := "", "", "", "", "", "", []string{}, ""
+	genas, primary, autoinc, notnull, defaultt, checks, unique := "", "", "", "", "", []string{}, ""
 	tags := (*mi.fTags)[mi.fName]
 	if len(tags) == 1 && tags[0] == "-" {
 		(*mi.res)[mi.fName] = ""
@@ -459,9 +459,6 @@ func handleMigrationInt(mi *migrationInput) {
 		if unique != "" {
 			(*mi.res)[mi.fName] += unique
 		}
-		if index != "" {
-			(*mi.res)[mi.fName] += index
-		}
 		if defaultt != "" {
 			if genas == "" {
 				(*mi.res)[mi.fName] += defaultt
@@ -578,7 +575,7 @@ func handleMigrationBool(mi *migrationInput) {
 }
 
 func handleMigrationString(mi *migrationInput) {
-	unique, notnull, text, json, defaultt, genas, size, pk, checks := "", "", "", "", "", "", "", "", []string{}
+	unique, notnull, text, json, defaultt, genas, size, checks := "", "", "", "", "", "", "", []string{}
 	tags := (*mi.fTags)[mi.fName]
 	if len(tags) == 1 && tags[0] == "-" {
 		(*mi.res)[mi.fName] = ""
@@ -708,14 +705,11 @@ func handleMigrationString(mi *migrationInput) {
 		}
 	}
 
-	if unique != "" && pk == "" {
-		(*mi.res)[mi.fName] += unique
-	}
-	if notnull != "" && pk == "" {
+	if notnull != "" {
 		(*mi.res)[mi.fName] += notnull
 	}
-	if pk != "" {
-		(*mi.res)[mi.fName] += pk
+	if unique != "" {
+		(*mi.res)[mi.fName] += unique
 	}
 	if defaultt != "" {
 		if genas == "" {
@@ -1030,7 +1024,7 @@ func handleMigrationFloat(mi *migrationInput) {
 }
 
 func handleMigrationTime(mi *migrationInput) {
-	defaultt, notnull, check := "", "", ""
+	defaultt, notnull, check, unique := "", "", "", ""
 	tags := (*mi.fTags)[mi.fName]
 	if len(tags) == 1 && tags[0] == "-" {
 		(*mi.res)[mi.fName] = ""
@@ -1039,6 +1033,8 @@ func handleMigrationTime(mi *migrationInput) {
 	for _, tag := range tags {
 		if !strings.Contains(tag, ":") {
 			switch tag {
+			case "unique":
+				unique = " UNIQUE"
 			case "now":
 				switch mi.dialect {
 				case SQLITE, "":
@@ -1126,18 +1122,35 @@ func handleMigrationTime(mi *migrationInput) {
 				} else {
 					(*mi.mindexes)[mi.fName] = sp[1]
 				}
+			case "uindex":
+				if v, ok := (*mi.uindexes)[mi.fName]; ok {
+					if v == "" {
+						(*mi.uindexes)[mi.fName] = sp[1]
+					} else if strings.Contains(sp[1], ",") {
+						(*mi.uindexes)[mi.fName] += "," + sp[1]
+					} else {
+						lg.ErrorC("mindex not working", "f", mi.fName, "v", sp[1])
+					}
+				} else {
+					(*mi.uindexes)[mi.fName] = sp[1]
+				}
 			default:
 				lg.ErrorC("case not handled for time", "case", sp[0])
 			}
 		}
 	}
 	if defaultt != "" {
+		if unique != "" {
+			(*mi.res)[mi.fName] += unique
+		}
 		(*mi.res)[mi.fName] = defaultt
 	} else {
 		(*mi.res)[mi.fName] = "BIGINT"
-
 		if notnull != "" {
 			(*mi.res)[mi.fName] += notnull
+		}
+		if unique != "" {
+			(*mi.res)[mi.fName] += unique
 		}
 		if check != "" {
 			(*mi.res)[mi.fName] += " CHECK(" + check + ")"

@@ -121,7 +121,7 @@
 # Installation
 
 ```sh
-go get -u github.com/kamalshkeir/korm@v1.94.8
+go get -u github.com/kamalshkeir/korm@v1.94.9
 ```
 
 # Drivers moved outside this package to not get them all in your go.mod file
@@ -1595,6 +1595,7 @@ Available 'on_delete' and 'on_update' options: cascade,(donothing,noaction),(set
 ```
 *  	index, +index, index+ (CREATE INDEX ON COLUMN)
 *  	index-, -index(CREATE INDEX DESC ON COLUMN)  
+*   unique
 *   now (NOT NULL and defaulted to current unix timestamp)
 *   update (NOT NULL DEFAULT UNIX_TIMESTAMP ON UPDATE UNIX_TIMESTAMP)
 ```
@@ -1604,6 +1605,7 @@ Available 'on_delete' and 'on_update' options: cascade,(donothing,noaction),(set
 ```
 *   fk:...
 *   check:...
+*   uindex:...
 ```
 
 </td>
