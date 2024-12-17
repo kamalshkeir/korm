@@ -2,6 +2,7 @@ package korm
 
 import (
 	"bytes"
+	"context"
 	"encoding/csv"
 	"encoding/json"
 	"errors"
@@ -153,9 +154,10 @@ func GetDatabaseSize(dbName string) (string, error) {
 
 var LogsView = func(c *ksmux.Context) {
 	d := map[string]any{
-		"admin_path": adminPathNameGroup,
-		"static_url": staticUrl,
-		"secure":     ksmux.IsTLS,
+		"admin_path":    adminPathNameGroup,
+		"static_url":    staticUrl,
+		"secure":        ksmux.IsTLS,
+		"trace_enabled": defaultTracer.enabled,
 	}
 	parsed := make([]LogEntry, 0)
 	if v := lg.GetLogs(); v != nil {
@@ -201,6 +203,7 @@ var DashView = func(c *ksmux.Context) {
 		"db_size":            size,
 		"count":              count,
 		"withRequestCounter": withRequestCounter,
+		"trace_enabled":      defaultTracer.enabled,
 	}
 	if withRequestCounter {
 		ddd["requests"] = GetTotalRequests()
@@ -227,10 +230,11 @@ var TablesView = func(c *ksmux.Context) {
 	}
 
 	c.Html("admin/admin_tables.html", map[string]any{
-		"admin_path": adminPathNameGroup,
-		"static_url": staticUrl,
-		"tables":     allTables,
-		"results":    results,
+		"admin_path":    adminPathNameGroup,
+		"static_url":    staticUrl,
+		"tables":        allTables,
+		"results":       results,
+		"trace_enabled": defaultTracer.enabled,
 	})
 }
 
@@ -503,6 +507,7 @@ var AllModelsGet = func(c *ksmux.Context) {
 		}
 		data["admin_path"] = adminPathNameGroup
 		data["static_url"] = staticUrl
+		data["trace_enabled"] = defaultTracer.enabled
 		c.Html("admin/admin_single_table.html", data)
 	} else {
 		lg.ErrorC("table not found", "table", model)
@@ -825,6 +830,65 @@ var UpdateRowPost = func(c *ksmux.Context) {
 	c.Json(map[string]any{
 		"success": ret,
 	})
+}
+
+var TracingGetView = func(c *ksmux.Context) {
+	c.Html("admin/admin_tracing.html", map[string]any{
+		"admin_path":    adminPathNameGroup,
+		"static_url":    staticUrl,
+		"trace_enabled": defaultTracer.enabled,
+	})
+}
+
+var GetTraces = func(c *ksmux.Context) {
+	dbtraces := GetDBTraces()
+	if len(dbtraces) > 0 {
+		for _, t := range dbtraces {
+			sp, _ := ksmux.StartSpan(context.Background(), t.Query)
+			sp.SetTag("query", t.Query)
+			sp.SetTag("args", fmt.Sprint(t.Args))
+			if t.Database != "" {
+				sp.SetTag("database", t.Database)
+			}
+			sp.SetTag("duration", t.Duration.String())
+			sp.SetError(t.Error)
+			sp.End()
+		}
+		ClearDBTraces()
+	}
+
+	traces := ksmux.GetTraces()
+	traceList := make([]map[string]interface{}, 0)
+	for traceID, spans := range traces {
+		spanList := make([]map[string]interface{}, 0)
+		for _, span := range spans {
+			errorMsg := ""
+			if span.Error() != nil {
+				errorMsg = span.Error().Error()
+			}
+			spanList = append(spanList, map[string]interface{}{
+				"id":         span.SpanID(),
+				"parentID":   span.ParentID(),
+				"name":       span.Name(),
+				"startTime":  span.StartTime(),
+				"endTime":    span.EndTime(),
+				"duration":   span.Duration().String(),
+				"tags":       span.Tags(),
+				"statusCode": span.StatusCode(),
+				"error":      errorMsg,
+			})
+		}
+		traceList = append(traceList, map[string]interface{}{
+			"traceID": traceID,
+			"spans":   spanList,
+		})
+	}
+	c.Json(traceList)
+}
+
+var ClearTraces = func(c *ksmux.Context) {
+	ksmux.ClearTraces()
+	c.Success("traces cleared")
 }
 
 func handleFilesUpload(files map[string][]*multipart.FileHeader, model string, id string, c *ksmux.Context, pkKey string) (uploadedPath []string, formName []string, err error) {

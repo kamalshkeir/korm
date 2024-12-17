@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql/driver"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -20,7 +21,7 @@ var (
 
 type logAndCacheHook struct{}
 
-func (h *logAndCacheHook) Before(ctx context.Context, query string, args ...interface{}) (context.Context, error) {
+func (h *logAndCacheHook) Before(ctx context.Context, query string, args ...any) (context.Context, error) {
 	if useCache && len(query) > 6 {
 		if !onceDone {
 			go RunEvery(FlushCacheEvery, func(cancelChan chan struct{}) {
@@ -36,20 +37,43 @@ func (h *logAndCacheHook) Before(ctx context.Context, query string, args ...inte
 			flushCache()
 		}
 	}
+	if ctx.Value(traceEnabledKey) != nil {
+		return context.WithValue(ctx, ksmux.ContextKey("trace_start"), time.Now()), nil
+	}
 	if logQueries {
 		lg.Printfs("yl> %s %v", query, args)
 		return context.WithValue(ctx, ksmux.ContextKey("begin"), time.Now()), nil
 	}
-	return context.Background(), nil
+	return ctx, nil
 }
 
-func (h *logAndCacheHook) After(ctx context.Context, query string, args ...interface{}) (context.Context, error) {
-	if logQueries {
-		begin := ctx.Value(ksmux.ContextKey("begin")).(time.Time)
-		lg.Printfs("yl, took: %v\n", time.Since(begin))
+func (h *logAndCacheHook) After(ctx context.Context, query string, args ...any) (context.Context, error) {
+	if !logQueries && ctx.Value(traceEnabledKey) == nil {
 		return ctx, nil
 	}
-	return context.Background(), nil
+
+	startTime, _ := ctx.Value(ksmux.ContextKey("trace_start")).(time.Time)
+	duration := time.Since(startTime)
+
+	if ctx.Value(traceEnabledKey) != nil && defaultTracer.enabled {
+		trace := TraceData{
+			Database:  defaultDB,
+			Query:     query,
+			Args:      args,
+			StartTime: startTime,
+			Duration:  duration,
+		}
+		defaultTracer.addTrace(trace)
+	}
+
+	if logQueries {
+		lg.InfoC("Query executed",
+			"query", query,
+			"args", fmt.Sprint(args...),
+			"duration", duration)
+	}
+
+	return ctx, nil
 }
 
 type DbHook func(database, table string, data map[string]any) error

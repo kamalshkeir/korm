@@ -21,6 +21,7 @@ type Selector[T any] struct {
 	db      *DatabaseEntity
 	dest    *[]T
 	nocache bool
+	trace   bool
 }
 
 type JsonOption struct {
@@ -650,6 +651,18 @@ func (sl *Selector[T]) NoCache() *Selector[T] {
 	return sl
 }
 
+func (sl *Selector[T]) Trace() *Selector[T] {
+	if sl == nil {
+		return nil
+	}
+	sl.trace = true
+	if sl.ctx == nil {
+		sl.ctx = context.Background()
+	}
+	sl.ctx = context.WithValue(sl.ctx, traceEnabledKey, true)
+	return sl
+}
+
 // The input can be a struct, a pointer to a struct, or a pointer to a pointer to a struct.
 func ResetStruct(input interface{}) error {
 	v := reflect.ValueOf(input)
@@ -683,6 +696,11 @@ func ResetStruct(input interface{}) error {
 }
 
 func (sl *Selector[T]) Query(statement string, args ...any) error {
+	// Ensure we have a context with trace flag if tracing is enabled
+	if sl.trace && sl.ctx == nil {
+		sl.ctx = context.WithValue(context.Background(), traceEnabledKey, true)
+	}
+
 	var stt string
 	if useCache && !sl.nocache {
 		stt = statement + fmt.Sprint(args...)
@@ -979,6 +997,13 @@ loop:
 }
 
 func (sl *Selector[T]) Named(statement string, args map[string]any, unsafe ...bool) error {
+	if sl.trace {
+		if sl.ctx == nil {
+			sl.ctx = context.Background()
+		}
+		sl.ctx = context.WithValue(sl.ctx, traceEnabledKey, true)
+	}
+
 	var stt string
 	if useCache && !sl.nocache {
 		stt = statement + fmt.Sprint(args)

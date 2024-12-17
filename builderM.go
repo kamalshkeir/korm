@@ -37,6 +37,7 @@ type BuilderM struct {
 	args       []any
 	order      []string
 	ctx        context.Context
+	trace      bool
 }
 
 // Table is a starter for BuiderM
@@ -266,6 +267,19 @@ func (b *BuilderM) NoCache() *BuilderM {
 
 // All get all data
 func (b *BuilderM) All() ([]map[string]any, error) {
+	if b.trace {
+		trace := TraceData{
+			Query:     b.statement,
+			Args:      b.args,
+			Database:  b.db.Name,
+			StartTime: time.Now(),
+		}
+		defer func() {
+			trace.Duration = time.Since(trace.StartTime)
+			defaultTracer.addTrace(trace)
+		}()
+	}
+
 	if b == nil || b.tableName == "" {
 		return nil, ErrTableNotFound
 	}
@@ -326,6 +340,13 @@ func (b *BuilderM) All() ([]map[string]any, error) {
 
 // One get single row
 func (b *BuilderM) One() (map[string]any, error) {
+	if b.trace {
+		if b.ctx == nil {
+			b.ctx = context.Background()
+		}
+		b.ctx = context.WithValue(b.ctx, traceEnabledKey, true)
+	}
+
 	if b == nil || b.tableName == "" {
 		return nil, ErrTableNotFound
 	}
@@ -390,6 +411,19 @@ func (b *BuilderM) One() (map[string]any, error) {
 
 // Insert add row to a table using input map, and return PK of the inserted row
 func (b *BuilderM) Insert(rowData map[string]any) (int, error) {
+	if b.trace {
+		trace := TraceData{
+			Query:     b.statement,
+			Args:      b.args,
+			Database:  b.db.Name,
+			StartTime: time.Now(),
+		}
+		defer func() {
+			trace.Duration = time.Since(trace.StartTime)
+			defaultTracer.addTrace(trace)
+		}()
+	}
+
 	if len(rowData) == 0 {
 		return 0, fmt.Errorf("cannot insert empty map, rowData:%v", rowData)
 	}
@@ -497,6 +531,19 @@ func (b *BuilderM) Insert(rowData map[string]any) (int, error) {
 
 // InsertR add row to a table using input map, and return the inserted row
 func (b *BuilderM) InsertR(rowData map[string]any) (map[string]any, error) {
+	if b.trace {
+		trace := TraceData{
+			Query:     b.statement,
+			Args:      b.args,
+			Database:  b.db.Name,
+			StartTime: time.Now(),
+		}
+		defer func() {
+			trace.Duration = time.Since(trace.StartTime)
+			defaultTracer.addTrace(trace)
+		}()
+	}
+
 	if b == nil || b.tableName == "" {
 		return nil, ErrTableNotFound
 	}
@@ -602,6 +649,19 @@ func (b *BuilderM) InsertR(rowData map[string]any) (map[string]any, error) {
 
 // BulkInsert insert many row at the same time in one query
 func (b *BuilderM) BulkInsert(rowsData ...map[string]any) ([]int, error) {
+	if b.trace {
+		trace := TraceData{
+			Query:     b.statement,
+			Args:      b.args,
+			Database:  b.db.Name,
+			StartTime: time.Now(),
+		}
+		defer func() {
+			trace.Duration = time.Since(trace.StartTime)
+			defaultTracer.addTrace(trace)
+		}()
+	}
+
 	if b == nil || b.tableName == "" {
 		return nil, ErrTableNotFound
 	}
@@ -710,6 +770,19 @@ func (b *BuilderM) BulkInsert(rowsData ...map[string]any) ([]int, error) {
 
 // Set used to update, Set("email,is_admin","example@mail.com",true) or Set("email = ? AND is_admin = ?","example@mail.com",true)
 func (b *BuilderM) Set(query string, args ...any) (int, error) {
+	if b.trace {
+		trace := TraceData{
+			Query:     b.statement,
+			Args:      b.args,
+			Database:  b.db.Name,
+			StartTime: time.Now(),
+		}
+		defer func() {
+			trace.Duration = time.Since(trace.StartTime)
+			defaultTracer.addTrace(trace)
+		}()
+	}
+
 	if b == nil || b.tableName == "" {
 		return 0, ErrTableNotFound
 	}
@@ -762,6 +835,19 @@ func (b *BuilderM) Set(query string, args ...any) (int, error) {
 
 // Delete data from database, can be multiple, depending on the where, return affected rows(Not every database or database driver may support affected rows)
 func (b *BuilderM) Delete() (int, error) {
+	if b.trace {
+		trace := TraceData{
+			Query:     b.statement,
+			Args:      b.args,
+			Database:  b.db.Name,
+			StartTime: time.Now(),
+		}
+		defer func() {
+			trace.Duration = time.Since(trace.StartTime)
+			defaultTracer.addTrace(trace)
+		}()
+	}
+
 	if b == nil || b.tableName == "" {
 		return 0, ErrTableNotFound
 	}
@@ -1136,6 +1222,13 @@ func (b *BuilderM) DeleteRelated(relatedTable string, whereRelatedTable string, 
 
 // QueryM query sql and return result as slice maps
 func (b *BuilderM) QueryM(statement string, args ...any) ([]map[string]any, error) {
+	if b.trace {
+		if b.ctx == nil {
+			b.ctx = context.Background()
+		}
+		b.ctx = context.WithValue(b.ctx, traceEnabledKey, true)
+	}
+
 	if b.db.Conn == nil {
 		return nil, errors.New("no connection")
 	}
@@ -1217,6 +1310,13 @@ func (b *BuilderM) QueryM(statement string, args ...any) ([]map[string]any, erro
 //			"email":"email@mail.com",
 //	    })
 func (b *BuilderM) QueryMNamed(statement string, args map[string]any, unsafe ...bool) ([]map[string]any, error) {
+	if b.trace {
+		if b.ctx == nil {
+			b.ctx = context.Background()
+		}
+		b.ctx = context.WithValue(b.ctx, traceEnabledKey, true)
+	}
+
 	if b.db.Conn == nil {
 		return nil, errors.New("no connection")
 	}
@@ -1392,4 +1492,16 @@ func (b *BuilderM) queryS(ptrStrctSlice any, statement string, args ...any) erro
 		}
 	}
 	return nil
+}
+
+func (b *BuilderM) Trace() *BuilderM {
+	if b == nil {
+		return nil
+	}
+	b.trace = true
+	if b.ctx == nil {
+		b.ctx = context.Background()
+	}
+	b.ctx = context.WithValue(b.ctx, traceEnabledKey, true)
+	return b
 }

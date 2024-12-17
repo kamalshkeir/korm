@@ -38,6 +38,7 @@ type BuilderS[T any] struct {
 	args       []any
 	order      []string
 	ctx        context.Context
+	trace      bool
 }
 
 // BuilderStruct empty query to struct starter, default db first connected
@@ -129,6 +130,19 @@ func SliceToString(slice interface{}) string {
 }
 
 func (b *BuilderS[T]) Insert(model *T) (int, error) {
+	if b.trace {
+		trace := TraceData{
+			Query:     b.statement,
+			Args:      b.args,
+			Database:  b.db.Name,
+			StartTime: time.Now(),
+		}
+		defer func() {
+			trace.Duration = time.Since(trace.StartTime)
+			defaultTracer.addTrace(trace)
+		}()
+	}
+
 	if b == nil || b.tableName == "" {
 		return 0, ErrTableNotFound
 	}
@@ -248,6 +262,19 @@ func (b *BuilderS[T]) Insert(model *T) (int, error) {
 
 // InsertR add row to a table using input struct, and return the inserted row
 func (b *BuilderS[T]) InsertR(model *T) (T, error) {
+	if b.trace {
+		trace := TraceData{
+			Query:     b.statement,
+			Args:      b.args,
+			Database:  b.db.Name,
+			StartTime: time.Now(),
+		}
+		defer func() {
+			trace.Duration = time.Since(trace.StartTime)
+			defaultTracer.addTrace(trace)
+		}()
+	}
+
 	if b == nil || b.tableName == "" {
 		return *new(T), ErrTableNotFound
 	}
@@ -367,6 +394,19 @@ func (b *BuilderS[T]) InsertR(model *T) (T, error) {
 
 // BulkInsert insert many row at the same time in one query
 func (b *BuilderS[T]) BulkInsert(models ...*T) ([]int, error) {
+	if b.trace {
+		trace := TraceData{
+			Query:     b.statement,
+			Args:      b.args,
+			Database:  b.db.Name,
+			StartTime: time.Now(),
+		}
+		defer func() {
+			trace.Duration = time.Since(trace.StartTime)
+			defaultTracer.addTrace(trace)
+		}()
+	}
+
 	if b == nil || b.tableName == "" {
 		return nil, ErrTableNotFound
 	}
@@ -495,6 +535,19 @@ func (b *BuilderS[T]) BulkInsert(models ...*T) ([]int, error) {
 
 // AddRelated used for many to many, and after korm.ManyToMany, to add a class to a student or a student to a class, class or student should exist in the database before adding them
 func (b *BuilderS[T]) AddRelated(relatedTable string, whereRelatedTable string, whereRelatedArgs ...any) (int, error) {
+	if b.trace {
+		trace := TraceData{
+			Query:     b.statement,
+			Args:      b.args,
+			Database:  b.db.Name,
+			StartTime: time.Now(),
+		}
+		defer func() {
+			trace.Duration = time.Since(trace.StartTime)
+			defaultTracer.addTrace(trace)
+		}()
+	}
+
 	if b == nil || b.tableName == "" {
 		return 0, ErrTableNotFound
 	}
@@ -593,6 +646,19 @@ func (b *BuilderS[T]) AddRelated(relatedTable string, whereRelatedTable string, 
 
 // DeleteRelated delete a relations many to many
 func (b *BuilderS[T]) DeleteRelated(relatedTable string, whereRelatedTable string, whereRelatedArgs ...any) (int, error) {
+	if b.trace {
+		trace := TraceData{
+			Query:     b.statement,
+			Args:      b.args,
+			Database:  b.db.Name,
+			StartTime: time.Now(),
+		}
+		defer func() {
+			trace.Duration = time.Since(trace.StartTime)
+			defaultTracer.addTrace(trace)
+		}()
+	}
+
 	if b == nil || b.tableName == "" {
 		return 0, ErrTableNotFound
 	}
@@ -664,6 +730,19 @@ func (b *BuilderS[T]) DeleteRelated(relatedTable string, whereRelatedTable strin
 
 // GetRelated used for many to many to get related classes to a student or related students to a class
 func (b *BuilderS[T]) GetRelated(relatedTable string, dest any) error {
+	if b.trace {
+		trace := TraceData{
+			Query:     b.statement,
+			Args:      b.args,
+			Database:  b.db.Name,
+			StartTime: time.Now(),
+		}
+		defer func() {
+			trace.Duration = time.Since(trace.StartTime)
+			defaultTracer.addTrace(trace)
+		}()
+	}
+
 	if b == nil || b.tableName == "" {
 		return ErrTableNotFound
 	}
@@ -729,6 +808,19 @@ func (b *BuilderS[T]) GetRelated(relatedTable string, dest any) error {
 
 // JoinRelated same as get, but it join data
 func (b *BuilderS[T]) JoinRelated(relatedTable string, dest any) error {
+	if b.trace {
+		trace := TraceData{
+			Query:     b.statement,
+			Args:      b.args,
+			Database:  b.db.Name,
+			StartTime: time.Now(),
+		}
+		defer func() {
+			trace.Duration = time.Since(trace.StartTime)
+			defaultTracer.addTrace(trace)
+		}()
+	}
+
 	if b == nil || b.tableName == "" {
 		return ErrTableNotFound
 	}
@@ -797,6 +889,19 @@ func (b *BuilderS[T]) JoinRelated(relatedTable string, dest any) error {
 
 // Set used to update, Set("email,is_admin","example@mail.com",true) or Set("email = ? , is_admin = ?","example@mail.com",true)
 func (b *BuilderS[T]) Set(query string, args ...any) (int, error) {
+	if b.trace {
+		trace := TraceData{
+			Query:     b.statement,
+			Args:      b.args,
+			Database:  b.db.Name,
+			StartTime: time.Now(),
+		}
+		defer func() {
+			trace.Duration = time.Since(trace.StartTime)
+			defaultTracer.addTrace(trace)
+		}()
+	}
+
 	if b == nil || b.tableName == "" {
 		return 0, ErrTableNotFound
 	}
@@ -851,6 +956,19 @@ func (b *BuilderS[T]) Set(query string, args ...any) (int, error) {
 
 // Delete data from database, can be multiple, depending on the where, return affected rows(Not every database or database driver may support affected rows)
 func (b *BuilderS[T]) Delete() (int, error) {
+	if b.trace {
+		trace := TraceData{
+			Query:     b.statement,
+			Args:      b.args,
+			Database:  b.db.Name,
+			StartTime: time.Now(),
+		}
+		defer func() {
+			trace.Duration = time.Since(trace.StartTime)
+			defaultTracer.addTrace(trace)
+		}()
+	}
+
 	if b == nil || b.tableName == "" {
 		return 0, ErrTableNotFound
 	}
@@ -891,6 +1009,19 @@ func (b *BuilderS[T]) Delete() (int, error) {
 
 // Drop drop table from db
 func (b *BuilderS[T]) Drop() (int, error) {
+	if b.trace {
+		trace := TraceData{
+			Query:     b.statement,
+			Args:      b.args,
+			Database:  b.db.Name,
+			StartTime: time.Now(),
+		}
+		defer func() {
+			trace.Duration = time.Since(trace.StartTime)
+			defaultTracer.addTrace(trace)
+		}()
+	}
+
 	if b == nil || b.tableName == "" {
 		return 0, ErrTableNotFound
 	}
@@ -1124,6 +1255,14 @@ func (b *BuilderS[T]) Debug() *BuilderS[T] {
 
 // All get all data
 func (b *BuilderS[T]) All() ([]T, error) {
+	// Only keep the context setup
+	if b.trace {
+		if b.ctx == nil {
+			b.ctx = context.Background()
+		}
+		b.ctx = context.WithValue(b.ctx, traceEnabledKey, true)
+	}
+
 	if b == nil || b.tableName == "" {
 		return nil, ErrTableNotFound
 	}
@@ -1172,7 +1311,12 @@ func (b *BuilderS[T]) All() ([]T, error) {
 	}
 
 	var models []T
-	err := To(&models).Query(b.statement, b.args...)
+	selector := To(&models)
+	if b.trace {
+		selector.ctx = b.ctx
+		selector.trace = true
+	}
+	err := selector.Query(b.statement, b.args...)
 	if err != nil {
 		return nil, err
 	}
@@ -1336,6 +1480,19 @@ func (b *BuilderS[T]) ToChan(ptrChan *chan T) ([]T, error) {
 //			"email":"email@mail.com",
 //	    })
 func (b *BuilderS[T]) QuerySNamed(statement string, args map[string]any, unsafe ...bool) ([]T, error) {
+	if b.trace {
+		trace := TraceData{
+			Query:     statement,
+			Args:      []any{args},
+			Database:  b.db.Name,
+			StartTime: time.Now(),
+		}
+		defer func() {
+			trace.Duration = time.Since(trace.StartTime)
+			defaultTracer.addTrace(trace)
+		}()
+	}
+
 	if b.db == nil {
 		b.db = &databases[0]
 	}
@@ -1466,6 +1623,19 @@ func (b *BuilderS[T]) QuerySNamed(statement string, args map[string]any, unsafe 
 
 // QueryS query to struct
 func (b *BuilderS[T]) QueryS(statement string, args ...any) ([]T, error) {
+	if b.trace {
+		trace := TraceData{
+			Query:     statement,
+			Args:      args,
+			Database:  b.db.Name,
+			StartTime: time.Now(),
+		}
+		defer func() {
+			trace.Duration = time.Since(trace.StartTime)
+			defaultTracer.addTrace(trace)
+		}()
+	}
+
 	if b.db == nil {
 		b.db = &databases[0]
 	}
@@ -1574,6 +1744,13 @@ func (b *BuilderS[T]) QueryS(statement string, args ...any) ([]T, error) {
 
 // One get single row
 func (b *BuilderS[T]) One() (T, error) {
+	if b.trace {
+		if b.ctx == nil {
+			b.ctx = context.Background()
+		}
+		b.ctx = context.WithValue(b.ctx, traceEnabledKey, true)
+	}
+
 	if b == nil || b.tableName == "" {
 		return *new(T), ErrTableNotFound
 	}
@@ -1628,4 +1805,16 @@ func (b *BuilderS[T]) One() (T, error) {
 		_ = cacheOneS.Set(c, model[0])
 	}
 	return model[0], nil
+}
+
+func (b *BuilderS[T]) Trace() *BuilderS[T] {
+	if b == nil {
+		return nil
+	}
+	b.trace = true
+	if b.ctx == nil {
+		b.ctx = context.Background()
+	}
+	b.ctx = context.WithValue(b.ctx, traceEnabledKey, true)
+	return b
 }

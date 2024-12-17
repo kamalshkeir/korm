@@ -277,6 +277,7 @@ type DashOpts struct {
 	Path               string // default /admin
 	RepoUser           string // default kamalshkeir
 	RepoName           string // default korm-dash
+	WithTracing        bool   // add request counter dashboard,default false
 	WithRequestCounter bool   // add request counter dashboard,default false
 }
 
@@ -358,6 +359,10 @@ func WithDashboard(addr string, options ...DashOpts) *ksbus.Server {
 	reqqCounter := false
 	if opts != nil && opts.WithRequestCounter {
 		reqqCounter = opts.WithRequestCounter
+	}
+	if opts != nil && opts.WithTracing {
+		// Enable db tracing
+		WithTracing()
 	}
 	initAdminUrlPatterns(reqqCounter, serverBus.App)
 	if len(os.Args) == 1 {
