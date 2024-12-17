@@ -851,6 +851,7 @@ var GetTraces = func(c *ksmux.Context) {
 				sp.SetTag("database", t.Database)
 			}
 			sp.SetTag("duration", t.Duration.String())
+			sp.SetDuration(t.Duration)
 			sp.SetError(t.Error)
 			sp.End()
 		}
