@@ -8,9 +8,25 @@ import (
 	"github.com/kamalshkeir/lg"
 )
 
-var staticAndTemplatesFS []embed.FS
+var (
+	staticAndTemplatesFS []embed.FS
+	statsFuncs           []StatsFunc
+)
+
+type StatsFunc struct {
+	Name string
+	Func func() string
+}
 
 func cloneAndMigrateDashboard(migrateUser bool, staticAndTemplatesEmbeded ...embed.FS) {
+	AddDashStats(StatsFunc{
+		Name: "Total records",
+		Func: statsNbRecords,
+	})
+	AddDashStats(StatsFunc{
+		Name: "Database <span style='color:var(--theme-color)'>" + defaultDB + "</span> size",
+		Func: statsDbSize,
+	})
 	if _, err := os.Stat(assetsDir); err != nil && !embededDashboard {
 		// if not generated
 		cmd := exec.Command("git", "clone", "https://github.com/"+repoUser+"/"+repoName)
@@ -45,4 +61,12 @@ func cloneAndMigrateDashboard(migrateUser bool, staticAndTemplatesEmbeded ...emb
 			return
 		}
 	}
+}
+
+func AddDashStats(fn ...StatsFunc) {
+	statsFuncs = append(statsFuncs, fn...)
+}
+
+func GetStats() []StatsFunc {
+	return statsFuncs
 }

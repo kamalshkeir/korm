@@ -22,6 +22,37 @@ import (
 	"github.com/kamalshkeir/lg"
 )
 
+func statsNbRecords() string {
+	allTables := GetAllTables(defaultDB)
+	q := []string{}
+	for _, t := range allTables {
+		q = append(q, "SELECT '"+t+"' AS table_name,COUNT(*) AS count FROM "+t)
+	}
+	query := strings.Join(q, ` UNION ALL `)
+
+	var results []struct {
+		TableName string `db:"table_name"`
+		Count     int    `db:"count"`
+	}
+	if err := To(&results).Query(query); lg.CheckError(err) {
+		return "0"
+	}
+	count := 0
+	for _, r := range results {
+		count += r.Count
+	}
+	return strconv.Itoa(count)
+}
+
+func statsDbSize() string {
+	size, err := GetDatabaseSize(defaultDB)
+	if err != nil {
+		lg.Error(err)
+		size = "0 MB"
+	}
+	return size
+}
+
 type LogEntry struct {
 	Type  string
 	At    string
@@ -170,40 +201,12 @@ var LogsView = func(c *ksmux.Context) {
 }
 
 var DashView = func(c *ksmux.Context) {
-	// Get database size
-	size, err := GetDatabaseSize(defaultDB)
-	if err != nil {
-		lg.Error(err)
-		size = "0 MB"
-	}
-
-	allTables := GetAllTables(defaultDB)
-	q := []string{}
-	for _, t := range allTables {
-		q = append(q, "SELECT '"+t+"' AS table_name,COUNT(*) AS count FROM "+t)
-	}
-	query := strings.Join(q, ` UNION ALL `)
-
-	var results []struct {
-		TableName string `db:"table_name"`
-		Count     int    `db:"count"`
-	}
-	if err := To(&results).Query(query); lg.CheckError(err) {
-		c.Error("something wrong happened")
-		return
-	}
-	count := 0
-	for _, r := range results {
-		count += r.Count
-	}
-
 	ddd := map[string]any{
 		"admin_path":         adminPathNameGroup,
 		"static_url":         staticUrl,
-		"db_size":            size,
-		"count":              count,
 		"withRequestCounter": withRequestCounter,
 		"trace_enabled":      defaultTracer.enabled,
+		"stats":              GetStats(),
 	}
 	if withRequestCounter {
 		ddd["requests"] = GetTotalRequests()
