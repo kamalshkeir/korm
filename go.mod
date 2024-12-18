@@ -8,7 +8,7 @@ require (
 	github.com/kamalshkeir/kinput v0.1.0
 	github.com/kamalshkeir/kmap v1.1.4
 	github.com/kamalshkeir/ksbus v1.4.4
-	github.com/kamalshkeir/ksmux v0.4.5
+	github.com/kamalshkeir/ksmux v0.4.7
 	github.com/kamalshkeir/kstrct v1.9.13
 	github.com/kamalshkeir/lg v0.1.3
 )
