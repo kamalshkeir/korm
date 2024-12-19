@@ -30,10 +30,11 @@ var termsessions = kmap.New[string, string]()
 
 var LogsView = func(c *ksmux.Context) {
 	d := map[string]any{
-		"admin_path":    adminPathNameGroup,
-		"static_url":    staticUrl,
-		"secure":        ksmux.IsTLS,
-		"trace_enabled": defaultTracer.enabled,
+		"admin_path":       adminPathNameGroup,
+		"static_url":       staticUrl,
+		"secure":           ksmux.IsTLS,
+		"trace_enabled":    defaultTracer.enabled,
+		"terminal_enabled": terminalUIEnabled,
 	}
 	parsed := make([]LogEntry, 0)
 	if v := lg.GetLogs(); v != nil {
