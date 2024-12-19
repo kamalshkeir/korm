@@ -77,4 +77,9 @@ func initAdminUrlPatterns(withReqCounter bool, r *ksmux.Router) {
 		adminGroup.Get("/traces/get", Admin(GetTraces))
 		adminGroup.Post("/traces/clear", Admin(ClearTraces))
 	}
+	if terminalUIEnabled {
+		adminGroup.Get("/terminal", Admin(TerminalGetView))
+		adminGroup.Get("/terminal/complete", Admin(TerminalAutoComplete))
+		adminGroup.Post("/terminal/execute", Admin(TerminalExecute))
+	}
 }

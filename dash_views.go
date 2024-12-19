@@ -11,6 +11,9 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -18,170 +21,12 @@ import (
 
 	"github.com/kamalshkeir/aes"
 	"github.com/kamalshkeir/argon"
+	"github.com/kamalshkeir/kmap"
 	"github.com/kamalshkeir/ksmux"
 	"github.com/kamalshkeir/lg"
 )
 
-func statsNbRecords() string {
-	allTables := GetAllTables(defaultDB)
-	q := []string{}
-	for _, t := range allTables {
-		q = append(q, "SELECT '"+t+"' AS table_name,COUNT(*) AS count FROM "+t)
-	}
-	query := strings.Join(q, ` UNION ALL `)
-
-	var results []struct {
-		TableName string `db:"table_name"`
-		Count     int    `db:"count"`
-	}
-	if err := To(&results).Query(query); lg.CheckError(err) {
-		return "0"
-	}
-	count := 0
-	for _, r := range results {
-		count += r.Count
-	}
-	return strconv.Itoa(count)
-}
-
-func statsDbSize() string {
-	size, err := GetDatabaseSize(defaultDB)
-	if err != nil {
-		lg.Error(err)
-		size = "0 MB"
-	}
-	return size
-}
-
-type LogEntry struct {
-	Type  string
-	At    string
-	Extra string
-}
-
-// Global atomic counter for requests
-var totalRequests uint64
-
-// GetTotalRequests returns the current total requests count
-func GetTotalRequests() uint64 {
-	return atomic.LoadUint64(&totalRequests)
-}
-
-func parseLogString(logStr string) LogEntry {
-	// Handle empty string case
-	if logStr == "" {
-		return LogEntry{}
-	}
-
-	// Split the time from the end
-	parts := strings.Split(logStr, "time=")
-	timeStr := ""
-	mainPart := logStr
-
-	if len(parts) > 1 {
-		timeStr = strings.TrimSpace(parts[1])
-		mainPart = strings.TrimSpace(parts[0])
-	}
-
-	// Get the log type (ERRO, INFO, etc)
-	logType := ""
-	if len(mainPart) >= 4 {
-		logType = strings.TrimSpace(mainPart[:4])
-		mainPart = mainPart[4:]
-	}
-
-	// Clean up the type
-	switch logType {
-	case "ERRO":
-		logType = "ERROR"
-	case "INFO":
-		logType = "INFO"
-	case "WARN":
-		logType = "WARNING"
-	case "DEBU":
-		logType = "DEBUG"
-	case "FATA":
-		logType = "FATAL"
-	default:
-		logType = "N/A"
-	}
-
-	return LogEntry{
-		Type:  logType,
-		At:    timeStr,
-		Extra: strings.TrimSpace(mainPart),
-	}
-}
-
-func reverseSlice[T any](slice []T) []T {
-	new := make([]T, 0, len(slice))
-	for i := len(slice) - 1; i >= 0; i-- {
-		new = append(new, slice[i])
-	}
-	return new
-}
-
-// GetDatabaseSize returns the size of the database in GB or MB
-func GetDatabaseSize(dbName string) (string, error) {
-	db := databases[0] // default db
-	for _, d := range databases {
-		if d.Name == dbName {
-			db = d
-			break
-		}
-	}
-
-	var size float64
-	var err error
-
-	switch db.Dialect {
-	case "sqlite", "sqlite3":
-		// For SQLite, get the file size
-		info, err := os.Stat(dbName + ".sqlite3")
-		if err != nil {
-			return "0 MB", fmt.Errorf("error getting sqlite db size: %v", err)
-		}
-		size = float64(info.Size())
-
-	case "postgres", "postgresql":
-		// For PostgreSQL, query the pg_database_size function
-		var sizeBytes int64
-		query := `SELECT pg_database_size($1)`
-
-		err = GetConnection().QueryRow(query, db.Name).Scan(&sizeBytes)
-		if err != nil {
-			return "0 MB", fmt.Errorf("error getting postgres db size: %v", err)
-		}
-		size = float64(sizeBytes)
-
-	case "mysql", "mariadb":
-		// For MySQL/MariaDB, query information_schema
-		var sizeBytes int64
-		query := `
-			SELECT SUM(data_length + index_length) 
-			FROM information_schema.TABLES 
-			WHERE table_schema = ?`
-		err = GetConnection().QueryRow(query, db.Name).Scan(&sizeBytes)
-		if err != nil {
-			return "0 MB", fmt.Errorf("error getting mysql db size: %v", err)
-		}
-		size = float64(sizeBytes)
-
-	default:
-		return "0 MB", fmt.Errorf("unsupported database dialect: %s", db.Dialect)
-	}
-
-	// Convert bytes to GB (1 GB = 1024^3 bytes)
-	sizeGB := size / (1024 * 1024 * 1024)
-
-	// If size is less than 1 GB, convert to MB
-	if sizeGB < 1 {
-		sizeMB := size / (1024 * 1024)
-		return fmt.Sprintf("%.2f MB", sizeMB), nil
-	}
-
-	return fmt.Sprintf("%.2f GB", sizeGB), nil
-}
+var termsessions = kmap.New[string, string]()
 
 var LogsView = func(c *ksmux.Context) {
 	d := map[string]any{
@@ -206,6 +51,7 @@ var DashView = func(c *ksmux.Context) {
 		"static_url":         staticUrl,
 		"withRequestCounter": withRequestCounter,
 		"trace_enabled":      defaultTracer.enabled,
+		"terminal_enabled":   terminalUIEnabled,
 		"stats":              GetStats(),
 	}
 	if withRequestCounter {
@@ -233,11 +79,12 @@ var TablesView = func(c *ksmux.Context) {
 	}
 
 	c.Html("admin/admin_tables.html", map[string]any{
-		"admin_path":    adminPathNameGroup,
-		"static_url":    staticUrl,
-		"tables":        allTables,
-		"results":       results,
-		"trace_enabled": defaultTracer.enabled,
+		"admin_path":       adminPathNameGroup,
+		"static_url":       staticUrl,
+		"tables":           allTables,
+		"results":          results,
+		"trace_enabled":    defaultTracer.enabled,
+		"terminal_enabled": terminalUIEnabled,
 	})
 }
 
@@ -511,6 +358,7 @@ var AllModelsGet = func(c *ksmux.Context) {
 		data["admin_path"] = adminPathNameGroup
 		data["static_url"] = staticUrl
 		data["trace_enabled"] = defaultTracer.enabled
+		data["terminal_enabled"] = terminalUIEnabled
 		c.Html("admin/admin_single_table.html", data)
 	} else {
 		lg.ErrorC("table not found", "table", model)
@@ -837,9 +685,105 @@ var UpdateRowPost = func(c *ksmux.Context) {
 
 var TracingGetView = func(c *ksmux.Context) {
 	c.Html("admin/admin_tracing.html", map[string]any{
-		"admin_path":    adminPathNameGroup,
-		"static_url":    staticUrl,
-		"trace_enabled": defaultTracer.enabled,
+		"admin_path":       adminPathNameGroup,
+		"static_url":       staticUrl,
+		"trace_enabled":    defaultTracer.enabled,
+		"terminal_enabled": terminalUIEnabled,
+	})
+}
+
+var TerminalGetView = func(c *ksmux.Context) {
+	c.Html("admin/admin_terminal.html", map[string]any{
+		"admin_path":       adminPathNameGroup,
+		"static_url":       staticUrl,
+		"trace_enabled":    defaultTracer.enabled,
+		"terminal_enabled": terminalUIEnabled,
+	})
+}
+
+// WebSocket endpoint for terminal
+var TerminalExecute = func(c *ksmux.Context) {
+	var req struct {
+		Command string `json:"command"`
+		Session string `json:"session"`
+	}
+	if err := c.BodyStruct(&req); err != nil {
+		c.Json(map[string]any{"type": "error", "content": err.Error()})
+		return
+	}
+
+	currentDir, ok := termsessions.Get(req.Session)
+	if !ok {
+		currentDir, _ = os.Getwd()
+		termsessions.Set(req.Session, currentDir)
+	}
+
+	output, newDir := executeCommand(req.Command, currentDir)
+
+	if newDir != "" {
+		termsessions.Set(req.Session, newDir)
+	}
+
+	c.Json(map[string]any{
+		"type":    "output",
+		"content": output,
+	})
+}
+
+var TerminalAutoComplete = func(c *ksmux.Context) {
+	currentDir, _ := os.Getwd()
+	input := c.QueryParam("input")
+	parts := strings.Fields(input)
+
+	if len(parts) == 0 {
+		c.Json(CompletionResult{
+			Type:        CommandCompletion,
+			Completions: basicCommands,
+			Input:       input,
+		})
+		return
+	}
+
+	command := parts[0]
+	lastPart := parts[len(parts)-1]
+
+	if len(parts) > 1 && strings.HasPrefix(lastPart, "-") {
+		if flags, ok := commandFlags[command]; ok {
+			matches := fuzzyMatch(lastPart, flags)
+			c.Json(CompletionResult{
+				Type:        FlagCompletion,
+				Completions: matches,
+				Input:       input,
+			})
+			return
+		}
+	}
+
+	if strings.HasPrefix(lastPart, "$") {
+		envVars := getEnvironmentVariables(lastPart[1:])
+		c.Json(CompletionResult{
+			Type:        EnvCompletion,
+			Completions: envVars,
+			Input:       input,
+		})
+		return
+	}
+
+	if len(parts) > 1 {
+		completions := getPathCompletions(currentDir, lastPart)
+		c.Json(CompletionResult{
+			Type:        PathCompletion,
+			Completions: completions,
+			Input:       input,
+		})
+		return
+	}
+
+	matches := fuzzyMatch(command, basicCommands)
+	c.Json(CompletionResult{
+		Type:        CommandCompletion,
+		Completions: matches,
+		Input:       input,
 	})
 }
 
@@ -1158,6 +1102,167 @@ var OfflineView = func(c *ksmux.Context) {
 	c.Text("<h1>YOUR ARE OFFLINE, check connection</h1>")
 }
 
+func statsNbRecords() string {
+	allTables := GetAllTables(defaultDB)
+	q := []string{}
+	for _, t := range allTables {
+		q = append(q, "SELECT '"+t+"' AS table_name,COUNT(*) AS count FROM "+t)
+	}
+	query := strings.Join(q, ` UNION ALL `)
+
+	var results []struct {
+		TableName string `db:"table_name"`
+		Count     int    `db:"count"`
+	}
+	if err := To(&results).Query(query); lg.CheckError(err) {
+		return "0"
+	}
+	count := 0
+	for _, r := range results {
+		count += r.Count
+	}
+	return strconv.Itoa(count)
+}
+
+func statsDbSize() string {
+	size, err := GetDatabaseSize(defaultDB)
+	if err != nil {
+		lg.Error(err)
+		size = "0 MB"
+	}
+	return size
+}
+
+type LogEntry struct {
+	Type  string
+	At    string
+	Extra string
+}
+
+// Global atomic counter for requests
+var totalRequests uint64
+
+// GetTotalRequests returns the current total requests count
+func GetTotalRequests() uint64 {
+	return atomic.LoadUint64(&totalRequests)
+}
+
+func parseLogString(logStr string) LogEntry {
+	// Handle empty string case
+	if logStr == "" {
+		return LogEntry{}
+	}
+
+	// Split the time from the end
+	parts := strings.Split(logStr, "time=")
+	timeStr := ""
+	mainPart := logStr
+
+	if len(parts) > 1 {
+		timeStr = strings.TrimSpace(parts[1])
+		mainPart = strings.TrimSpace(parts[0])
+	}
+
+	// Get the log type (ERRO, INFO, etc)
+	logType := ""
+	if len(mainPart) >= 4 {
+		logType = strings.TrimSpace(mainPart[:4])
+		mainPart = mainPart[4:]
+	}
+
+	// Clean up the type
+	switch logType {
+	case "ERRO":
+		logType = "ERROR"
+	case "INFO":
+		logType = "INFO"
+	case "WARN":
+		logType = "WARNING"
+	case "DEBU":
+		logType = "DEBUG"
+	case "FATA":
+		logType = "FATAL"
+	default:
+		logType = "N/A"
+	}
+
+	return LogEntry{
+		Type:  logType,
+		At:    timeStr,
+		Extra: strings.TrimSpace(mainPart),
+	}
+}
+
+func reverseSlice[T any](slice []T) []T {
+	new := make([]T, 0, len(slice))
+	for i := len(slice) - 1; i >= 0; i-- {
+		new = append(new, slice[i])
+	}
+	return new
+}
+
+// GetDatabaseSize returns the size of the database in GB or MB
+func GetDatabaseSize(dbName string) (string, error) {
+	db := databases[0] // default db
+	for _, d := range databases {
+		if d.Name == dbName {
+			db = d
+			break
+		}
+	}
+
+	var size float64
+	var err error
+
+	switch db.Dialect {
+	case "sqlite", "sqlite3":
+		// For SQLite, get the file size
+		info, err := os.Stat(dbName + ".sqlite3")
+		if err != nil {
+			return "0 MB", fmt.Errorf("error getting sqlite db size: %v", err)
+		}
+		size = float64(info.Size())
+
+	case "postgres", "postgresql":
+		// For PostgreSQL, query the pg_database_size function
+		var sizeBytes int64
+		query := `SELECT pg_database_size($1)`
+
+		err = GetConnection().QueryRow(query, db.Name).Scan(&sizeBytes)
+		if err != nil {
+			return "0 MB", fmt.Errorf("error getting postgres db size: %v", err)
+		}
+		size = float64(sizeBytes)
+
+	case "mysql", "mariadb":
+		// For MySQL/MariaDB, query information_schema
+		var sizeBytes int64
+		query := `
+			SELECT SUM(data_length + index_length) 
+			FROM information_schema.TABLES 
+			WHERE table_schema = ?`
+		err = GetConnection().QueryRow(query, db.Name).Scan(&sizeBytes)
+		if err != nil {
+			return "0 MB", fmt.Errorf("error getting mysql db size: %v", err)
+		}
+		size = float64(sizeBytes)
+
+	default:
+		return "0 MB", fmt.Errorf("unsupported database dialect: %s", db.Dialect)
+	}
+
+	// Convert bytes to GB (1 GB = 1024^3 bytes)
+	sizeGB := size / (1024 * 1024 * 1024)
+
+	// If size is less than 1 GB, convert to MB
+	if sizeGB < 1 {
+		sizeMB := size / (1024 * 1024)
+		return fmt.Sprintf("%.2f MB", sizeMB), nil
+	}
+
+	return fmt.Sprintf("%.2f GB", sizeGB), nil
+}
+
 func uploadMultipartFile(file multipart.File, filename string, outPath string, acceptedFormats ...string) (string, error) {
 	//create destination file making sure the path is writeable.
 	if outPath == "" {
@@ -1194,4 +1299,280 @@ func uploadMultipartFile(file multipart.File, filename string, outPath string, a
 	} else {
 		return "", fmt.Errorf("not in allowed extensions 'jpg','jpeg','png','json' : %v", l)
 	}
+}
+
+// TERMINAL
+
+type CompletionType string
+
+const (
+	CommandCompletion CompletionType = "command"
+	FlagCompletion    CompletionType = "flag"
+	PathCompletion    CompletionType = "path"
+	EnvCompletion     CompletionType = "env"
+)
+
+type CompletionResult struct {
+	Type        CompletionType `json:"type"`
+	Completions []string       `json:"completions"`
+	Input       string         `json:"input"`
+}
+
+// Command flags map
+var commandFlags = map[string][]string{
+	"ls":    {"-l", "-a", "-h", "-r", "--help"},
+	"grep":  {"-i", "-v", "-r", "-n", "--help"},
+	"rm":    {"-r", "-f", "-i", "--help"},
+	"cp":    {"-r", "-f", "-i", "--help"},
+	"mkdir": {"-p", "--help"},
+}
+
+var basicCommands = []string{
+	"ls", "cd", "pwd", "clear", "cls", "cat", "touch",
+	"mkdir", "rmdir", "grep", "cp", "mv", "rm", "exit",
+}
+
+// Helper functions
+// Helper functions
+func fuzzyMatch(input string, candidates []string) []string {
+	if input == "" {
+		return candidates
+	}
+
+	matches := make([]string, 0)
+	inputLower := strings.ToLower(input)
+
+	for _, candidate := range candidates {
+		if strings.Contains(strings.ToLower(candidate), inputLower) {
+			matches = append(matches, candidate)
+		}
+	}
+	return matches
+}
+
+func getEnvironmentVariables(prefix string) []string {
+	vars := make([]string, 0)
+	for _, env := range os.Environ() {
+		if parts := strings.SplitN(env, "=", 2); len(parts) > 0 {
+			if strings.HasPrefix(strings.ToLower(parts[0]), strings.ToLower(prefix)) {
+				vars = append(vars, "$"+parts[0])
+			}
+		}
+	}
+	return vars
+}
+
+func getPathCompletions(baseDir, partial string) []string {
+	searchDir := baseDir
+	prefix := ""
+
+	if filepath.IsAbs(partial) {
+		searchDir = filepath.Dir(partial)
+		prefix = filepath.Dir(partial) + string(filepath.Separator)
+	} else if strings.Contains(partial, string(filepath.Separator)) {
+		searchDir = filepath.Join(baseDir, filepath.Dir(partial))
+		prefix = filepath.Dir(partial) + string(filepath.Separator)
+	}
+
+	files, err := os.ReadDir(searchDir)
+	if err != nil {
+		return nil
+	}
+
+	completions := make([]string, 0)
+	for _, file := range files {
+		name := prefix + file.Name()
+		if strings.HasPrefix(strings.ToLower(name), strings.ToLower(partial)) {
+			if file.IsDir() {
+				name += string(filepath.Separator)
+			}
+			completions = append(completions, name)
+		}
+	}
+	return completions
+}
+
+func executeCommand(command, currentDir string) (output, newDir string) {
+	parts := strings.Fields(command)
+	if len(parts) == 0 {
+		return "", ""
+	}
+
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		switch strings.ToLower(strings.TrimSpace(parts[0])) {
+		case "cd":
+			if len(parts) < 2 {
+				currentDir, _ = os.Getwd()
+				return "", currentDir
+			}
+			newDir := parts[1]
+			if !filepath.IsAbs(newDir) {
+				newDir = filepath.Join(currentDir, newDir)
+			}
+			if fi, err := os.Stat(newDir); err == nil && fi.IsDir() {
+				// Change directory and show contents
+				currentDir = newDir
+				// Execute ls command to show directory contents
+				cmd = exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command",
+					"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-ChildItem")
+				cmd.Dir = currentDir
+				out, err := cmd.CombinedOutput()
+				if err != nil {
+					return "Error: " + err.Error() + "\n", currentDir
+				}
+				return string(out), currentDir
+			}
+			return "Error: Not a directory\n", ""
+
+		case "ls":
+			args := []string{"-NoProfile", "-NonInteractive", "-Command"}
+			cmdStr := "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-ChildItem"
+
+			// Handle directory argument
+			if len(parts) > 1 {
+				cmdStr += " -Path '" + parts[1] + "'"
+			}
+
+			args = append(args, cmdStr)
+			cmd = exec.Command("powershell", args...)
+
+		case "pwd":
+			cmd = exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command",
+				"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; (Get-Location).Path")
+
+		case "clear", "cls":
+			return "CLEAR", ""
+
+		case "exit", "quit":
+			return "Closing session...\n", ""
+
+		case "cp":
+			if len(parts) >= 3 {
+				cmd = exec.Command("cmd", "/c", "chcp 65001 >nul && copy", parts[1], parts[2])
+			} else {
+				return "Usage: cp source destination\n", ""
+			}
+
+		case "rm":
+			if len(parts) >= 2 {
+				cmd = exec.Command("cmd", "/c", "chcp 65001 >nul && del", parts[1])
+			} else {
+				return "Usage: rm filename\n", ""
+			}
+
+		case "mv":
+			if len(parts) >= 3 {
+				cmd = exec.Command("cmd", "/c", "chcp 65001 >nul && move", parts[1], parts[2])
+			} else {
+				return "Usage: mv source destination\n", ""
+			}
+
+		case "cat":
+			if len(parts) < 2 {
+				return "Usage: cat filename\n", ""
+			}
+			cmd = exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command",
+				"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content", parts[1])
+
+		case "touch":
+			if len(parts) < 2 {
+				return "Usage: touch filename\n", ""
+			}
+			// Check if file exists
+			filePath := filepath.Join(currentDir, parts[1])
+			if _, err := os.Stat(filePath); err == nil {
+				return "Error: File already exists\n", ""
+			}
+			cmd = exec.Command("cmd", "/c", "echo.>", parts[1])
+
+		case "mkdir":
+			if len(parts) < 2 {
+				return "Usage: mkdir dirname\n", ""
+			}
+			cmd = exec.Command("cmd", "/c", "mkdir", parts[1])
+
+		case "rmdir":
+			if len(parts) < 2 {
+				return "Usage: rmdir dirname\n", ""
+			}
+			cmd = exec.Command("cmd", "/c", "rmdir", "/s", "/q", parts[1])
+
+		case "grep":
+			if len(parts) < 2 {
+				return "Usage: grep [flags] pattern [file...]\n", ""
+			}
+
+			args := []string{"/c", "findstr", "/l"}
+			if len(parts) == 2 {
+				// Simple pattern search
+				pattern := strings.Trim(parts[1], "\"'") // Remove quotes if present
+				args = append(args, "/n", "/i", pattern, "*.*")
+			} else {
+				pattern := ""
+				files := []string{}
+
+				for i := 1; i < len(parts); i++ {
+					arg := parts[i]
+					if strings.HasPrefix(arg, "-") {
+						switch arg {
+						case "-r", "-R":
+							args = append(args, "/s")
+						case "-n":
+							args = append(args, "/n")
+						case "-i":
+							args = append(args, "/i")
+						case "-v":
+							args = append(args, "/v")
+						}
+					} else if pattern == "" {
+						pattern = strings.Trim(arg, "\"'") // Remove quotes if present
+					} else {
+						files = append(files, arg)
+					}
+				}
+
+				if pattern == "" {
+					return "Error: No pattern specified\n", ""
+				}
+
+				if !strings.Contains(strings.Join(args, " "), "/n") {
+					args = append(args, "/n")
+				}
+
+				args = append(args, pattern)
+				if len(files) > 0 {
+					args = append(args, files...)
+				} else {
+					args = append(args, "*.*")
+				}
+			}
+			cmd = exec.Command("cmd", args...)
+		default:
+			// Handle any command with potential flags
+			if strings.HasPrefix(parts[0], "go") || strings.HasPrefix(parts[0], "git") {
+				// For commands like go, git - pass all args directly
+				cmd = exec.Command(parts[0], parts[1:]...)
+			} else {
+				// For other Windows commands, preserve UTF-8 and pass all args
+				args := []string{"/c", "chcp 65001 >nul &&", parts[0]}
+				args = append(args, parts[1:]...)
+				cmd = exec.Command("cmd", args...)
+			}
+		}
+	} else {
+		// Unix commands - always pass all arguments to preserve flags
+		cmd = exec.Command(parts[0], parts[1:]...)
+	}
+
+	if cmd != nil {
+		cmd.Dir = currentDir
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return "Error: " + err.Error() + "\n", ""
+		}
+		return string(out), ""
+	}
+
+	return "", ""
 }

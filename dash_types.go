@@ -18,6 +18,7 @@ var (
 	repoUser           = "kamalshkeir"
 	repoName           = "korm-dash"
 	adminPathNameGroup = "/admin"
+	terminalUIEnabled  = false
 	// Debug when true show extra useful logs for queries executed for migrations and queries statements
 	Debug = false
 	// FlushCacheEvery execute korm.FlushCache() every 10 min by default, you should not worry about it, but useful that you can change it
