@@ -79,7 +79,7 @@ func initAdminUrlPatterns(withReqCounter bool, r *ksmux.Router) {
 	}
 	if terminalUIEnabled {
 		adminGroup.Get("/terminal", Admin(TerminalGetView))
-		adminGroup.Get("/terminal/complete", Admin(TerminalAutoComplete))
 		adminGroup.Post("/terminal/execute", Admin(TerminalExecute))
+		adminGroup.Get("/terminal/complete", Admin(TerminalComplete))
 	}
 }

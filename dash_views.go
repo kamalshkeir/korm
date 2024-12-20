@@ -713,78 +713,21 @@ var TerminalExecute = func(c *ksmux.Context) {
 		return
 	}
 
-	currentDir, ok := termsessions.Get(req.Session)
-	if !ok {
+	currentDir, _ := termsessions.Get(req.Session)
+	if currentDir == "" {
 		currentDir, _ = os.Getwd()
-		termsessions.Set(req.Session, currentDir)
 	}
 
 	output, newDir := executeCommand(req.Command, currentDir)
 
-	if newDir != "" {
-		termsessions.Set(req.Session, newDir)
-	}
+	// Always update the session with the new directory
+	termsessions.Set(req.Session, newDir)
+	lg.Debug("Updated session directory:", newDir) // Debug log
 
 	c.Json(map[string]any{
-		"type":    "output",
-		"content": output,
-	})
-}
-
-var TerminalAutoComplete = func(c *ksmux.Context) {
-	currentDir, _ := os.Getwd()
-	input := c.QueryParam("input")
-	parts := strings.Fields(input)
-
-	if len(parts) == 0 {
-		c.Json(CompletionResult{
-			Type:        CommandCompletion,
-			Completions: basicCommands,
-			Input:       input,
-		})
-		return
-	}
-
-	command := parts[0]
-	lastPart := parts[len(parts)-1]
-
-	if len(parts) > 1 && strings.HasPrefix(lastPart, "-") {
-		if flags, ok := commandFlags[command]; ok {
-			matches := fuzzyMatch(lastPart, flags)
-			c.Json(CompletionResult{
-				Type:        FlagCompletion,
-				Completions: matches,
-				Input:       input,
-			})
-			return
-		}
-	}
-
-	if strings.HasPrefix(lastPart, "$") {
-		envVars := getEnvironmentVariables(lastPart[1:])
-		c.Json(CompletionResult{
-			Type:        EnvCompletion,
-			Completions: envVars,
-			Input:       input,
-		})
-		return
-	}
-
-	if len(parts) > 1 {
-		completions := getPathCompletions(currentDir, lastPart)
-		c.Json(CompletionResult{
-			Type:        PathCompletion,
-			Completions: completions,
-			Input:       input,
-		})
-		return
-	}
-
-	matches := fuzzyMatch(command, basicCommands)
-	c.Json(CompletionResult{
-		Type:        CommandCompletion,
-		Completions: matches,
-		Input:       input,
+		"type":      "output",
+		"content":   output,
+		"directory": newDir,
 	})
 }
 
@@ -1304,276 +1247,122 @@ func uploadMultipartFile(file multipart.File, filename string, outPath string, a
 
 // TERMINAL
 
-type CompletionType string
-
-const (
-	CommandCompletion CompletionType = "command"
-	FlagCompletion    CompletionType = "flag"
-	PathCompletion    CompletionType = "path"
-	EnvCompletion     CompletionType = "env"
-)
-
-type CompletionResult struct {
-	Type        CompletionType `json:"type"`
-	Completions []string       `json:"completions"`
-	Input       string         `json:"input"`
-}
-
-// Command flags map
-var commandFlags = map[string][]string{
-	"ls":    {"-l", "-a", "-h", "-r", "--help"},
-	"grep":  {"-i", "-v", "-r", "-n", "--help"},
-	"rm":    {"-r", "-f", "-i", "--help"},
-	"cp":    {"-r", "-f", "-i", "--help"},
-	"mkdir": {"-p", "--help"},
-}
-
-var basicCommands = []string{
-	"ls", "cd", "pwd", "clear", "cls", "cat", "touch",
-	"mkdir", "rmdir", "grep", "cp", "mv", "rm", "exit",
-}
-
-// Helper functions
-// Helper functions
-func fuzzyMatch(input string, candidates []string) []string {
-	if input == "" {
-		return candidates
-	}
-
-	matches := make([]string, 0)
-	inputLower := strings.ToLower(input)
-
-	for _, candidate := range candidates {
-		if strings.Contains(strings.ToLower(candidate), inputLower) {
-			matches = append(matches, candidate)
-		}
-	}
-	return matches
-}
-
-func getEnvironmentVariables(prefix string) []string {
-	vars := make([]string, 0)
-	for _, env := range os.Environ() {
-		if parts := strings.SplitN(env, "=", 2); len(parts) > 0 {
-			if strings.HasPrefix(strings.ToLower(parts[0]), strings.ToLower(prefix)) {
-				vars = append(vars, "$"+parts[0])
-			}
-		}
-	}
-	return vars
-}
-
-func getPathCompletions(baseDir, partial string) []string {
-	searchDir := baseDir
-	prefix := ""
-
-	if filepath.IsAbs(partial) {
-		searchDir = filepath.Dir(partial)
-		prefix = filepath.Dir(partial) + string(filepath.Separator)
-	} else if strings.Contains(partial, string(filepath.Separator)) {
-		searchDir = filepath.Join(baseDir, filepath.Dir(partial))
-		prefix = filepath.Dir(partial) + string(filepath.Separator)
-	}
-
-	files, err := os.ReadDir(searchDir)
-	if err != nil {
-		return nil
-	}
-
-	completions := make([]string, 0)
-	for _, file := range files {
-		name := prefix + file.Name()
-		if strings.HasPrefix(strings.ToLower(name), strings.ToLower(partial)) {
-			if file.IsDir() {
-				name += string(filepath.Separator)
-			}
-			completions = append(completions, name)
-		}
-	}
-	return completions
-}
-
 func executeCommand(command, currentDir string) (output, newDir string) {
 	parts := strings.Fields(command)
 	if len(parts) == 0 {
-		return "", ""
+		return "", currentDir
 	}
 
+	// Handle built-in cd command since it affects the terminal's working directory
+	if parts[0] == "cd" {
+		if len(parts) < 2 {
+			// cd without args goes to home directory
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return "Error getting home directory: " + err.Error() + "\n", currentDir
+			}
+			return home, home
+		}
+		newDir := parts[1]
+		if !filepath.IsAbs(newDir) {
+			newDir = filepath.Join(currentDir, newDir)
+		}
+		if fi, err := os.Stat(newDir); err == nil && fi.IsDir() {
+			return newDir, newDir
+		}
+		return "Error: Not a directory\n", currentDir
+	}
+
+	// Handle clear/cls command for terminal UI
+	if parts[0] == "clear" || parts[0] == "cls" {
+		return "CLEAR", currentDir
+	}
+
+	// Handle pwd command (built-in)
+	if parts[0] == "pwd" {
+		return currentDir + "\n", currentDir
+	}
+
+	// Handle dir/ls command for Windows/Unix compatibility
+	if parts[0] == "dir" || parts[0] == "ls" {
+		files, err := os.ReadDir(currentDir)
+		if err != nil {
+			return fmt.Sprintf("Error reading directory: %s\n", err), currentDir
+		}
+
+		var output strings.Builder
+		for _, file := range files {
+			info, err := file.Info()
+			if err != nil {
+				continue
+			}
+			prefix := "F"
+			if file.IsDir() {
+				prefix = "D"
+			}
+			size := fmt.Sprintf("%8d", info.Size())
+			name := file.Name()
+			output.WriteString(fmt.Sprintf("[%s] %s %s\n", prefix, size, name))
+		}
+		return output.String(), currentDir
+	}
+
+	// Execute other commands through shell
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
-		switch strings.ToLower(strings.TrimSpace(parts[0])) {
-		case "cd":
-			if len(parts) < 2 {
-				currentDir, _ = os.Getwd()
-				return "", currentDir
-			}
-			newDir := parts[1]
-			if !filepath.IsAbs(newDir) {
-				newDir = filepath.Join(currentDir, newDir)
-			}
-			if fi, err := os.Stat(newDir); err == nil && fi.IsDir() {
-				// Change directory and show contents
-				currentDir = newDir
-				// Execute ls command to show directory contents
-				cmd = exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command",
-					"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-ChildItem")
-				cmd.Dir = currentDir
-				out, err := cmd.CombinedOutput()
-				if err != nil {
-					return "Error: " + err.Error() + "\n", currentDir
-				}
-				return string(out), currentDir
-			}
-			return "Error: Not a directory\n", ""
-
-		case "ls":
-			args := []string{"-NoProfile", "-NonInteractive", "-Command"}
-			cmdStr := "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-ChildItem"
-
-			// Handle directory argument
-			if len(parts) > 1 {
-				cmdStr += " -Path '" + parts[1] + "'"
-			}
-
-			args = append(args, cmdStr)
-			cmd = exec.Command("powershell", args...)
-
-		case "pwd":
-			cmd = exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command",
-				"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; (Get-Location).Path")
-
-		case "clear", "cls":
-			return "CLEAR", ""
-
-		case "exit", "quit":
-			return "Closing session...\n", ""
-
-		case "cp":
-			if len(parts) >= 3 {
-				cmd = exec.Command("cmd", "/c", "chcp 65001 >nul && copy", parts[1], parts[2])
-			} else {
-				return "Usage: cp source destination\n", ""
-			}
-
-		case "rm":
-			if len(parts) >= 2 {
-				cmd = exec.Command("cmd", "/c", "chcp 65001 >nul && del", parts[1])
-			} else {
-				return "Usage: rm filename\n", ""
-			}
-
-		case "mv":
-			if len(parts) >= 3 {
-				cmd = exec.Command("cmd", "/c", "chcp 65001 >nul && move", parts[1], parts[2])
-			} else {
-				return "Usage: mv source destination\n", ""
-			}
-
-		case "cat":
-			if len(parts) < 2 {
-				return "Usage: cat filename\n", ""
-			}
-			cmd = exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command",
-				"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content", parts[1])
-
-		case "touch":
-			if len(parts) < 2 {
-				return "Usage: touch filename\n", ""
-			}
-			// Check if file exists
-			filePath := filepath.Join(currentDir, parts[1])
-			if _, err := os.Stat(filePath); err == nil {
-				return "Error: File already exists\n", ""
-			}
-			cmd = exec.Command("cmd", "/c", "echo.>", parts[1])
-
-		case "mkdir":
-			if len(parts) < 2 {
-				return "Usage: mkdir dirname\n", ""
-			}
-			cmd = exec.Command("cmd", "/c", "mkdir", parts[1])
-
-		case "rmdir":
-			if len(parts) < 2 {
-				return "Usage: rmdir dirname\n", ""
-			}
-			cmd = exec.Command("cmd", "/c", "rmdir", "/s", "/q", parts[1])
-
-		case "grep":
-			if len(parts) < 2 {
-				return "Usage: grep [flags] pattern [file...]\n", ""
-			}
-
-			args := []string{"/c", "findstr", "/l"}
-			if len(parts) == 2 {
-				// Simple pattern search
-				pattern := strings.Trim(parts[1], "\"'") // Remove quotes if present
-				args = append(args, "/n", "/i", pattern, "*.*")
-			} else {
-				pattern := ""
-				files := []string{}
-
-				for i := 1; i < len(parts); i++ {
-					arg := parts[i]
-					if strings.HasPrefix(arg, "-") {
-						switch arg {
-						case "-r", "-R":
-							args = append(args, "/s")
-						case "-n":
-							args = append(args, "/n")
-						case "-i":
-							args = append(args, "/i")
-						case "-v":
-							args = append(args, "/v")
-						}
-					} else if pattern == "" {
-						pattern = strings.Trim(arg, "\"'") // Remove quotes if present
-					} else {
-						files = append(files, arg)
-					}
-				}
-
-				if pattern == "" {
-					return "Error: No pattern specified\n", ""
-				}
-
-				if !strings.Contains(strings.Join(args, " "), "/n") {
-					args = append(args, "/n")
-				}
-
-				args = append(args, pattern)
-				if len(files) > 0 {
-					args = append(args, files...)
-				} else {
-					args = append(args, "*.*")
-				}
-			}
-			cmd = exec.Command("cmd", args...)
-		default:
-			// Handle any command with potential flags
-			if strings.HasPrefix(parts[0], "go") || strings.HasPrefix(parts[0], "git") {
-				// For commands like go, git - pass all args directly
-				cmd = exec.Command(parts[0], parts[1:]...)
-			} else {
-				// For other Windows commands, preserve UTF-8 and pass all args
-				args := []string{"/c", "chcp 65001 >nul &&", parts[0]}
-				args = append(args, parts[1:]...)
-				cmd = exec.Command("cmd", args...)
-			}
-		}
+		cmd = exec.Command("cmd", "/c", command)
 	} else {
-		// Unix commands - always pass all arguments to preserve flags
-		cmd = exec.Command(parts[0], parts[1:]...)
+		cmd = exec.Command("/bin/sh", "-c", command) // Use /bin/sh directly
 	}
 
-	if cmd != nil {
-		cmd.Dir = currentDir
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			return "Error: " + err.Error() + "\n", ""
+	cmd.Dir = currentDir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Sprintf("Error: %s\n%s", err, string(out)), currentDir
+	}
+	return string(out), currentDir
+}
+
+var TerminalComplete = func(c *ksmux.Context) {
+	input := c.Request.URL.Query().Get("input")
+	session := c.Request.URL.Query().Get("session")
+
+	// Get the last word of the input (after any spaces)
+	parts := strings.Fields(input)
+	if len(parts) > 0 {
+		input = parts[len(parts)-1]
+	}
+
+	lg.Debug("Input after splitting:", input)
+
+	currentDir, _ := termsessions.Get(session)
+	if currentDir == "" {
+		currentDir, _ = os.Getwd()
+	}
+
+	// Get all files in current directory
+	files, err := os.ReadDir(currentDir)
+	if err != nil {
+		lg.Error("Error reading directory:", err)
+		c.Json(map[string]any{"suggestions": []string{}})
+		return
+	}
+
+	// Find matches for the input
+	suggestions := []string{}
+	for _, file := range files {
+		name := file.Name()
+		if strings.HasPrefix(strings.ToLower(name), strings.ToLower(input)) {
+			if file.IsDir() {
+				suggestions = append(suggestions, name+"/")
+			} else {
+				suggestions = append(suggestions, name)
+			}
 		}
-		return string(out), ""
 	}
 
-	return "", ""
+	lg.Debug("Found suggestions:", suggestions)
+	c.Json(map[string]any{
+		"suggestions": suggestions,
+	})
 }
