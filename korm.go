@@ -23,24 +23,35 @@ import (
 
 var (
 	// defaultDB keep tracking of the first database connected
-	defaultDB           = ""
-	useCache            = true
-	cacheMaxMemoryMb    = 100
-	databases           = []DatabaseEntity{}
-	mutexModelTablename sync.RWMutex
-	mModelTablename     = map[string]any{}
-	cacheAllTables      = kmap.New[string, []string]()
-	cacheAllCols        = kmap.New[string, map[string]string]()
-	cacheAllColsOrdered = kmap.New[string, []string]()
-	relationsMap        = kmap.New[string, struct{}]()
-	onceDone            = false
-	serverBus           *ksbus.Server
-	cacheQueryS         = kmap.New[dbCache, any](cacheMaxMemoryMb)
-	cacheQueryM         = kmap.New[dbCache, any](cacheMaxMemoryMb)
-	cacheQ              = kmap.New[string, any](cacheMaxMemoryMb)
-	ErrTableNotFound    = errors.New("unable to find tableName")
-	ErrBigData          = kmap.ErrLargeData
-	logQueries          = false
+	defaultDB               = ""
+	useCache                = true
+	cacheMaxMemoryMb        = 100
+	databases               = []DatabaseEntity{}
+	mutexModelTablename     sync.RWMutex
+	mModelTablename         = map[string]any{}
+	cacheAllTables          = kmap.New[string, []string]()
+	cacheAllCols            = kmap.New[string, map[string]string]()
+	cacheAllColsOrdered     = kmap.New[string, []string]()
+	relationsMap            = kmap.New[string, struct{}]()
+	onceDone                = false
+	serverBus               *ksbus.Server
+	cacheQueryS             = kmap.New[dbCache, any](cacheMaxMemoryMb)
+	cacheQueryM             = kmap.New[dbCache, any](cacheMaxMemoryMb)
+	cacheQ                  = kmap.New[string, any](cacheMaxMemoryMb)
+	ErrTableNotFound        = errors.New("unable to find tableName")
+	ErrBigData              = kmap.ErrLargeData
+	logQueries              = false
+	terminalAllowedCommands = map[string]bool{
+		"ls":    true,
+		"pwd":   true,
+		"cd":    true,
+		"tail":  true,
+		"cat":   true,
+		"echo":  true,
+		"exit":  true,
+		"clear": true,
+		"cls":   true,
+	}
 )
 
 // New the generic way to connect to all handled databases
@@ -774,4 +785,18 @@ func getTableName[T any]() string {
 // LogQueries enable logging sql statements with time tooked
 func LogQueries() {
 	logQueries = true
+}
+
+// AllowTerminalCommands adds commands to the allowed list for admin terminal
+func AllowTerminalCommands(commands ...string) {
+	for _, cmd := range commands {
+		terminalAllowedCommands[cmd] = true
+	}
+}
+
+// DisallowTerminalCommands removes commands from the allowed list
+func DisallowTerminalCommands(commands ...string) {
+	for _, cmd := range commands {
+		delete(terminalAllowedCommands, cmd)
+	}
 }

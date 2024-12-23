@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -1253,38 +1254,30 @@ func executeCommand(command, currentDir string) (output, newDir string) {
 		return "", currentDir
 	}
 
+	// Check if command is allowed
+	if !terminalAllowedCommands[parts[0]] {
+		return fmt.Sprintf("Command '%s' not allowed. Use only: %v\n",
+			parts[0], getAllowedCommands()), currentDir
+	}
+
 	// Handle built-in cd command since it affects the terminal's working directory
-	if parts[0] == "cd" {
+	switch parts[0] {
+	case "touch":
 		if len(parts) < 2 {
-			// cd without args goes to home directory
-			home, err := os.UserHomeDir()
-			if err != nil {
-				return "Error getting home directory: " + err.Error() + "\n", currentDir
-			}
-			return home, home
+			return "Error: missing file name\n", currentDir
 		}
-		newDir := parts[1]
-		if !filepath.IsAbs(newDir) {
-			newDir = filepath.Join(currentDir, newDir)
+		fileName := parts[1]
+		filePath := filepath.Join(currentDir, fileName)
+		// check if file exists
+		if _, err := os.Stat(filePath); err == nil {
+			return fmt.Sprintf("File '%s' already exists\n", fileName), currentDir
 		}
-		if fi, err := os.Stat(newDir); err == nil && fi.IsDir() {
-			return newDir, newDir
+		_, err := os.Create(filePath)
+		if err != nil {
+			return fmt.Sprintf("Error creating file: %s\n", err), currentDir
 		}
-		return "Error: Not a directory\n", currentDir
-	}
-
-	// Handle clear/cls command for terminal UI
-	if parts[0] == "clear" || parts[0] == "cls" {
-		return "CLEAR", currentDir
-	}
-
-	// Handle pwd command (built-in)
-	if parts[0] == "pwd" {
-		return currentDir + "\n", currentDir
-	}
-
-	// Handle dir/ls command for Windows/Unix compatibility
-	if parts[0] == "dir" || parts[0] == "ls" {
+		return fmt.Sprintf("File '%s' created at '%s'\n", fileName, filePath), currentDir
+	case "ls", "dir":
 		// Default to current directory if no argument provided
 		targetDir := currentDir
 
@@ -1324,11 +1317,163 @@ func executeCommand(command, currentDir string) (output, newDir string) {
 			output.WriteString(fmt.Sprintf("[%s] %s %s\n", prefix, size, name))
 		}
 		return output.String(), currentDir
-	}
-
-	// Execute other commands through shell
-	if parts[0] == "vim" || parts[0] == "vi" || parts[0] == "nano" {
+	case "cd":
+		if len(parts) < 2 {
+			// cd without args goes to home directory
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return "Error getting home directory: " + err.Error() + "\n", currentDir
+			}
+			return home, home
+		}
+		newDir := parts[1]
+		if !filepath.IsAbs(newDir) {
+			newDir = filepath.Join(currentDir, newDir)
+		}
+		if fi, err := os.Stat(newDir); err == nil && fi.IsDir() {
+			return newDir, newDir
+		}
+		return "Error: Not a directory\n", currentDir
+	case "clear", "cls":
+		return "CLEAR", currentDir
+	case "pwd":
+		return currentDir + "\n", currentDir
+	case "vim", "vi", "nano", "nvim":
 		return fmt.Sprintf("Interactive editors like %s are not supported in web terminal\n", parts[0]), currentDir
+	case "tail":
+		if len(parts) < 2 {
+			return "Error: missing file name\n", currentDir
+		}
+		fileName := parts[1]
+		filePath := filepath.Join(currentDir, fileName)
+
+		// Default settings
+		numLines := 10
+		follow := false
+
+		// Parse flags
+		for i := 2; i < len(parts); i++ {
+			switch parts[i] {
+			case "-n":
+				if i+1 < len(parts) {
+					if n, err := strconv.Atoi(parts[i+1]); err == nil {
+						numLines = n
+						i++
+					}
+				}
+			case "-f":
+				follow = true
+			}
+		}
+
+		if follow {
+			return "tail -f not supported in web terminal (requires WebSocket)\n", currentDir
+		}
+
+		// Check file exists
+		if _, err := os.Stat(filePath); err != nil {
+			return fmt.Sprintf("Error: file '%s' does not exist\n", fileName), currentDir
+		}
+
+		// Read file
+		content, err := os.ReadFile(filePath)
+		if err != nil {
+			return fmt.Sprintf("Error reading file: %s\n", err), currentDir
+		}
+
+		// Split into lines and get last N lines
+		lines := strings.Split(string(content), "\n")
+		start := len(lines) - numLines
+		if start < 0 {
+			start = 0
+		}
+
+		return strings.Join(lines[start:], "\n"), currentDir
+	case "rmdir":
+		if len(parts) < 2 {
+			return "Error: missing directory name\n", currentDir
+		}
+		dirName := parts[1]
+		dirPath := filepath.Join(currentDir, dirName)
+		if _, err := os.Stat(dirPath); err != nil {
+			return fmt.Sprintf("Error: directory '%s' does not exist\n", dirName), currentDir
+		}
+		if err := os.RemoveAll(dirPath); err != nil {
+			return fmt.Sprintf("Error removing directory: %s\n", err), currentDir
+		}
+		return fmt.Sprintf("Directory '%s' removed\n", dirName), currentDir
+	case "rm":
+		if len(parts) < 2 {
+			return "Error: missing file name\n", currentDir
+		}
+		fileName := parts[1]
+		filePath := filepath.Join(currentDir, fileName)
+		if _, err := os.Stat(filePath); err != nil {
+			return fmt.Sprintf("Error: file '%s' does not exist\n", fileName), currentDir
+		}
+		if err := os.Remove(filePath); err != nil {
+			return fmt.Sprintf("Error removing file: %s\n", err), currentDir
+		}
+		return fmt.Sprintf("File '%s' removed\n", fileName), currentDir
+	case "cp":
+		if len(parts) < 3 {
+			return "Error: missing source and destination file names\n", currentDir
+		}
+		sourceFileName := parts[1]
+		destinationFileName := parts[2]
+		sourceFilePath := filepath.Join(currentDir, sourceFileName)
+		destinationFilePath := filepath.Join(currentDir, destinationFileName)
+		if stat, err := os.Stat(sourceFilePath); err != nil {
+			return fmt.Sprintf("Error: file '%s' does not exist\n", sourceFileName), currentDir
+		} else {
+			if stat.IsDir() {
+				if err := copyDir(sourceFilePath, destinationFilePath); err != nil {
+					return fmt.Sprintf("Error copying directory: %s\n", err), currentDir
+				}
+				return fmt.Sprintf("Directory '%s' copied to '%s'\n", sourceFileName, destinationFileName), currentDir
+			}
+		}
+		if err := copyFile(sourceFilePath, destinationFilePath); err != nil {
+			return fmt.Sprintf("Error copying file: %s\n", err), currentDir
+		}
+		return fmt.Sprintf("File '%s' copied to '%s'\n", sourceFileName, destinationFileName), currentDir
+	case "mv":
+		if len(parts) < 3 {
+			return "Error: missing source and destination file names\n", currentDir
+		}
+		sourceFileName := parts[1]
+		destinationFileName := parts[2]
+		sourceFilePath := filepath.Join(currentDir, sourceFileName)
+		destinationFilePath := filepath.Join(currentDir, destinationFileName)
+		if _, err := os.Stat(sourceFilePath); err != nil {
+			return fmt.Sprintf("Error: file '%s' does not exist\n", sourceFileName), currentDir
+		}
+		if err := os.Rename(sourceFilePath, destinationFilePath); err != nil {
+			return fmt.Sprintf("Error renaming file: %s\n", err), currentDir
+		}
+		return fmt.Sprintf("File '%s' renamed to '%s'\n", sourceFileName, destinationFileName), currentDir
+	case "cat":
+		if len(parts) < 2 {
+			return "Error: missing file name\n", currentDir
+		}
+		fileName := parts[1]
+		filePath := filepath.Join(currentDir, fileName)
+		if _, err := os.Stat(filePath); err != nil {
+			return fmt.Sprintf("Error: file '%s' does not exist\n", fileName), currentDir
+		}
+		content, err := os.ReadFile(filePath)
+		if err != nil {
+			return fmt.Sprintf("Error reading file: %s\n", err), currentDir
+		}
+		return string(content), currentDir
+	case "echo":
+		if len(parts) < 2 {
+			return "Error: missing text to echo\n", currentDir
+		}
+		text := strings.Join(parts[1:], " ")
+		return text + "\n", currentDir
+	case "exit":
+		return "EXIT", currentDir
 	}
 
 	// Rest of shell commands
@@ -1345,6 +1490,15 @@ func executeCommand(command, currentDir string) (output, newDir string) {
 		return fmt.Sprintf("Error: %s\n%s", err, string(out)), currentDir
 	}
 	return string(out), currentDir
+}
+
+func getAllowedCommands() []string {
+	cmds := make([]string, 0, len(terminalAllowedCommands))
+	for cmd := range terminalAllowedCommands {
+		cmds = append(cmds, cmd)
+	}
+	sort.Strings(cmds)
+	return cmds
 }
 
 var TerminalComplete = func(c *ksmux.Context) {
@@ -1428,4 +1582,49 @@ var TerminalComplete = func(c *ksmux.Context) {
 	}
 
 	c.Json(map[string]any{"suggestions": suggestions})
+}
+
+func copyFile(src, dst string) error {
+	sourceFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer sourceFile.Close()
+
+	destFile, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer destFile.Close()
+
+	_, err = io.Copy(destFile, sourceFile)
+	return err
+}
+
+func copyDir(src, dst string) error {
+	err := os.MkdirAll(dst, os.ModePerm)
+	if err != nil {
+		return err
+	}
+
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		srcPath := filepath.Join(src, entry.Name())
+		dstPath := filepath.Join(dst, entry.Name())
+
+		if entry.IsDir() {
+			if err = copyDir(srcPath, dstPath); err != nil {
+				return err
+			}
+		} else {
+			if err = copyFile(srcPath, dstPath); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
