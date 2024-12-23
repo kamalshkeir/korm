@@ -1285,7 +1285,26 @@ func executeCommand(command, currentDir string) (output, newDir string) {
 
 	// Handle dir/ls command for Windows/Unix compatibility
 	if parts[0] == "dir" || parts[0] == "ls" {
-		files, err := os.ReadDir(currentDir)
+		// Default to current directory if no argument provided
+		targetDir := currentDir
+
+		// If argument provided, resolve the path
+		if len(parts) > 1 {
+			// Handle relative or absolute path
+			if filepath.IsAbs(parts[1]) {
+				targetDir = parts[1]
+			} else {
+				targetDir = filepath.Join(currentDir, parts[1])
+			}
+		}
+
+		// Clean up path and check if directory exists
+		targetDir = filepath.Clean(targetDir)
+		if fi, err := os.Stat(targetDir); err != nil || !fi.IsDir() {
+			return fmt.Sprintf("Error: cannot access '%s': No such directory\n", parts[1]), currentDir
+		}
+
+		files, err := os.ReadDir(targetDir)
 		if err != nil {
 			return fmt.Sprintf("Error reading directory: %s\n", err), currentDir
 		}
@@ -1308,11 +1327,16 @@ func executeCommand(command, currentDir string) (output, newDir string) {
 	}
 
 	// Execute other commands through shell
+	if parts[0] == "vim" || parts[0] == "vi" || parts[0] == "nano" {
+		return fmt.Sprintf("Interactive editors like %s are not supported in web terminal\n", parts[0]), currentDir
+	}
+
+	// Rest of shell commands
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
 		cmd = exec.Command("cmd", "/c", command)
 	} else {
-		cmd = exec.Command("/bin/sh", "-c", command) // Use /bin/sh directly
+		cmd = exec.Command("/bin/sh", "-c", command)
 	}
 
 	cmd.Dir = currentDir
@@ -1327,42 +1351,81 @@ var TerminalComplete = func(c *ksmux.Context) {
 	input := c.Request.URL.Query().Get("input")
 	session := c.Request.URL.Query().Get("session")
 
-	// Get the last word of the input (after any spaces)
-	parts := strings.Fields(input)
-	if len(parts) > 0 {
-		input = parts[len(parts)-1]
-	}
-
-	lg.Debug("Input after splitting:", input)
-
 	currentDir, _ := termsessions.Get(session)
 	if currentDir == "" {
 		currentDir, _ = os.Getwd()
 	}
 
-	// Get all files in current directory
-	files, err := os.ReadDir(currentDir)
+	// Get the last word of the input (after any spaces)
+	parts := strings.Fields(input)
+	if len(parts) == 0 {
+		c.Json(map[string]any{"suggestions": []string{}})
+		return
+	}
+
+	lastWord := parts[len(parts)-1]
+	targetDir := currentDir
+
+	// Handle path completion
+	if strings.Contains(lastWord, "/") {
+		// Split the path into parts
+		pathParts := strings.Split(lastWord, "/")
+		// The last part is what we're trying to complete
+		searchPattern := pathParts[len(pathParts)-1]
+		// Everything before the last part is the directory to search in
+		searchDir := strings.Join(pathParts[:len(pathParts)-1], "/")
+
+		// Resolve the full path of the directory to search
+		if filepath.IsAbs(searchDir) {
+			targetDir = searchDir
+		} else {
+			targetDir = filepath.Join(currentDir, searchDir)
+		}
+
+		// Get all files in the target directory
+		files, err := os.ReadDir(targetDir)
+		if err != nil {
+			lg.Error("Error reading directory:", err)
+			c.Json(map[string]any{"suggestions": []string{}})
+			return
+		}
+
+		// Find matches and build full paths
+		suggestions := []string{}
+		for _, file := range files {
+			name := file.Name()
+			if strings.HasPrefix(strings.ToLower(name), strings.ToLower(searchPattern)) {
+				if file.IsDir() {
+					name += "/"
+				}
+				// Reconstruct the full path suggestion
+				suggestion := strings.Join([]string{searchDir, name}, "/")
+				suggestions = append(suggestions, suggestion)
+			}
+		}
+
+		c.Json(map[string]any{"suggestions": suggestions})
+		return
+	}
+
+	// Handle non-path completion (first level)
+	files, err := os.ReadDir(targetDir)
 	if err != nil {
 		lg.Error("Error reading directory:", err)
 		c.Json(map[string]any{"suggestions": []string{}})
 		return
 	}
 
-	// Find matches for the input
 	suggestions := []string{}
 	for _, file := range files {
 		name := file.Name()
-		if strings.HasPrefix(strings.ToLower(name), strings.ToLower(input)) {
+		if strings.HasPrefix(strings.ToLower(name), strings.ToLower(lastWord)) {
 			if file.IsDir() {
-				suggestions = append(suggestions, name+"/")
-			} else {
-				suggestions = append(suggestions, name)
+				name += "/"
 			}
+			suggestions = append(suggestions, name)
 		}
 	}
 
-	lg.Debug("Found suggestions:", suggestions)
-	c.Json(map[string]any{
-		"suggestions": suggestions,
-	})
+	c.Json(map[string]any{"suggestions": suggestions})
 }

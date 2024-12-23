@@ -574,11 +574,11 @@ func (b *BuilderS[T]) AddRelated(relatedTable string, whereRelatedTable string, 
 	}
 	memoryRelatedTable, err := GetMemoryTable(relatedTable)
 	if err != nil {
-		return 0, fmt.Errorf("memory table not found:" + relatedTable)
+		return 0, fmt.Errorf("memory table not found: %s", relatedTable)
 	}
 	memoryTypedTable, err := GetMemoryTable(b.tableName)
 	if err != nil {
-		return 0, fmt.Errorf("memory table not found:" + relatedTable)
+		return 0, fmt.Errorf("memory table not found: %s", b.tableName)
 	}
 
 	adaptTimeToUnixArgs(&whereRelatedArgs)
@@ -682,11 +682,11 @@ func (b *BuilderS[T]) DeleteRelated(relatedTable string, whereRelatedTable strin
 	}
 	memoryRelatedTable, err := GetMemoryTable(relatedTable)
 	if err != nil {
-		return 0, fmt.Errorf("memory table not found:" + relatedTable)
+		return 0, fmt.Errorf("memory table not found: %s", relatedTable)
 	}
 	memoryTypedTable, err := GetMemoryTable(b.tableName)
 	if err != nil {
-		return 0, fmt.Errorf("memory table not found:" + relatedTable)
+		return 0, fmt.Errorf("memory table not found: %s", b.tableName)
 	}
 	ids := make([]any, 2)
 	adaptTimeToUnixArgs(&whereRelatedArgs)
