@@ -16,8 +16,6 @@ import (
 )
 
 var (
-	cacheOneS       = kmap.New[dbCache, any]()
-	cacheAllS       = kmap.New[dbCache, any](cacheMaxMemoryMb)
 	ErrNoConnection = errors.New("no connection")
 	ErrNoData       = errors.New("no data")
 )
@@ -155,11 +153,9 @@ func (b *BuilderS[T]) Insert(model *T) (int, error) {
 	if len(names) < len(mvalues) {
 		return 0, errors.New("more values than fields")
 	}
-	if onInsert != nil {
-		err := onInsert(b.db.Name, b.tableName, mvalues)
-		if err != nil {
-			return 0, err
-		}
+	quote := "`"
+	if b.db.Dialect == POSTGRES || b.db.Dialect == COCKROACH {
+		quote = "\""
 	}
 
 	for k, v := range mvalues {
@@ -211,13 +207,13 @@ func (b *BuilderS[T]) Insert(model *T) (int, error) {
 	newkeys := make([]string, 0, len(mvalues))
 	newvalues := make([]any, 0, len(mvalues))
 	for k, v := range mvalues {
-		newkeys = append(newkeys, k)
+		newkeys = append(newkeys, quote+k+quote)
 		newvalues = append(newvalues, v)
 	}
 	fields_comma_separated := strings.Join(newkeys, ",")
 
 	stat := strings.Builder{}
-	stat.WriteString("INSERT INTO `" + b.tableName + "` (")
+	stat.WriteString("INSERT INTO " + quote + b.tableName + quote + " (")
 	stat.WriteString(fields_comma_separated)
 	stat.WriteString(") VALUES (")
 	stat.WriteString(placeholders)
@@ -287,11 +283,9 @@ func (b *BuilderS[T]) InsertR(model *T) (T, error) {
 	if len(names) < len(mvalues) {
 		return *new(T), errors.New("more values than fields")
 	}
-	if onInsert != nil {
-		err := onInsert(b.db.Name, b.tableName, mvalues)
-		if err != nil {
-			return *new(T), err
-		}
+	quote := "`"
+	if b.db.Dialect == POSTGRES || b.db.Dialect == COCKROACH {
+		quote = "\""
 	}
 
 	for k, v := range mvalues {
@@ -343,13 +337,13 @@ func (b *BuilderS[T]) InsertR(model *T) (T, error) {
 	newkeys := make([]string, 0, len(mvalues))
 	newvalues := make([]any, 0, len(mvalues))
 	for k, v := range mvalues {
-		newkeys = append(newkeys, k)
+		newkeys = append(newkeys, quote+k+quote)
 		newvalues = append(newvalues, v)
 	}
 	fields_comma_separated := strings.Join(newkeys, ",")
 
 	stat := strings.Builder{}
-	stat.WriteString("INSERT INTO `" + b.tableName + "` (")
+	stat.WriteString("INSERT INTO " + quote + b.tableName + quote + " (")
 	stat.WriteString(fields_comma_separated)
 	stat.WriteString(") VALUES (")
 	stat.WriteString(placeholders)
@@ -420,12 +414,6 @@ func (b *BuilderS[T]) BulkInsert(models ...*T) ([]int, error) {
 		names, mvalues, mTypes, mtags := getStructInfos(models[mm], true)
 		if len(names) < len(mvalues) {
 			return nil, errors.New("more values than fields")
-		}
-		if onInsert != nil {
-			err := onInsert(b.db.Name, b.tableName, mvalues)
-			if err != nil {
-				return nil, err
-			}
 		}
 		placeholdersSlice := []string{}
 		values := []any{}
@@ -612,24 +600,6 @@ func (b *BuilderS[T]) AddRelated(relatedTable string, whereRelatedTable string, 
 		} else {
 			ids[1] = v
 			ids[3] = v
-		}
-	}
-	if onInsert != nil {
-		var mInsert map[string]any
-		if inOrder {
-			mInsert = map[string]any{
-				b.tableName + "_id":  ids[0],
-				relatedTable + "_id": ids[1],
-			}
-		} else {
-			mInsert = map[string]any{
-				b.tableName + "_id":  ids[1],
-				relatedTable + "_id": ids[0],
-			}
-		}
-		err := onInsert(b.db.Name, relationTableName, mInsert)
-		if err != nil {
-			return 0, err
 		}
 	}
 	stat := "INSERT INTO " + relationTableName + "(" + cols + ") select ?,? WHERE NOT EXISTS (select * FROM " + relationTableName + " WHERE " + wherecols + ");"
@@ -908,24 +878,6 @@ func (b *BuilderS[T]) Set(query string, args ...any) (int, error) {
 	if b.whereQuery == "" {
 		return 0, fmt.Errorf("you should use Where before Update")
 	}
-	if onSet != nil {
-		mToSet := map[string]any{}
-		sp := strings.Split(query, ",")
-		if strings.Contains(query, "?") {
-			for i := range sp {
-				sp[i] = setReplacer.Replace(sp[i])
-				mToSet[strings.TrimSpace(sp[i])] = args[i]
-			}
-		} else {
-			for i := range sp {
-				mToSet[strings.TrimSpace(sp[i])] = args[i]
-			}
-		}
-		err := onSet(b.db.Name, b.tableName, mToSet)
-		if err != nil {
-			return 0, err
-		}
-	}
 	adaptSetQuery(&query)
 	adaptTimeToUnixArgs(&args)
 	b.statement = "UPDATE " + b.tableName + " SET " + query + " WHERE " + b.whereQuery
@@ -939,6 +891,58 @@ func (b *BuilderS[T]) Set(query string, args ...any) (int, error) {
 		res sql.Result
 		err error
 	)
+	if b.ctx != nil {
+		res, err = b.db.Conn.ExecContext(b.ctx, b.statement, args...)
+	} else {
+		res, err = b.db.Conn.Exec(b.statement, args...)
+	}
+	if err != nil {
+		return 0, err
+	}
+	aff, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	return int(aff), nil
+}
+
+func (b *BuilderS[T]) SetM(data map[string]any) (int, error) {
+	if b.trace {
+		trace := TraceData{
+			Query:     b.statement,
+			Args:      b.args,
+			Database:  b.db.Name,
+			StartTime: time.Now(),
+		}
+		defer func() {
+			trace.Duration = time.Since(trace.StartTime)
+			defaultTracer.addTrace(trace)
+		}()
+	}
+
+	if b == nil || b.tableName == "" {
+		return 0, ErrTableNotFound
+	}
+	if b.whereQuery == "" {
+		return 0, errors.New("you should use Where before Update")
+	}
+	sss := make([]string, 0, len(data))
+	args := make([]any, 0, len(data))
+	for k, v := range data {
+		sss = append(sss, k+" = ?")
+		args = append(args, v)
+	}
+	adaptTimeToUnixArgs(&args)
+	query := strings.Join(sss, ",")
+	b.statement = "UPDATE " + b.tableName + " SET " + query + " WHERE " + b.whereQuery
+	AdaptPlaceholdersToDialect(&b.statement, b.db.Dialect)
+	args = append(args, b.args...)
+	if b.debug {
+		lg.InfoC("debug", "statement", b.statement, "args", args)
+	}
+
+	var res sql.Result
+	var err error
 	if b.ctx != nil {
 		res, err = b.db.Conn.ExecContext(b.ctx, b.statement, args...)
 	} else {
@@ -971,12 +975,6 @@ func (b *BuilderS[T]) Delete() (int, error) {
 
 	if b == nil || b.tableName == "" {
 		return 0, ErrTableNotFound
-	}
-	if onDelete != nil {
-		err := onDelete(b.db.Name, b.tableName, b.whereQuery, b.args...)
-		if err != nil {
-			return 0, err
-		}
 	}
 
 	b.statement = "DELETE FROM " + b.tableName
@@ -1025,10 +1023,11 @@ func (b *BuilderS[T]) Drop() (int, error) {
 	if b == nil || b.tableName == "" {
 		return 0, ErrTableNotFound
 	}
-	if onDrop != nil {
-		err := onDrop(b.db.Name, b.tableName)
-		if err != nil {
-			return 0, err
+	if v, ok := hooks.Get("drop"); ok {
+		for _, vv := range v {
+			vv(HookData{
+				Table: b.tableName,
+			})
 		}
 	}
 
@@ -1057,9 +1056,13 @@ func (b *BuilderS[T]) Select(columns ...string) *BuilderS[T] {
 	if b == nil || b.tableName == "" {
 		return nil
 	}
+	quote := "`"
+	if b.db.Dialect == POSTGRES || b.db.Dialect == COCKROACH {
+		quote = "\""
+	}
 	for i := range columns {
-		if !strings.HasPrefix(columns[i], "`") && !strings.HasPrefix(columns[i], "'") {
-			columns[i] = "`" + columns[i] + "`"
+		if !strings.HasPrefix(columns[i], quote) && !strings.HasPrefix(columns[i], "'") {
+			columns[i] = quote + columns[i] + quote
 		}
 	}
 	b.selected = strings.Join(columns, ",")
@@ -1279,8 +1282,12 @@ func (b *BuilderS[T]) All() ([]T, error) {
 		args:       fmt.Sprint(b.args...),
 	}
 	if useCache && !b.nocache {
-		if v, ok := cacheAllS.Get(c); ok {
-			return v.([]T), nil
+		if v, ok := caches.Get(b.tableName); ok {
+			if vv, ok := v.Get(c); ok {
+				if vvTyped, ok := vv.([]T); ok {
+					return vvTyped, nil
+				}
+			}
 		}
 	}
 	if b.selected != "" && b.selected != "*" {
@@ -1321,7 +1328,14 @@ func (b *BuilderS[T]) All() ([]T, error) {
 		return nil, err
 	}
 	if useCache && !b.nocache {
-		_ = cacheAllS.Set(c, models)
+		if v, ok := caches.Get(b.tableName); ok {
+			v.Set(c, models)
+			caches.Set(b.tableName, v)
+		} else {
+			new := kmap.New[dbCache, any]()
+			new.Set(c, models)
+			caches.Set(b.tableName, new)
+		}
 	}
 	return models, nil
 }
@@ -1343,12 +1357,14 @@ func (b *BuilderS[T]) ToChan(ptrChan *chan T) ([]T, error) {
 		args:       fmt.Sprint(b.args...),
 	}
 	if useCache && !b.nocache {
-		if v, ok := cacheAllS.Get(c); ok {
-			if vv, ok := v.([]T); ok {
-				for _, val := range vv {
-					*ptrChan <- val
+		if v, ok := caches.Get(b.tableName); ok {
+			if vv, ok := v.Get(c); ok {
+				if vvTyped, ok := vv.([]T); ok {
+					for _, val := range vvTyped {
+						*ptrChan <- val
+					}
+					return vvTyped, nil
 				}
-				return vv, nil
 			}
 		}
 	}
@@ -1467,7 +1483,14 @@ func (b *BuilderS[T]) ToChan(ptrChan *chan T) ([]T, error) {
 		return res, ErrNoData
 	}
 	if useCache && !b.nocache {
-		_ = cacheAllS.Set(c, res)
+		if v, ok := caches.Get(b.tableName); ok {
+			v.Set(c, res)
+			caches.Set(b.tableName, v)
+		} else {
+			new := kmap.New[dbCache, any]()
+			new.Set(c, res)
+			caches.Set(b.tableName, new)
+		}
 	}
 	return res, nil
 }
@@ -1509,8 +1532,12 @@ func (b *BuilderS[T]) QuerySNamed(statement string, args map[string]any, unsafe 
 		args:      rgs,
 	}
 	if useCache && !b.nocache {
-		if v, ok := cacheQueryS.Get(c); ok {
-			return v.([]T), nil
+		if v, ok := caches.Get("qss" + b.tableName); ok {
+			if vv, ok := v.Get(c); ok {
+				if vvTyped, ok := vv.([]T); ok {
+					return vvTyped, nil
+				}
+			}
 		}
 	}
 	var query string
@@ -1616,7 +1643,14 @@ func (b *BuilderS[T]) QuerySNamed(statement string, args map[string]any, unsafe 
 		return nil, ErrNoData
 	}
 	if useCache && !b.nocache {
-		_ = cacheQueryS.Set(c, res)
+		if v, ok := caches.Get("qss" + b.tableName); ok {
+			v.Set(c, res)
+			caches.Set(b.tableName, v)
+		} else {
+			new := kmap.New[dbCache, any]()
+			new.Set(c, res)
+			caches.Set(b.tableName, new)
+		}
 	}
 	return res, nil
 }
@@ -1648,8 +1682,12 @@ func (b *BuilderS[T]) QueryS(statement string, args ...any) ([]T, error) {
 		args:      fmt.Sprint(args...),
 	}
 	if useCache && !b.nocache {
-		if v, ok := cacheQueryS.Get(c); ok {
-			return v.([]T), nil
+		if v, ok := caches.Get("QS" + b.tableName); ok {
+			if vv, ok := v.Get(c); ok {
+				if vvTyped, ok := vv.([]T); ok {
+					return vvTyped, nil
+				}
+			}
 		}
 	}
 	AdaptPlaceholdersToDialect(&statement, b.db.Dialect)
@@ -1737,7 +1775,14 @@ func (b *BuilderS[T]) QueryS(statement string, args ...any) ([]T, error) {
 		return nil, ErrNoData
 	}
 	if useCache && !b.nocache {
-		_ = cacheQueryS.Set(c, res)
+		if v, ok := caches.Get("QS" + b.tableName); ok {
+			v.Set(c, res)
+			caches.Set(b.tableName, v)
+		} else {
+			new := kmap.New[dbCache, any]()
+			new.Set(c, res)
+			caches.Set(b.tableName, new)
+		}
 	}
 	return res, nil
 }
@@ -1767,8 +1812,12 @@ func (b *BuilderS[T]) One() (T, error) {
 		args:       fmt.Sprint(b.args...),
 	}
 	if useCache && !b.nocache {
-		if v, ok := cacheOneS.Get(c); ok {
-			return v.(T), nil
+		if v, ok := caches.Get("s" + b.tableName); ok {
+			if vv, ok := v.Get(c); ok {
+				if vvTyped, ok := vv.(T); ok {
+					return vvTyped, nil
+				}
+			}
 		}
 	}
 	if b.tableName == "" {
@@ -1802,7 +1851,14 @@ func (b *BuilderS[T]) One() (T, error) {
 		return *new(T), ErrNoData
 	}
 	if useCache && !b.nocache {
-		_ = cacheOneS.Set(c, model[0])
+		if v, ok := caches.Get(b.tableName); ok {
+			v.Set(c, model[0])
+			caches.Set(b.tableName, v)
+		} else {
+			new := kmap.New[dbCache, any]()
+			new.Set(c, model[0])
+			caches.Set(b.tableName, new)
+		}
 	}
 	return model[0], nil
 }

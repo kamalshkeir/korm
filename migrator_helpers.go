@@ -232,15 +232,16 @@ tagsLoop:
 	}
 }
 
+func flushTableCache(table string) {
+	if v, ok := caches.Get(table); ok {
+		v.Flush()
+	}
+}
+
 func flushCache() {
 	go func() {
-		cacheAllM.Flush()
-		cacheAllS.Flush()
-		cacheQueryS.Flush()
-		cacheQueryM.Flush()
+		caches.Flush()
 		cacheQ.Flush()
-		cachesOneM.Flush()
-		cacheOneS.Flush()
 		cacheAllTables.Flush()
 		cacheAllCols.Flush()
 	}()

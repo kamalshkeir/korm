@@ -12,31 +12,15 @@ import (
 	"github.com/kamalshkeir/lg"
 )
 
-var (
-	onInsert DbHook
-	onSet    DbHook
-	onDelete func(database, table string, query string, args ...any) error
-	onDrop   func(database, table string) error
-)
+// Hooks instances may be passed to Wrap() to define an instrumented driver
+type Hooks interface {
+	Before(ctx context.Context, query string, args ...interface{}) (context.Context, error)
+	After(ctx context.Context, query string, args ...interface{}) (context.Context, error)
+}
 
 type logAndCacheHook struct{}
 
 func (h *logAndCacheHook) Before(ctx context.Context, query string, args ...any) (context.Context, error) {
-	if useCache && len(query) > 6 {
-		if !onceDone {
-			go RunEvery(FlushCacheEvery, func(cancelChan chan struct{}) {
-				if !useCache {
-					cancelChan <- struct{}{}
-				}
-				flushCache()
-			})
-			onceDone = true
-		}
-		q := strings.TrimSpace(strings.ToLower(query[:6]))
-		if q != "select" && q != "pragma" {
-			flushCache()
-		}
-	}
 	if ctx.Value(traceEnabledKey) != nil {
 		return context.WithValue(ctx, ksmux.ContextKey("trace_start"), time.Now()), nil
 	}
@@ -50,6 +34,21 @@ func (h *logAndCacheHook) Before(ctx context.Context, query string, args ...any)
 func (h *logAndCacheHook) After(ctx context.Context, query string, args ...any) (context.Context, error) {
 	if !logQueries && ctx.Value(traceEnabledKey) == nil {
 		return ctx, nil
+	}
+
+	if strings.Contains(strings.ToUpper(query), "DROP") {
+		flushCache()
+		if v, ok := hooks.Get("drop"); ok {
+			for _, vv := range v {
+				vv(HookData{
+					Operation: "drop",
+					Data: map[string]any{
+						"query": query,
+						"args":  args,
+					},
+				})
+			}
+		}
 	}
 
 	startTime, _ := ctx.Value(ksmux.ContextKey("trace_start")).(time.Time)
@@ -74,36 +73,6 @@ func (h *logAndCacheHook) After(ctx context.Context, query string, args ...any) 
 	}
 
 	return ctx, nil
-}
-
-type DbHook func(database, table string, data map[string]any) error
-
-func OnInsert(fn DbHook) {
-	onInsert = fn
-}
-
-func OnSet(fn DbHook) {
-	onSet = fn
-}
-
-func OnDelete(fn func(database, table string, query string, args ...any) error) {
-	onDelete = fn
-}
-
-func OnDrop(fn func(database, table string) error) {
-	onDrop = fn
-}
-
-// Hook is the hook callback signature
-type Hook func(ctx context.Context, query string, args ...interface{}) (context.Context, error)
-
-// ErrorHook is the error handling callback signature
-type ErrorHook func(ctx context.Context, err error, query string, args ...interface{}) error
-
-// Hooks instances may be passed to Wrap() to define an instrumented driver
-type Hooks interface {
-	Before(ctx context.Context, query string, args ...interface{}) (context.Context, error)
-	After(ctx context.Context, query string, args ...interface{}) (context.Context, error)
 }
 
 // OnErrorer instances will be called if any error happens

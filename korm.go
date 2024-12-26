@@ -33,10 +33,7 @@ var (
 	cacheAllCols            = kmap.New[string, map[string]string]()
 	cacheAllColsOrdered     = kmap.New[string, []string]()
 	relationsMap            = kmap.New[string, struct{}]()
-	onceDone                = false
 	serverBus               *ksbus.Server
-	cacheQueryS             = kmap.New[dbCache, any](cacheMaxMemoryMb)
-	cacheQueryM             = kmap.New[dbCache, any](cacheMaxMemoryMb)
 	cacheQ                  = kmap.New[string, any](cacheMaxMemoryMb)
 	ErrTableNotFound        = errors.New("unable to find tableName")
 	ErrBigData              = kmap.ErrLargeData
@@ -179,6 +176,8 @@ func New(dbType Dialect, dbName string, dbDriver driver.Driver, dbDSN ...string)
 			Tables:  []TableEntity{},
 		})
 	}
+	err = AutoMigrate[TriggersQueue]("_triggers_queue")
+	lg.CheckError(err)
 	return nil
 }
 
@@ -244,6 +243,7 @@ func ManyToMany(table1, table2 string, dbName ...string) error {
 		},
 		fkeys,
 		[]string{"id", table1 + "_id", table2 + "_id"},
+		dben.Dialect,
 	)
 	if Debug {
 		lg.Printfs("yl%s\n", st)
@@ -668,6 +668,7 @@ func GetAllColumnsTypes(table string, dbName ...string) (map[string]string, []st
 			return nil, nil
 		}
 		columns[singleColName] = singleColType
+		colsSlice = append(colsSlice, singleColName)
 	}
 	if useCache {
 		cacheAllCols.Set(dName+table, columns)

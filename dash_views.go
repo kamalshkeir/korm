@@ -239,6 +239,11 @@ var TableGetAll = func(c *ksmux.Context) {
 	}
 
 	if dbMem != nil {
+		ccc := cols
+		if t != nil {
+			ccc = t.Columns
+		}
+
 		data := map[string]any{
 			"dbType":         dbMem.Dialect,
 			"table":          model,
@@ -248,7 +253,7 @@ var TableGetAll = func(c *ksmux.Context) {
 			"pk":             idString,
 			"fkeys":          mmfkeys,
 			"fkeysModels":    mmfkeysModels,
-			"columnsOrdered": cols,
+			"columnsOrdered": ccc,
 		}
 		if t != nil {
 			data["columns"] = t.ModelTypes
@@ -591,7 +596,13 @@ var UpdateRowPost = func(c *ksmux.Context) {
 	data, files := c.ParseMultipartForm()
 	id := data["row_id"][0]
 	idString := "id"
-	t, _ := GetMemoryTable(data["table"][0], defaultDB)
+	db, _ := GetMemoryDatabase(defaultDB)
+	var t TableEntity
+	for _, tab := range db.Tables {
+		if tab.Name == data["table"][0] {
+			t = tab
+		}
+	}
 	if t.Pk != "" && t.Pk != "id" {
 		idString = t.Pk
 	}
@@ -614,6 +625,10 @@ var UpdateRowPost = func(c *ksmux.Context) {
 
 	ignored := []string{idString, "file", "image", "photo", "img", "fichier", "row_id", "table"}
 	toUpdate := map[string]any{}
+	quote := "`"
+	if db.Dialect == POSTGRES || db.Dialect == COCKROACH {
+		quote = "\""
+	}
 	for key, val := range data {
 		if !SliceContains(ignored, key) {
 			if modelDB[key] == val[0] {
@@ -626,9 +641,9 @@ var UpdateRowPost = func(c *ksmux.Context) {
 					c.Error("unable to hash pass")
 					return
 				}
-				toUpdate["`"+key+"`"] = hash
+				toUpdate[quote+key+quote] = hash
 			} else {
-				toUpdate["`"+key+"`"] = val[0]
+				toUpdate[quote+key+quote] = val[0]
 			}
 		}
 	}

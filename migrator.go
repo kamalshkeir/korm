@@ -131,7 +131,7 @@ func autoMigrate[T any](model *T, db *DatabaseEntity, tableName string, execute 
 			}
 		}
 	}
-	statement := prepareCreateStatement(tableName, res, fkeys, cols)
+	statement := prepareCreateStatement(tableName, res, fkeys, cols, db.Dialect)
 	var triggers map[string][]string
 
 	// check for update field to create a trigger
@@ -140,6 +140,36 @@ func autoMigrate[T any](model *T, db *DatabaseEntity, tableName string, execute 
 			for _, tag := range tags {
 				if tag == "update" {
 					triggers = checkUpdatedAtTrigger(db.Dialect, tableName, col, pk)
+				}
+			}
+		}
+	} else {
+		for col, tags := range mFieldName_Tags {
+			for _, tag := range tags {
+				if tag == "now" {
+					createTrigger := fmt.Sprintf(`CREATE TRIGGER before_insert_%s_%s
+					BEFORE INSERT ON %s
+					FOR EACH ROW
+					BEGIN
+						SET NEW.%s = UNIX_TIMESTAMP();
+					END`, tableName, col, tableName, col)
+
+					if triggers == nil {
+						triggers = make(map[string][]string)
+					}
+					triggers["mysql_triggers"] = append(triggers["mysql_triggers"], createTrigger)
+				} else if tag == "update" {
+					createTrigger := fmt.Sprintf(`CREATE TRIGGER before_update_%s_%s
+					BEFORE UPDATE ON %s
+					FOR EACH ROW
+					BEGIN
+						SET NEW.%s = UNIX_TIMESTAMP();
+					END`, tableName, col, tableName, col)
+
+					if triggers == nil {
+						triggers = make(map[string][]string)
+					}
+					triggers["mysql_triggers"] = append(triggers["mysql_triggers"], createTrigger)
 				}
 			}
 		}
@@ -310,9 +340,11 @@ func AutoMigrate[T any](tableName string, dbName ...string) error {
 			return nil
 		}
 	}
-
+	if tableName != "_triggers_queue" {
+		err = AddChangesTrigger(tableName)
+	}
+	lg.CheckError(err)
 	LinkModel[T](tableName, db.Name)
-
 	return nil
 }
 
@@ -1042,7 +1074,7 @@ func handleMigrationTime(mi *migrationInput) {
 				case POSTGRES:
 					defaultt = "BIGINT NOT NULL DEFAULT extract(epoch from now())"
 				case MYSQL, MARIA:
-					defaultt = "BIGINT NOT NULL DEFAULT (UNIX_TIMESTAMP())"
+					defaultt = "BIGINT NOT NULL DEFAULT 0"
 				default:
 					lg.ErrorC("not handled Time for", "f", mi.fName, "type", mi.fType)
 				}
@@ -1053,7 +1085,7 @@ func handleMigrationTime(mi *migrationInput) {
 				case POSTGRES:
 					defaultt = "BIGINT NOT NULL DEFAULT extract(epoch from now())"
 				case MYSQL, MARIA:
-					defaultt = "BIGINT NOT NULL DEFAULT (UNIX_TIMESTAMP()) ON UPDATE (UNIX_TIMESTAMP())"
+					defaultt = "BIGINT NOT NULL DEFAULT 0"
 				default:
 					lg.ErrorC("not handled Time for", "f", mi.fName, "type", mi.fType)
 				}
@@ -1158,21 +1190,36 @@ func handleMigrationTime(mi *migrationInput) {
 	}
 }
 
-func prepareCreateStatement(tbName string, fields map[string]string, fkeys, cols []string) string {
+func prepareCreateStatement(tbName string, fields map[string]string, fkeys, cols []string, dialect string) string {
 	var strBuilder strings.Builder
-	strBuilder.WriteString("CREATE TABLE IF NOT EXISTS ")
-	strBuilder.WriteString(tbName + " (")
-	for i, col := range cols {
-		fName := "`" + col + "`"
-		fType := fields[col]
-		if fType == "" {
-			continue
+	if dialect == POSTGRES || dialect == COCKROACH {
+		strBuilder.WriteString(`CREATE TABLE IF NOT EXISTS "` + tbName + `" (`)
+		for i, col := range cols {
+			fName := `"` + col + `"`
+			fType := fields[col]
+			if fType == "" {
+				continue
+			}
+			reste := ","
+			if i == len(fields)-1 {
+				reste = ""
+			}
+			strBuilder.WriteString(fName + " " + fType + reste)
 		}
-		reste := ","
-		if i == len(fields)-1 {
-			reste = ""
+	} else {
+		strBuilder.WriteString("CREATE TABLE IF NOT EXISTS `" + tbName + "` (")
+		for i, col := range cols {
+			fName := "`" + col + "`"
+			fType := fields[col]
+			if fType == "" {
+				continue
+			}
+			reste := ","
+			if i == len(fields)-1 {
+				reste = ""
+			}
+			strBuilder.WriteString(fName + " " + fType + reste)
 		}
-		strBuilder.WriteString(fName + " " + fType + reste)
 	}
 	if len(fkeys) > 0 {
 		strBuilder.WriteString(",")

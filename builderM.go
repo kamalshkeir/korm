@@ -16,9 +16,7 @@ import (
 )
 
 var (
-	cachesOneM  = kmap.New[dbCache, map[string]any]()
-	cacheAllM   = kmap.New[dbCache, []map[string]any](cacheMaxMemoryMb)
-	setReplacer = strings.NewReplacer("=", "", "?", "")
+	caches = kmap.New[string, *kmap.SafeMap[dbCache, any]](cacheMaxMemoryMb)
 )
 
 // BuilderM is query builder map string any
@@ -73,9 +71,13 @@ func (b *BuilderM) Select(columns ...string) *BuilderM {
 	if b == nil || b.tableName == "" {
 		return nil
 	}
+	quote := "`"
+	if b.db.Dialect == POSTGRES || b.db.Dialect == COCKROACH {
+		quote = "\""
+	}
 	for i := range columns {
-		if !strings.HasPrefix(columns[i], "`") && !strings.HasPrefix(columns[i], "'") {
-			columns[i] = "`" + columns[i] + "`"
+		if !strings.HasPrefix(columns[i], quote) && !strings.HasPrefix(columns[i], "'") {
+			columns[i] = quote + columns[i] + quote
 		}
 	}
 	b.selected = strings.Join(columns, ",")
@@ -297,8 +299,12 @@ func (b *BuilderM) All() ([]map[string]any, error) {
 		args:       fmt.Sprint(b.args...),
 	}
 	if useCache && !b.nocache {
-		if v, ok := cacheAllM.Get(c); ok {
-			return v, nil
+		if v, ok := caches.Get(b.tableName); ok {
+			if vv, ok := v.Get(c); ok {
+				if vvs, ok := vv.([]map[string]any); ok {
+					return vvs, nil
+				}
+			}
 		}
 	}
 
@@ -333,7 +339,14 @@ func (b *BuilderM) All() ([]map[string]any, error) {
 		return nil, err
 	}
 	if useCache && !b.nocache {
-		_ = cacheAllM.Set(c, models)
+		if v, ok := caches.Get(b.tableName); ok {
+			v.Set(c, models)
+			caches.Set(b.tableName, v)
+		} else {
+			new := kmap.New[dbCache, any]()
+			new.Set(c, models)
+			caches.Set(b.tableName, new)
+		}
 	}
 	return models, nil
 }
@@ -364,8 +377,12 @@ func (b *BuilderM) One() (map[string]any, error) {
 		args:       fmt.Sprint(b.args...),
 	}
 	if useCache && !b.nocache {
-		if v, ok := cachesOneM.Get(c); ok {
-			return v, nil
+		if v, ok := caches.Get("s" + b.tableName); ok {
+			if vv, ok := v.Get(c); ok {
+				if vvmap, ok := vv.(map[string]any); ok {
+					return vvmap, nil
+				}
+			}
 		}
 	}
 
@@ -403,7 +420,14 @@ func (b *BuilderM) One() (map[string]any, error) {
 		return nil, ErrNoData
 	}
 	if useCache && !b.nocache {
-		_ = cachesOneM.Set(c, models[0])
+		if v, ok := caches.Get(b.tableName); ok {
+			v.Set(c, models[0])
+			caches.Set(b.tableName, v)
+		} else {
+			new := kmap.New[dbCache, any]()
+			new.Set(c, models[0])
+			caches.Set("s"+b.tableName, new)
+		}
 	}
 
 	return models[0], nil
@@ -430,13 +454,6 @@ func (b *BuilderM) Insert(rowData map[string]any) (int, error) {
 	if b == nil || b.tableName == "" {
 		return 0, ErrTableNotFound
 	}
-	if onInsert != nil {
-		err := onInsert(b.db.Name, b.tableName, rowData)
-		if err != nil {
-			return 0, err
-		}
-
-	}
 	pk := ""
 	var tbmem TableEntity
 	for _, t := range b.db.Tables {
@@ -445,7 +462,10 @@ func (b *BuilderM) Insert(rowData map[string]any) (int, error) {
 			tbmem = t
 		}
 	}
-
+	quote := "`"
+	if b.db.Dialect == POSTGRES || b.db.Dialect == COCKROACH {
+		quote = "\""
+	}
 	placeholdersSlice := []string{}
 	keys := []string{}
 	values := []any{}
@@ -459,8 +479,9 @@ func (b *BuilderM) Insert(rowData map[string]any) (int, error) {
 		default:
 			return 0, errors.New("database is neither sqlite3, postgres or mysql")
 		}
-		if !strings.HasPrefix(k, "`") && !strings.HasPrefix(k, "'") {
-			keys = append(keys, "`"+k+"`")
+
+		if !strings.HasPrefix(k, quote) && !strings.HasPrefix(k, "'") {
+			keys = append(keys, quote+k+quote)
 		} else {
 			keys = append(keys, k)
 		}
@@ -484,7 +505,7 @@ func (b *BuilderM) Insert(rowData map[string]any) (int, error) {
 	}
 	placeholders := strings.Join(placeholdersSlice, ",")
 	stat := strings.Builder{}
-	stat.WriteString("INSERT INTO `" + b.tableName + "` (")
+	stat.WriteString("INSERT INTO " + quote + b.tableName + quote + " (")
 	stat.WriteString(strings.Join(keys, ","))
 	stat.WriteString(") VALUES (")
 	stat.WriteString(placeholders)
@@ -547,13 +568,7 @@ func (b *BuilderM) InsertR(rowData map[string]any) (map[string]any, error) {
 	if b == nil || b.tableName == "" {
 		return nil, ErrTableNotFound
 	}
-	if onInsert != nil {
-		err := onInsert(b.db.Name, b.tableName, rowData)
-		if err != nil {
-			return nil, err
-		}
 
-	}
 	pk := ""
 	var tbmem TableEntity
 	for _, t := range b.db.Tables {
@@ -562,7 +577,10 @@ func (b *BuilderM) InsertR(rowData map[string]any) (map[string]any, error) {
 			tbmem = t
 		}
 	}
-
+	quote := "`"
+	if b.db.Dialect == POSTGRES || b.db.Dialect == COCKROACH {
+		quote = "\""
+	}
 	placeholdersSlice := []string{}
 	keys := []string{}
 	values := []any{}
@@ -576,8 +594,8 @@ func (b *BuilderM) InsertR(rowData map[string]any) (map[string]any, error) {
 		default:
 			return nil, errors.New("database is neither sqlite3, postgres or mysql")
 		}
-		if !strings.HasPrefix(k, "`") && !strings.HasPrefix(k, "'") {
-			keys = append(keys, "`"+k+"`")
+		if !strings.HasPrefix(k, quote) && !strings.HasPrefix(k, "'") {
+			keys = append(keys, quote+k+quote)
 		} else {
 			keys = append(keys, k)
 		}
@@ -602,7 +620,7 @@ func (b *BuilderM) InsertR(rowData map[string]any) (map[string]any, error) {
 	}
 	placeholders := strings.Join(placeholdersSlice, ",")
 	stat := strings.Builder{}
-	stat.WriteString("INSERT INTO `" + b.tableName + "` (")
+	stat.WriteString("INSERT INTO " + quote + b.tableName + quote + " (")
 	stat.WriteString(strings.Join(keys, ","))
 	stat.WriteString(") VALUES (")
 	stat.WriteString(placeholders)
@@ -672,6 +690,10 @@ func (b *BuilderM) BulkInsert(rowsData ...map[string]any) ([]int, error) {
 	}
 	ids := []int{}
 	pk := ""
+	quote := "`"
+	if b.db.Dialect == POSTGRES || b.db.Dialect == COCKROACH {
+		quote = "\""
+	}
 	var tbmem TableEntity
 	for _, t := range b.db.Tables {
 		if t.Name == b.tableName {
@@ -680,12 +702,6 @@ func (b *BuilderM) BulkInsert(rowsData ...map[string]any) ([]int, error) {
 		}
 	}
 	for ii := range rowsData {
-		if onInsert != nil {
-			err := onInsert(b.db.Name, b.tableName, rowsData[ii])
-			if err != nil {
-				return nil, err
-			}
-		}
 		placeholdersSlice := []string{}
 		keys := []string{}
 		values := []any{}
@@ -699,7 +715,11 @@ func (b *BuilderM) BulkInsert(rowsData ...map[string]any) ([]int, error) {
 			default:
 				return nil, errors.New("database is neither sqlite3, postgres or mysql")
 			}
-			keys = append(keys, k)
+			if !strings.HasPrefix(k, quote) && !strings.HasPrefix(k, "'") {
+				keys = append(keys, quote+k+quote)
+			} else {
+				keys = append(keys, k)
+			}
 			if v == true {
 				v = 1
 			} else if v == false {
@@ -719,7 +739,7 @@ func (b *BuilderM) BulkInsert(rowsData ...map[string]any) ([]int, error) {
 		placeholders := strings.Join(placeholdersSlice, ",")
 
 		stat := strings.Builder{}
-		stat.WriteString("INSERT INTO " + b.tableName + " (")
+		stat.WriteString("INSERT INTO " + quote + b.tableName + quote + " (")
 		stat.WriteString(strings.Join(keys, ","))
 		stat.WriteString(") VALUES (")
 		stat.WriteString(placeholders)
@@ -786,30 +806,64 @@ func (b *BuilderM) Set(query string, args ...any) (int, error) {
 	if b == nil || b.tableName == "" {
 		return 0, ErrTableNotFound
 	}
-	if onSet != nil {
-		mToSet := map[string]any{}
-		sp := strings.Split(query, ",")
-		if strings.Contains(query, "?") {
-			for i := range sp {
-				sp[i] = setReplacer.Replace(sp[i])
-				mToSet[strings.TrimSpace(sp[i])] = args[i]
-			}
-		} else {
-			for i := range sp {
-				mToSet[strings.TrimSpace(sp[i])] = args[i]
-			}
-		}
-		err := onSet(b.db.Name, b.tableName, mToSet)
-		if err != nil {
-			return 0, err
-		}
-	}
 	if b.whereQuery == "" {
 		return 0, errors.New("you should use Where before Update")
 	}
 	adaptSetQuery(&query)
 	b.statement = "UPDATE " + b.tableName + " SET " + query + " WHERE " + b.whereQuery
 	adaptTimeToUnixArgs(&args)
+	AdaptPlaceholdersToDialect(&b.statement, b.db.Dialect)
+	args = append(args, b.args...)
+	if b.debug {
+		lg.InfoC("debug", "statement", b.statement, "args", args)
+	}
+
+	var res sql.Result
+	var err error
+	if b.ctx != nil {
+		res, err = b.db.Conn.ExecContext(b.ctx, b.statement, args...)
+	} else {
+		res, err = b.db.Conn.Exec(b.statement, args...)
+	}
+	if err != nil {
+		return 0, err
+	}
+	aff, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	return int(aff), nil
+}
+
+func (b *BuilderM) SetM(data map[string]any) (int, error) {
+	if b.trace {
+		trace := TraceData{
+			Query:     b.statement,
+			Args:      b.args,
+			Database:  b.db.Name,
+			StartTime: time.Now(),
+		}
+		defer func() {
+			trace.Duration = time.Since(trace.StartTime)
+			defaultTracer.addTrace(trace)
+		}()
+	}
+
+	if b == nil || b.tableName == "" {
+		return 0, ErrTableNotFound
+	}
+	if b.whereQuery == "" {
+		return 0, errors.New("you should use Where before Update")
+	}
+	sss := make([]string, 0, len(data))
+	args := make([]any, 0, len(data))
+	for k, v := range data {
+		sss = append(sss, k+" = ?")
+		args = append(args, v)
+	}
+	adaptTimeToUnixArgs(&args)
+	query := strings.Join(sss, ",")
+	b.statement = "UPDATE " + b.tableName + " SET " + query + " WHERE " + b.whereQuery
 	AdaptPlaceholdersToDialect(&b.statement, b.db.Dialect)
 	args = append(args, b.args...)
 	if b.debug {
@@ -851,12 +905,6 @@ func (b *BuilderM) Delete() (int, error) {
 	if b == nil || b.tableName == "" {
 		return 0, ErrTableNotFound
 	}
-	if onDelete != nil {
-		err := onDelete(b.db.Name, b.tableName, b.whereQuery, b.args...)
-		if err != nil {
-			return 0, err
-		}
-	}
 	b.statement = "DELETE FROM " + b.tableName
 	if b.whereQuery != "" {
 		b.statement += " WHERE " + b.whereQuery
@@ -890,10 +938,11 @@ func (b *BuilderM) Drop() (int, error) {
 	if b == nil || b.tableName == "" {
 		return 0, ErrTableNotFound
 	}
-	if onDrop != nil {
-		err := onDrop(b.db.Name, b.tableName)
-		if err != nil {
-			return 0, err
+	if v, ok := hooks.Get("drop"); ok {
+		for _, vv := range v {
+			vv(HookData{
+				Table: b.tableName,
+			})
 		}
 	}
 	b.statement = "DROP TABLE IF EXISTS " + b.tableName
@@ -981,24 +1030,6 @@ func (b *BuilderM) AddRelated(relatedTable string, whereRelatedTable string, whe
 		} else {
 			ids[1] = v
 			ids[3] = v
-		}
-	}
-	if onInsert != nil {
-		var mInsert map[string]any
-		if inOrder {
-			mInsert = map[string]any{
-				b.tableName + "_id":  ids[0],
-				relatedTable + "_id": ids[1],
-			}
-		} else {
-			mInsert = map[string]any{
-				b.tableName + "_id":  ids[1],
-				relatedTable + "_id": ids[0],
-			}
-		}
-		err := onInsert(b.db.Name, relationTableName, mInsert)
-		if err != nil {
-			return 0, err
 		}
 	}
 	stat := "INSERT INTO " + relationTableName + "(" + cols + ") select ?,? WHERE NOT EXISTS (select * FROM " + relationTableName + " WHERE " + wherecols + ");"
@@ -1238,8 +1269,12 @@ func (b *BuilderM) QueryM(statement string, args ...any) ([]map[string]any, erro
 		args:      fmt.Sprint(args...),
 	}
 	if useCache && !b.nocache {
-		if v, ok := cacheQueryM.Get(c); ok {
-			return v.([]map[string]any), nil
+		if v, ok := caches.Get("qmm" + b.tableName); ok {
+			if vv, ok := v.Get(c); ok {
+				if vvs, ok := vv.([]map[string]any); ok {
+					return vvs, nil
+				}
+			}
 		}
 	}
 	AdaptPlaceholdersToDialect(&statement, b.db.Dialect)
@@ -1297,7 +1332,14 @@ func (b *BuilderM) QueryM(statement string, args ...any) ([]map[string]any, erro
 		return nil, ErrNoData
 	}
 	if useCache && !b.nocache {
-		_ = cacheQueryM.Set(c, listMap)
+		if v, ok := caches.Get("qmm" + b.tableName); ok {
+			v.Set(c, listMap)
+			caches.Set(b.tableName, v)
+		} else {
+			new := kmap.New[dbCache, any]()
+			new.Set(c, listMap)
+			caches.Set(b.tableName, new)
+		}
 	}
 	return listMap, nil
 }
@@ -1330,8 +1372,12 @@ func (b *BuilderM) QueryMNamed(statement string, args map[string]any, unsafe ...
 		args:      rgs,
 	}
 	if useCache && !b.nocache {
-		if v, ok := cacheQueryM.Get(c); ok {
-			return v.([]map[string]any), nil
+		if v, ok := caches.Get("qmnn" + b.tableName); ok {
+			if vv, ok := v.Get(c); ok {
+				if vvs, ok := vv.([]map[string]any); ok {
+					return vvs, nil
+				}
+			}
 		}
 	}
 	var query string
@@ -1402,7 +1448,14 @@ func (b *BuilderM) QueryMNamed(statement string, args map[string]any, unsafe ...
 		return nil, ErrNoData
 	}
 	if useCache && !b.nocache {
-		_ = cacheQueryM.Set(c, listMap)
+		if v, ok := caches.Get("qmnn" + b.tableName); ok {
+			v.Set(c, listMap)
+			caches.Set(b.tableName, v)
+		} else {
+			new := kmap.New[dbCache, any]()
+			new.Set(c, listMap)
+			caches.Set(b.tableName, new)
+		}
 	}
 	return listMap, nil
 }

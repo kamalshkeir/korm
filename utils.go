@@ -303,8 +303,5 @@ func SetCacheMaxMemory(megaByte int) {
 		megaByte = 100
 	}
 	cacheMaxMemoryMb = megaByte
-	cacheAllM = kmap.New[dbCache, []map[string]any](cacheMaxMemoryMb)
-	cacheAllS = kmap.New[dbCache, any](cacheMaxMemoryMb)
-	cacheQueryM = kmap.New[dbCache, any](cacheMaxMemoryMb)
-	cacheQueryS = kmap.New[dbCache, any](cacheMaxMemoryMb)
+	caches = kmap.New[string, *kmap.SafeMap[dbCache, any]](cacheMaxMemoryMb)
 }
