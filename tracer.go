@@ -43,16 +43,9 @@ var (
 	}
 )
 
-func EnableTerminal() {
-	terminalUIEnabled = true
-}
-func DisableTerminal() {
-	terminalUIEnabled = false
-}
-
-// EnableTracing turns on tracing db + api
-func EnableTracing() {
-	SetMaxDBTraces(50)
+// WithTracing turns on tracing db + api
+func WithTracing() {
+	SetMaxDBTraces(MaxDbTraces)
 	defaultTracer.enabled = true
 	// enable ksmux tracing
 	ksmux.EnableTracing(nil)

@@ -31,11 +31,8 @@ var termsessions = kmap.New[string, string]()
 
 var LogsView = func(c *ksmux.Context) {
 	d := map[string]any{
-		"admin_path":       adminPathNameGroup,
-		"static_url":       staticUrl,
-		"secure":           ksmux.IsTLS,
-		"trace_enabled":    defaultTracer.enabled,
-		"terminal_enabled": terminalUIEnabled,
+		"secure":  ksmux.IsTLS,
+		"metrics": GetSystemMetrics(),
 	}
 	parsed := make([]LogEntry, 0)
 	if v := lg.GetLogs(); v != nil {
@@ -49,11 +46,7 @@ var LogsView = func(c *ksmux.Context) {
 
 var DashView = func(c *ksmux.Context) {
 	ddd := map[string]any{
-		"admin_path":         adminPathNameGroup,
-		"static_url":         staticUrl,
 		"withRequestCounter": withRequestCounter,
-		"trace_enabled":      defaultTracer.enabled,
-		"terminal_enabled":   terminalUIEnabled,
 		"stats":              GetStats(),
 	}
 	if withRequestCounter {
@@ -81,20 +74,13 @@ var TablesView = func(c *ksmux.Context) {
 	}
 
 	c.Html("admin/admin_tables.html", map[string]any{
-		"admin_path":       adminPathNameGroup,
-		"static_url":       staticUrl,
-		"tables":           allTables,
-		"results":          results,
-		"trace_enabled":    defaultTracer.enabled,
-		"terminal_enabled": terminalUIEnabled,
+		"tables":  allTables,
+		"results": results,
 	})
 }
 
 var LoginView = func(c *ksmux.Context) {
-	c.Html("admin/admin_login.html", map[string]any{
-		"admin_path": adminPathNameGroup,
-		"static_url": staticUrl,
-	})
+	c.Html("admin/admin_login.html", nil)
 }
 
 var LoginPOSTView = func(c *ksmux.Context) {
@@ -260,8 +246,6 @@ var TableGetAll = func(c *ksmux.Context) {
 		} else {
 			data["columns"] = dbCols
 		}
-		data["admin_path"] = adminPathNameGroup
-		data["static_url"] = staticUrl
 		c.Json(map[string]any{
 			"success": data,
 		})
@@ -362,10 +346,6 @@ var AllModelsGet = func(c *ksmux.Context) {
 		} else {
 			data["columns"] = dbCols
 		}
-		data["admin_path"] = adminPathNameGroup
-		data["static_url"] = staticUrl
-		data["trace_enabled"] = defaultTracer.enabled
-		data["terminal_enabled"] = terminalUIEnabled
 		c.Html("admin/admin_single_table.html", data)
 	} else {
 		lg.ErrorC("table not found", "table", model)
@@ -554,6 +534,8 @@ var CreateModelView = func(c *ksmux.Context) {
 				return
 			}
 			m[key] = val[0]
+		case "pk":
+			continue
 		default:
 			if key != "" && val[0] != "" && val[0] != "null" {
 				m[key] = val[0]
@@ -701,21 +683,11 @@ var UpdateRowPost = func(c *ksmux.Context) {
 }
 
 var TracingGetView = func(c *ksmux.Context) {
-	c.Html("admin/admin_tracing.html", map[string]any{
-		"admin_path":       adminPathNameGroup,
-		"static_url":       staticUrl,
-		"trace_enabled":    defaultTracer.enabled,
-		"terminal_enabled": terminalUIEnabled,
-	})
+	c.Html("admin/admin_tracing.html", nil)
 }
 
 var TerminalGetView = func(c *ksmux.Context) {
-	c.Html("admin/admin_terminal.html", map[string]any{
-		"admin_path":       adminPathNameGroup,
-		"static_url":       staticUrl,
-		"trace_enabled":    defaultTracer.enabled,
-		"terminal_enabled": terminalUIEnabled,
-	})
+	c.Html("admin/admin_terminal.html", nil)
 }
 
 // WebSocket endpoint for terminal
@@ -1642,4 +1614,19 @@ func copyDir(src, dst string) error {
 		}
 	}
 	return nil
+}
+
+var GetMetricsView = func(c *ksmux.Context) {
+	metrics := GetSystemMetrics()
+	c.Json(metrics)
+}
+
+var GetLogsView = func(c *ksmux.Context) {
+	parsed := make([]LogEntry, 0)
+	if v := lg.GetLogs(); v != nil {
+		for _, vv := range reverseSlice(v.Slice) {
+			parsed = append(parsed, parseLogString(vv))
+		}
+	}
+	c.Json(parsed)
 }

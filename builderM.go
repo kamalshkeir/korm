@@ -941,7 +941,8 @@ func (b *BuilderM) Drop() (int, error) {
 	if v, ok := hooks.Get("drop"); ok {
 		for _, vv := range v {
 			vv(HookData{
-				Table: b.tableName,
+				Table:     b.tableName,
+				Operation: "drop",
 			})
 		}
 	}

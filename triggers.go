@@ -35,6 +35,7 @@ type TriggersQueue struct {
 type HookFunc func(HookData)
 
 type HookData struct {
+	Pk        string         `json:"pk"`
 	Table     string         `json:"table"`
 	Operation string         `json:"operation"`
 	Data      map[string]any `json:"data"`
@@ -76,6 +77,28 @@ func OnDrop(fn HookFunc) {
 	} else {
 		hooks.Set("drop", []HookFunc{fn})
 	}
+}
+
+func initCacheHooks() {
+	// Add hook for data changes
+	OnInsert(func(hd HookData) {
+		flushTableCache(hd.Table)
+	})
+
+	// Add hook for updates
+	OnSet(func(hd HookData) {
+		flushTableCache(hd.Table)
+	})
+
+	// Add hook for deletes
+	OnDelete(func(hd HookData) {
+		flushTableCache(hd.Table)
+	})
+
+	// Add hook for drops
+	OnDrop(func(hd HookData) {
+		flushCache()
+	})
 }
 
 // AddTrigger add trigger tablename_trig if col empty and tablename_trig_col if not
@@ -260,8 +283,15 @@ func AddChangesTrigger(tableName string, dbName ...string) error {
 		return err
 	}
 
+	var t TableEntity
+	for _, tt := range db.Tables {
+		if tt.Name == tableName {
+			t = tt
+		}
+	}
+
 	// Get table columns for constructing the change data
-	cols, _ := GetAllColumnsTypes(tableName, dName)
+	cols := t.Types
 	if len(cols) == 0 {
 		return ErrTableNotFound
 	}
@@ -315,6 +345,7 @@ func AddChangesTrigger(tableName string, dbName ...string) error {
 					if lg.CheckError(err) {
 						continue
 					}
+					ddd.Pk = t.Pk
 					// Delete processed row within transaction
 					if _, err := tx.Exec("DELETE FROM _triggers_queue WHERE rowid = ?", rowid); err == nil {
 						if hhh, ok := hooks.Get(ddd.Operation); ok {
@@ -379,7 +410,7 @@ func AddChangesTrigger(tableName string, dbName ...string) error {
 				if lg.CheckError(err) {
 					continue
 				}
-
+				ddd.Pk = t.Pk
 				// Delete the processed row
 				_, err = tx.Exec("DELETE FROM \"_triggers_queue\" WHERE data = $1", jsonData)
 				if err != nil {
@@ -462,6 +493,7 @@ func AddChangesTrigger(tableName string, dbName ...string) error {
 
 				// Publish change only after successful commit
 				ddd := HookData{}
+				ddd.Pk = t.Pk
 				err = json.Unmarshal([]byte(jsonData), &ddd)
 				if lg.CheckError(err) {
 					continue

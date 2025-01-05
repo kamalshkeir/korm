@@ -118,7 +118,7 @@ func New(dbType Dialect, dbName string, dbDriver driver.Driver, dbDSN ...string)
 		}
 	default:
 		dbType = "sqlite3"
-		lg.Errorf("%s not handled, choices are: postgres,mysql,sqlite3,maria,cockroach", dbType)
+		lg.ErrorC("not handled, choices are: postgres,mysql,sqlite3,maria,cockroach", "dbType", dbType)
 		dsn = dbName + ".sqlite3"
 		if dsn == "" {
 			dsn = "db.sqlite3"
@@ -176,8 +176,12 @@ func New(dbType Dialect, dbName string, dbDriver driver.Driver, dbDSN ...string)
 			Tables:  []TableEntity{},
 		})
 	}
+	err = AutoMigrate[TablesInfos]("_tables_infos")
+	lg.CheckError(err)
 	err = AutoMigrate[TriggersQueue]("_triggers_queue")
 	lg.CheckError(err)
+
+	initCacheHooks()
 	return nil
 }
 
@@ -290,11 +294,13 @@ type DashOpts struct {
 	RepoName           string // default korm-dash
 	WithTracing        bool   // add tracing handling page in dash and enable tracing
 	WithTerminal       bool   // add terminal session handling page in dash
+	WithNodeManager    bool   // add node manager handling page in dash
 	WithRequestCounter bool   // add request counter dashboard,default false
 }
 
 // WithDashboard enable admin dashboard
 func WithDashboard(addr string, options ...DashOpts) *ksbus.Server {
+	dahsboardUsed = true
 	var opts *DashOpts
 	staticAndTemplatesEmbeded := []embed.FS{}
 	if len(options) > 0 {
@@ -366,7 +372,6 @@ func WithDashboard(addr string, options ...DashOpts) *ksbus.Server {
 		}
 	}
 	cloneAndMigrateDashboard(true, staticAndTemplatesEmbeded...)
-	lg.UsePublisher(serverBus, "lg:logs")
 
 	reqqCounter := false
 	if opts != nil && opts.WithRequestCounter {
@@ -374,10 +379,13 @@ func WithDashboard(addr string, options ...DashOpts) *ksbus.Server {
 	}
 	if opts != nil && opts.WithTracing {
 		// Enable db tracing
-		EnableTracing()
+		WithTracing()
 	}
 	if opts != nil && opts.WithTerminal {
-		EnableTerminal()
+		terminalUIEnabled = true
+	}
+	if opts != nil && opts.WithNodeManager {
+		WithNodeManager()
 	}
 	initAdminUrlPatterns(reqqCounter, serverBus.App)
 	if len(os.Args) == 1 {
@@ -491,9 +499,15 @@ func Transaction(dbName ...string) (*sql.Tx, error) {
 	return GetConnection(dbName...).Begin()
 }
 
-// FlushCache send msg to the cache system to Flush all the cache, safe to use in concurrent mode, and safe to use in general, it's done every 30 minutes(korm.FlushCacheEvery) and on update , create, delete , drop
-func FlushCache() {
-	flushCache()
+// FlushCache send msg to the cache system to Flush all the cache, safe to use in concurrent mode, and safe to use in general, flushed every (korm.FlushCacheEvery)
+func FlushCache(tables ...string) {
+	if len(tables) > 0 {
+		for _, t := range tables {
+			flushTableCache(t)
+		}
+	} else {
+		flushCache()
+	}
 }
 
 // DisableCache disable the cache system, if and only if you are having problem with it, also you can korm.FlushCache on command too
@@ -596,7 +610,12 @@ func GetAllTables(dbName ...string) []string {
 	if useCache && len(tables) > 0 {
 		cacheAllTables.Set(name, tables)
 	}
-
+	for i := len(tables) - 1; i >= 0; i-- {
+		t := tables[i]
+		if strings.HasPrefix(t, "_") {
+			tables = append(tables[:i], tables[i+1:]...)
+		}
+	}
 	return tables
 }
 

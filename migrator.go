@@ -12,6 +12,50 @@ import (
 	"github.com/kamalshkeir/lg"
 )
 
+func GetTablesInfosFromDB(tables ...string) []TableEntity {
+	if len(tables) == 0 {
+		tables = GetAllTables(defaultDB)
+	}
+	tinfos, err := Model[TablesInfos]().Where("name IN (?)", tables).All()
+	if lg.CheckError(err) {
+		return nil
+	}
+	res := make([]TableEntity, 0, len(tinfos))
+	for _, ti := range tinfos {
+		fkk := []kormFkey{}
+		for _, fk := range ti.Fkeys {
+			sp := strings.Split(fk, ";;")
+			if len(sp) == 3 {
+				k := kormFkey{}
+				for i, spp := range sp {
+					spp = strings.TrimSpace(spp)
+					switch i {
+					case 0:
+						k.FromTableField = spp
+					case 1:
+						k.ToTableField = spp
+					case 2:
+						if spp == "true" {
+							k.Unique = true
+						}
+					}
+				}
+				fkk = append(fkk, k)
+			}
+		}
+		res = append(res, TableEntity{
+			Types:      ti.Types,
+			ModelTypes: ti.ModelTypes,
+			Tags:       ti.Tags,
+			Columns:    ti.Columns,
+			Pk:         ti.Pk,
+			Name:       ti.Name,
+			Fkeys:      fkk,
+		})
+	}
+	return res
+}
+
 // CREATE TRIGGER IF NOT EXISTS users_update_trig AFTER UPDATE ON
 func checkUpdatedAtTrigger(dialect, tableName, col, pk string) map[string][]string {
 	triggers := map[string][]string{}
@@ -42,6 +86,283 @@ func autoMigrate[T any](model *T, db *DatabaseEntity, tableName string, execute 
 	toReturnstats := []string{}
 	dialect := db.Dialect
 	s := reflect.ValueOf(model).Elem()
+	typeOfT := s.Type()
+	mFieldName_Type := map[string]string{}
+	mFieldName_Tags := map[string][]string{}
+	cols := []string{}
+	pk := ""
+
+	for i := 0; i < s.NumField(); i++ {
+		f := s.Field(i)
+		fname := typeOfT.Field(i).Name
+		fname = kstrct.ToSnakeCase(fname)
+		ftype := f.Type()
+		if ftype.Kind() == reflect.Ptr {
+			mFieldName_Type[fname] = ftype.Elem().String()
+		} else {
+			mFieldName_Type[fname] = ftype.String()
+		}
+
+		if ftag, ok := typeOfT.Field(i).Tag.Lookup("korm"); ok {
+			tags := strings.Split(ftag, ";")
+			for i, tag := range tags {
+				if ftag == "-" {
+					continue
+				}
+				tag := strings.TrimSpace(tag)
+				if tag == "autoinc" || tag == "pk" || fname == "id" {
+					pk = fname
+				}
+				tags[i] = strings.TrimSpace(tags[i])
+			}
+			mFieldName_Tags[fname] = tags
+		} else if ftag, ok := typeOfT.Field(i).Tag.Lookup("kstrct"); ok {
+			if ftag == "-" {
+				continue
+			}
+		}
+		cols = append(cols, fname)
+	}
+	if pk == "" {
+		if v := strings.ToLower(typeOfT.Field(0).Name); strings.HasSuffix(v, "id") {
+			pk = v
+			mFieldName_Tags[pk] = []string{"pk"}
+		} else {
+			cols = append([]string{"id"}, cols...)
+			mFieldName_Type["id"] = "uint"
+			mFieldName_Tags["id"] = []string{"pk"}
+			pk = "id"
+		}
+	}
+
+	res := map[string]string{}
+	fkeys := []string{}
+	indexes := []string{}
+	mindexes := map[string]string{}
+	uindexes := map[string]string{}
+	var mi *migrationInput
+	for _, fName := range cols {
+		if ty, ok := mFieldName_Type[fName]; ok {
+			mi = &migrationInput{
+				table:    tableName,
+				dialect:  dialect,
+				fName:    fName,
+				fType:    ty,
+				fTags:    &mFieldName_Tags,
+				fKeys:    &fkeys,
+				res:      &res,
+				indexes:  &indexes,
+				mindexes: &mindexes,
+				uindexes: &uindexes,
+			}
+			if ty[0] != '[' && strings.Contains(ty, "int") {
+				if ty[0] != '*' && ty[1] != '[' {
+					handleMigrationInt(mi)
+				}
+			}
+			switch ty {
+			case "bool", "*bool":
+				handleMigrationBool(mi)
+			case "string", "*string", "[]string", "[]int", "[]int64", "[]float64", "[]any":
+				handleMigrationString(mi)
+			case "[]uint8", "[]byte", "*[]uint8", "*[]byte":
+				handleMigrationSliceByte(mi)
+			case "float64", "float32", "*float64", "*float32":
+				handleMigrationFloat(mi)
+			case "time.Time", "*time.Time":
+				handleMigrationTime(mi)
+			default:
+				if strings.HasPrefix(ty, "map") || strings.HasPrefix(ty, "*map") {
+					handleMigrationSliceByte(mi)
+					continue
+				}
+				if tags, ok := mFieldName_Tags[fName]; ok {
+					if strings.Contains(strings.Join(tags, ","), "json") {
+						handleMigrationSliceByte(mi)
+						continue
+					}
+					if !strings.Contains(strings.Join(tags, ","), "generated") && !strings.Contains(ty, "int") {
+						lg.Errorf("%s of type %s not handled", fName, ty)
+					}
+				}
+			}
+		}
+	}
+	statement := prepareCreateStatement(tableName, res, fkeys, cols, db.Dialect)
+	var triggers map[string][]string
+
+	// check for update field to create a trigger
+	if db.Dialect != MYSQL && db.Dialect != MARIA {
+		for col, tags := range mFieldName_Tags {
+			for _, tag := range tags {
+				if tag == "update" {
+					triggers = checkUpdatedAtTrigger(db.Dialect, tableName, col, pk)
+				}
+			}
+		}
+	} else {
+		for col, tags := range mFieldName_Tags {
+			for _, tag := range tags {
+				if tag == "now" {
+					createTrigger := fmt.Sprintf(`CREATE TRIGGER before_insert_%s_%s
+					BEFORE INSERT ON %s
+					FOR EACH ROW
+					BEGIN
+						SET NEW.%s = UNIX_TIMESTAMP();
+					END`, tableName, col, tableName, col)
+
+					if triggers == nil {
+						triggers = make(map[string][]string)
+					}
+					triggers["mysql_triggers"] = append(triggers["mysql_triggers"], createTrigger)
+				} else if tag == "update" {
+					createTrigger := fmt.Sprintf(`CREATE TRIGGER before_update_%s_%s
+					BEFORE UPDATE ON %s
+					FOR EACH ROW
+					BEGIN
+						SET NEW.%s = UNIX_TIMESTAMP();
+					END`, tableName, col, tableName, col)
+
+					if triggers == nil {
+						triggers = make(map[string][]string)
+					}
+					triggers["mysql_triggers"] = append(triggers["mysql_triggers"], createTrigger)
+				}
+			}
+		}
+	}
+
+	if Debug {
+		lg.InfoC("debug", "stat", statement)
+	}
+
+	c, cancel := context.WithTimeout(context.TODO(), 5*time.Second)
+	defer cancel()
+	if execute {
+		ress, err := db.Conn.ExecContext(c, statement)
+		if lg.CheckError(err) {
+			lg.InfoC("debug", "stat", statement)
+			return "", err
+		}
+		_, err = ress.RowsAffected()
+		if err != nil {
+			return "", err
+		}
+	}
+	toReturnstats = append(toReturnstats, statement)
+
+	if !strings.HasSuffix(tableName, "_temp") {
+		if len(triggers) > 0 {
+			for _, stats := range triggers {
+				for _, st := range stats {
+					if Debug {
+						lg.Printfs("trigger updated_at %s: %s\n", tableName, st)
+					}
+					if execute {
+						err := Exec(db.Name, st)
+						if lg.CheckError(err) {
+							lg.Printfs("rdtrigger updated_at %s: %s\n", tableName, st)
+							return "", err
+						}
+					}
+					toReturnstats = append(toReturnstats, st)
+				}
+			}
+		}
+		statIndexes := ""
+		if len(indexes) > 0 {
+			for _, col := range indexes {
+				ff := strings.ReplaceAll(col, "DESC", "")
+				statIndexes += fmt.Sprintf("CREATE INDEX idx_%s_%s ON %s (%s);", tableName, ff, tableName, col)
+			}
+		}
+		mstatIndexes := ""
+		if len(*mi.mindexes) > 0 {
+			for k, v := range *mi.mindexes {
+				ff := strings.ReplaceAll(k, "DESC", "")
+				mstatIndexes = fmt.Sprintf("CREATE INDEX idx_%s_%s ON %s (%s)", tableName, ff, tableName, k+","+v)
+			}
+		}
+		ustatIndexes := []string{}
+		for col, tagValue := range *mi.uindexes {
+			sp := strings.Split(tagValue, ",")
+			for i := range sp {
+				if sp[i][0] == 'I' && db.Dialect != MYSQL && db.Dialect != MARIA {
+					sp[i] = "LOWER(" + sp[i][1:] + ")"
+				}
+			}
+			res := strings.Join(sp, ",")
+			ustatIndexes = append(ustatIndexes, fmt.Sprintf("CREATE UNIQUE INDEX idx_%s_%s ON %s (%s)", tableName, col, tableName, res))
+		}
+		statIndexesExecuted := false
+		if statIndexes != "" {
+			if Debug {
+				lg.Printfs("%s\n", statIndexes)
+			}
+			if execute && !statIndexesExecuted {
+				_, err := db.Conn.Exec(statIndexes)
+				if lg.CheckError(err) {
+					lg.Printfs("rdindexes: %s\n", statIndexes)
+					return "", err
+				}
+				statIndexesExecuted = true
+			}
+
+			toReturnstats = append(toReturnstats, statIndexes)
+		}
+		if mstatIndexes != "" {
+			if Debug {
+				lg.Printfs("mindexes: %s\n", mstatIndexes)
+			}
+			if execute {
+				_, err := db.Conn.Exec(mstatIndexes)
+				if lg.CheckError(err) {
+					lg.Printfs("rdmindexes: %s\n", mstatIndexes)
+					return "", err
+				}
+			}
+
+			toReturnstats = append(toReturnstats, mstatIndexes)
+		}
+		if len(ustatIndexes) > 0 {
+			for i := range ustatIndexes {
+				if Debug {
+					lg.Printfs("uindexes: %s\n", ustatIndexes[i])
+				}
+				if execute {
+					// Extract index name from the CREATE INDEX statement
+					parts := strings.Split(ustatIndexes[i], " ")
+					var indexName string
+					for j, part := range parts {
+						if part == "INDEX" {
+							indexName = parts[j+1]
+							break
+						}
+					}
+					// Check if index exists before creating it
+					if !indexExists(db.Conn, tableName, indexName, db.Dialect) {
+						_, err := db.Conn.Exec(ustatIndexes[i])
+						if lg.CheckError(err) {
+							lg.Printfs("rduindexes: %s\n", ustatIndexes)
+							return "", err
+						}
+					}
+				}
+				toReturnstats = append(toReturnstats, ustatIndexes[i])
+			}
+		}
+	}
+	if execute && Debug {
+		lg.Printfs("gr %s migrated\n", tableName)
+	}
+	toReturnQuery := strings.Join(toReturnstats, ";")
+	return toReturnQuery, nil
+}
+
+func autoMigrateAny(model any, db *DatabaseEntity, tableName string, execute bool) (string, error) {
+	toReturnstats := []string{}
+	dialect := db.Dialect
+	s := reflect.ValueOf(model)
 	typeOfT := s.Type()
 	mFieldName_Type := map[string]string{}
 	mFieldName_Tags := map[string][]string{}
@@ -273,10 +594,22 @@ func autoMigrate[T any](model *T, db *DatabaseEntity, tableName string, execute 
 					lg.Printfs("uindexes: %s\n", ustatIndexes[i])
 				}
 				if execute {
-					_, err := db.Conn.Exec(ustatIndexes[i])
-					if lg.CheckError(err) {
-						lg.Printfs("rduindexes: %s\n", ustatIndexes)
-						return "", err
+					// Extract index name from the CREATE INDEX statement
+					parts := strings.Split(ustatIndexes[i], " ")
+					var indexName string
+					for j, part := range parts {
+						if part == "INDEX" {
+							indexName = parts[j+1]
+							break
+						}
+					}
+					// Check if index exists before creating it
+					if !indexExists(db.Conn, tableName, indexName, db.Dialect) {
+						_, err := db.Conn.Exec(ustatIndexes[i])
+						if lg.CheckError(err) {
+							lg.Printfs("rduindexes: %s\n", ustatIndexes)
+							return "", err
+						}
 					}
 				}
 				toReturnstats = append(toReturnstats, ustatIndexes[i])
@@ -340,11 +673,14 @@ func AutoMigrate[T any](tableName string, dbName ...string) error {
 			return nil
 		}
 	}
-	if tableName != "_triggers_queue" {
-		err = AddChangesTrigger(tableName)
-	}
-	lg.CheckError(err)
 	LinkModel[T](tableName, db.Name)
+	if tableName != "_triggers_queue" && tableName != "_tables_infos" {
+		if nodeManagerDebug {
+			fmt.Println("Adding Trigger Changes on", tableName)
+		}
+		err = AddChangesTrigger(tableName)
+		lg.CheckError(err)
+	}
 	return nil
 }
 
@@ -1201,7 +1537,7 @@ func prepareCreateStatement(tbName string, fields map[string]string, fkeys, cols
 				continue
 			}
 			reste := ","
-			if i == len(fields)-1 {
+			if i == len(cols)-1 {
 				reste = ""
 			}
 			strBuilder.WriteString(fName + " " + fType + reste)
@@ -1215,7 +1551,7 @@ func prepareCreateStatement(tbName string, fields map[string]string, fkeys, cols
 				continue
 			}
 			reste := ","
-			if i == len(fields)-1 {
+			if i == len(cols)-1 {
 				reste = ""
 			}
 			strBuilder.WriteString(fName + " " + fType + reste)

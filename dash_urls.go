@@ -11,6 +11,11 @@ import (
 func init() {
 	const kormKeyUser = "korm-user"
 	ksmux.BeforeRenderHtml("korm-user", func(c *ksmux.Context, data *map[string]any) {
+		(*data)["admin_path"] = adminPathNameGroup
+		(*data)["static_url"] = staticUrl
+		(*data)["trace_enabled"] = defaultTracer.enabled
+		(*data)["terminal_enabled"] = terminalUIEnabled
+		(*data)["nodemanager_enabled"] = nodeManager != nil
 		user, ok := c.GetKey(kormKeyUser)
 		if ok {
 			(*data)["IsAuthenticated"] = true
@@ -71,6 +76,8 @@ func initAdminUrlPatterns(withReqCounter bool, r *ksmux.Router) {
 	adminGroup.Get("/export/:table", Admin(ExportView))
 	adminGroup.Get("/export/:table/csv", Admin(ExportCSVView))
 	adminGroup.Get("/logs", Admin(LogsView))
+	adminGroup.Get("/logs/get", Admin(GetLogsView))
+	adminGroup.Get("/metrics/get", Admin(GetMetricsView))
 	adminGroup.Post("/import", Admin(ImportView))
 	if defaultTracer.enabled {
 		adminGroup.Get("/traces", Admin(TracingGetView))

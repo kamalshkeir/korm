@@ -17,6 +17,7 @@ var (
 	templatesDir       = path.Join(assetsDir, "/", "templates")
 	repoUser           = "kamalshkeir"
 	repoName           = "korm-dash"
+	dahsboardUsed      = false
 	adminPathNameGroup = "/admin"
 	terminalUIEnabled  = false
 	// Debug when true show extra useful logs for queries executed for migrations and queries statements

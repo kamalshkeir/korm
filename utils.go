@@ -2,6 +2,7 @@ package korm
 
 import (
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"net/mail"
 	"os"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -258,6 +260,27 @@ func getStructInfos[T any](strctt *T, ignoreZeroValues ...bool) (fields []string
 	return fields, fValues, fTypes, fTags
 }
 
+func indexExists(conn *sql.DB, tableName, indexName string, dialect Dialect) bool {
+	var query string
+	switch dialect {
+	case SQLITE:
+		query = `SELECT name FROM sqlite_master 
+				 WHERE type='index' AND tbl_name=? AND name=?`
+	case POSTGRES:
+		query = `SELECT indexname FROM pg_indexes 
+				 WHERE tablename = $1 AND indexname = $2`
+	case MYSQL, MARIA:
+		query = `SELECT INDEX_NAME FROM information_schema.statistics 
+				 WHERE table_name = ? AND index_name = ?`
+	default:
+		return false
+	}
+
+	var name string
+	err := conn.QueryRow(query, tableName, indexName).Scan(&name)
+	return err == nil
+}
+
 // foreignkeyStat options are : "cascade","donothing", "noaction","setnull", "null","setdefault", "default"
 func foreignkeyStat(fName, toTable, onDelete, onUpdate string) string {
 	toPk := "id"
@@ -304,4 +327,71 @@ func SetCacheMaxMemory(megaByte int) {
 	}
 	cacheMaxMemoryMb = megaByte
 	caches = kmap.New[string, *kmap.SafeMap[dbCache, any]](cacheMaxMemoryMb)
+}
+
+// SystemMetrics holds memory and runtime statistics for the application
+type SystemMetrics struct {
+	// Memory metrics
+	HeapMemoryMB   float64 // Currently allocated heap memory in MB
+	SystemMemoryMB float64 // Total memory obtained from system in MB
+	StackMemoryMB  float64 // Memory used by goroutine stacks
+	HeapObjects    uint64  // Number of allocated heap objects
+	HeapReleasedMB float64 // Memory released to the OS in MB
+
+	// Garbage Collection metrics
+	NumGC         uint32  // Number of completed GC cycles
+	LastGCTimeSec float64 // Time since last garbage collection in seconds
+	GCCPUPercent  float64 // Fraction of CPU time used by GC (0-100)
+
+	// Runtime metrics
+	NumGoroutines int    // Current number of goroutines
+	NumCPU        int    // Number of logical CPUs
+	GoVersion     string // Go version used to build the program
+}
+
+// GetSystemMetrics returns memory and runtime statistics for the application
+func GetSystemMetrics() SystemMetrics {
+	var metrics SystemMetrics
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+
+	// Memory metrics
+	metrics.HeapMemoryMB = float64(m.Alloc) / (1024 * 1024)
+	metrics.SystemMemoryMB = float64(m.Sys) / (1024 * 1024)
+	metrics.StackMemoryMB = float64(m.StackSys) / (1024 * 1024)
+	metrics.HeapObjects = m.HeapObjects
+	metrics.HeapReleasedMB = float64(m.HeapReleased) / (1024 * 1024)
+
+	// GC metrics
+	metrics.NumGC = m.NumGC
+	metrics.LastGCTimeSec = time.Since(time.Unix(0, int64(m.LastGC))).Seconds()
+	metrics.GCCPUPercent = m.GCCPUFraction * 100
+
+	// Runtime metrics
+	metrics.NumGoroutines = runtime.NumGoroutine()
+	metrics.NumCPU = runtime.NumCPU()
+	metrics.GoVersion = runtime.Version()
+
+	return metrics
+}
+
+// PrintSystemMetrics prints the current system metrics
+func PrintSystemMetrics() {
+	metrics := GetSystemMetrics()
+	fmt.Println("Memory Metrics:")
+	fmt.Printf("  Heap Memory: %.2f MB\n", metrics.HeapMemoryMB)
+	fmt.Printf("  System Memory: %.2f MB\n", metrics.SystemMemoryMB)
+	fmt.Printf("  Stack Memory: %.2f MB\n", metrics.StackMemoryMB)
+	fmt.Printf("  Heap Objects: %d\n", metrics.HeapObjects)
+	fmt.Printf("  Heap Released: %.2f MB\n", metrics.HeapReleasedMB)
+
+	fmt.Println("\nGarbage Collection:")
+	fmt.Printf("  GC Cycles: %d\n", metrics.NumGC)
+	fmt.Printf("  Last GC: %.2f seconds ago\n", metrics.LastGCTimeSec)
+	fmt.Printf("  GC CPU Usage: %.2f%%\n", metrics.GCCPUPercent)
+
+	fmt.Println("\nRuntime Info:")
+	fmt.Printf("  Goroutines: %d\n", metrics.NumGoroutines)
+	fmt.Printf("  CPUs: %d\n", metrics.NumCPU)
+	fmt.Printf("  Go Version: %s\n", metrics.GoVersion)
 }

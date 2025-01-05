@@ -4,6 +4,10 @@ import (
 	"database/sql"
 )
 
+var (
+	MaxDbTraces = 50
+)
+
 const (
 	MIGRATION_FOLDER         = "migrations"
 	SQLITE           Dialect = "sqlite3"
@@ -25,6 +29,17 @@ type TableEntity struct {
 	Fkeys      []kormFkey
 	Pk         string
 	Name       string
+}
+
+type TablesInfos struct {
+	Id         uint
+	Name       string
+	Pk         string
+	Types      map[string]string
+	ModelTypes map[string]string
+	Tags       map[string][]string
+	Columns    []string
+	Fkeys      []string
 }
 
 // DatabaseEntity hold memory db state
