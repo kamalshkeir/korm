@@ -544,6 +544,7 @@ func GetAllTables(dbName ...string) []string {
 	} else {
 		name = dbName[0]
 	}
+
 	db, err := GetMemoryDatabase(name)
 	if err != nil {
 		return nil
@@ -607,14 +608,15 @@ func GetAllTables(dbName ...string) []string {
 		lg.ErrorC("database type not supported, should be sqlite3, postgres, cockroach, maria or mysql")
 		return nil
 	}
-	if useCache && len(tables) > 0 {
-		cacheAllTables.Set(name, tables)
-	}
+
 	for i := len(tables) - 1; i >= 0; i-- {
 		t := tables[i]
 		if strings.HasPrefix(t, "_") {
 			tables = append(tables[:i], tables[i+1:]...)
 		}
+	}
+	if useCache && len(tables) > 0 {
+		cacheAllTables.Set(name, tables)
 	}
 	return tables
 }
