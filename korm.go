@@ -384,7 +384,7 @@ func WithDashboard(addr string, options ...DashOpts) *ksbus.Server {
 	if opts != nil && opts.WithTerminal {
 		terminalUIEnabled = true
 	}
-	if opts != nil && opts.WithNodeManager {
+	if opts != nil && opts.WithNodeManager && nodeManager == nil {
 		WithNodeManager()
 	}
 	initAdminUrlPatterns(reqqCounter, serverBus.App)

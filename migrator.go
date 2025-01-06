@@ -674,7 +674,7 @@ func AutoMigrate[T any](tableName string, dbName ...string) error {
 		}
 	}
 	LinkModel[T](tableName, db.Name)
-	if tableName != "_triggers_queue" && tableName != "_tables_infos" {
+	if tableName != "users" && tableName != "_triggers_queue" && tableName != "_tables_infos" {
 		if nodeManagerDebug {
 			fmt.Println("Adding Trigger Changes on", tableName)
 		}

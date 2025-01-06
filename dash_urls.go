@@ -79,6 +79,7 @@ func initAdminUrlPatterns(withReqCounter bool, r *ksmux.Router) {
 	adminGroup.Get("/logs/get", Admin(GetLogsView))
 	adminGroup.Get("/metrics/get", Admin(GetMetricsView))
 	adminGroup.Post("/import", Admin(ImportView))
+	adminGroup.Get("/restart", Admin(RestartView))
 	if defaultTracer.enabled {
 		adminGroup.Get("/traces", Admin(TracingGetView))
 		adminGroup.Get("/traces/get", Admin(GetTraces))

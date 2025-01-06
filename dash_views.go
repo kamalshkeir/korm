@@ -31,7 +31,6 @@ var termsessions = kmap.New[string, string]()
 
 var LogsView = func(c *ksmux.Context) {
 	d := map[string]any{
-		"secure":  ksmux.IsTLS,
 		"metrics": GetSystemMetrics(),
 	}
 	parsed := make([]LogEntry, 0)
@@ -54,6 +53,12 @@ var DashView = func(c *ksmux.Context) {
 	}
 
 	c.Html("admin/admin_index.html", ddd)
+}
+
+var RestartView = func(c *ksmux.Context) {
+	if serverBus != nil {
+		lg.CheckError(serverBus.App.Restart())
+	}
 }
 
 var TablesView = func(c *ksmux.Context) {

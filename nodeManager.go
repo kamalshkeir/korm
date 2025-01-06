@@ -1,17 +1,11 @@
 package korm
 
 import (
-	"context"
 	"fmt"
-	"io"
 	"net/http"
-	"os"
-	"os/exec"
 	"reflect"
-	"runtime"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/kamalshkeir/kmap"
@@ -52,7 +46,7 @@ func DebugNodeManager() {
 func (nm *NodeManager) startHeartbeat() {
 	nm.stopChan = make(chan struct{})
 	go func() {
-		ticker := time.NewTicker(10 * time.Second)
+		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
 
 		for {
@@ -113,6 +107,7 @@ func WithNodeManager() *NodeManager {
 	if serverBus == nil {
 		serverBus = WithBus()
 	}
+
 	serverBus.OnServerData(onServerData)
 	// Create node manager after server is initialized
 	nodeManager = newNodeManager(serverBus)
@@ -139,6 +134,7 @@ func WithNodeManager() *NodeManager {
 		}
 	}
 	initHandlersDashboard(nodeManager.server.App)
+
 	return nodeManager
 }
 
@@ -175,7 +171,7 @@ func initHandlersDashboard(app *ksmux.Router) {
 			"localhost"+data.Address == nodeManager.server.Address {
 			go func() {
 				time.Sleep(100 * time.Millisecond) // Small delay to allow response to be sent
-				nodeManager.GracefulRestart()
+				lg.CheckError(nodeManager.gracefulRestart())
 			}()
 			c.Status(200).Json(map[string]any{"message": "restarting self"})
 			return
@@ -189,6 +185,11 @@ func initHandlersDashboard(app *ksmux.Router) {
 		}, nodeManager.IsSecure(data.Address))
 
 		if err != nil {
+			n := nodeManager.GetNode(data.Address)
+			if n != nil && n.Active {
+				n.Active = false
+				nodeManager.nodes.Set(n.Address, n)
+			}
 			c.Status(500).Json(map[string]any{"error": "failed tco send restart command"})
 			return
 		}
@@ -236,7 +237,14 @@ func initHandlersDashboard(app *ksmux.Router) {
 			Address: data.Address,
 			Secure:  data.Secure,
 		}
-		nodeManager.AddNode(targetNode)
+		err := nodeManager.AddNode(targetNode)
+		if err != nil {
+			// nodeManager.RemoveNode(targetNode.Address)
+			c.Status(http.StatusServiceUnavailable).Json(map[string]any{
+				"error": "node not found, or not available",
+			})
+			return
+		}
 		nodeManager.SyncData(targetNode)
 		nodes := nodeManager.GetNodes()
 		secureNodes := 0
@@ -301,89 +309,16 @@ func initHandlersDashboard(app *ksmux.Router) {
 			"active":  activeNodes,
 		})
 	}))
-	ksmux.OnShutdown(func(srv *http.Server) error {
+	app.OnShutdown(func() error {
 		nodeManager.Shutdown()
 		return nil
 	})
 }
 
-func (nm *NodeManager) GracefulRestart() error {
-	// 1. Notify other nodes we're going down for restart
-	nodes := nm.GetNodes()
-	for _, node := range nodes {
-		_ = nm.server.PublishToServer(node.Address, map[string]any{
-			"type": "node_restart",
-			"addr": nm.server.Address,
-			"id":   nm.server.ID,
-		}, node.Secure)
+func (nm *NodeManager) gracefulRestart() error {
+	if nm != nil {
+		return nm.server.App.Restart()
 	}
-
-	// 2. Wait a bit for messages to be sent
-	time.Sleep(100 * time.Millisecond)
-
-	nm.nodes.Flush()
-
-	Shutdown()
-
-	// 5. Properly shutdown the HTTP server and all its connections
-	if nm.server != nil && nm.server.App != nil && nm.server.App.Server != nil {
-		// Set a short timeout for existing connections to finish
-		nm.server.App.Server.SetKeepAlivesEnabled(false)
-
-		// Create a context with timeout for shutdown
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-
-		// Shutdown the server
-		if err := nm.server.App.Server.Shutdown(ctx); err != nil {
-			lg.ErrorC("Error shutting down server:", "err", err)
-		}
-
-		// Close the underlying listener
-		if nm.server.App.Server.Handler != nil {
-			if closer, ok := nm.server.App.Server.Handler.(io.Closer); ok {
-				closer.Close()
-			}
-		}
-	}
-
-	// 6. Set global nodeManager to nil
-	nodeManager = nil
-
-	// 7. Wait for resources to be released
-	time.Sleep(500 * time.Millisecond)
-
-	// 8. Start the new process before killing the current one
-	self, err := os.Executable()
-	if err != nil {
-		return err
-	}
-
-	// Create a new process with the same arguments and environment
-	cmd := exec.Command(self, os.Args[1:]...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
-	cmd.Env = os.Environ()
-
-	// Start the new process
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-
-	// 9. Give the new process time to start
-	time.Sleep(1 * time.Second)
-	ksmux.Graceful(func() error {
-		Shutdown()
-		nm.Shutdown()
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		_ = nm.server.App.Server.Shutdown(ctx)
-		return nil
-	})
-
-	// 10. Exit the current process
-	os.Exit(0)
 	return nil
 }
 
@@ -407,7 +342,13 @@ func initNodeManagerHooks(nodeManager *NodeManager) {
 					"pk":    hd.Pk,
 					"data":  hd.Data,
 				}, node.Secure); err != nil {
-					lg.ErrorC("Failed to sync insert:", "err", err)
+					if node.Active {
+						node.Active = false
+						nodeManager.nodes.Set(node.Address, node)
+					}
+					if nodeManagerDebug {
+						lg.ErrorC("Failed to sync insert:", "err", err)
+					}
 				}
 			}
 		}
@@ -433,7 +374,13 @@ func initNodeManagerHooks(nodeManager *NodeManager) {
 					"old_data": hd.Old,
 					"new_data": hd.New,
 				}, node.Secure); err != nil {
-					lg.ErrorC("Failed to sync set:", "err", err)
+					if node.Active {
+						node.Active = false
+						nodeManager.nodes.Set(node.Address, node)
+					}
+					if nodeManagerDebug {
+						lg.ErrorC("Failed to sync set:", "err", err)
+					}
 				}
 			}
 		}
@@ -509,7 +456,11 @@ func onServerData(data any, _ *ws.Conn) {
 	switch msg["type"] {
 	case "node_offline":
 		if addr, ok := msg["addr"].(string); ok {
-			nodeManager.RemoveNode(addr)
+			n := nodeManager.GetNode(addr)
+			if n != nil {
+				n.Active = false
+				nodeManager.nodes.Set(n.Address, n)
+			}
 		}
 	case "ping":
 		// Respond to ping
@@ -691,7 +642,11 @@ func onServerData(data any, _ *ws.Conn) {
 				Secure:  secure,
 				Active:  true,
 			}
-			nodeManager.AddNode(newNode)
+			err := nodeManager.AddNode(newNode)
+			if err != nil {
+				lg.ErrorC("unable to add node", "node", newNode.Address)
+				return
+			}
 		}
 
 		// Send back our node info to update the remote node's list
@@ -873,6 +828,7 @@ func onServerData(data any, _ *ws.Conn) {
 			lg.ErrorC("unable to create or update", "table", table, "pk", pkID, "err", err)
 			return
 		}
+		flushTableCache(table)
 		if dahsboardUsed {
 			data[pk] = pkID
 			nodeManager.server.Publish("korm_db_dashboard_hooks", msg)
@@ -906,6 +862,7 @@ func onServerData(data any, _ *ws.Conn) {
 				lg.ErrorC("unable to update", "table", table, "pk", pkID, "err", err)
 				return
 			}
+			flushTableCache(table)
 			if dahsboardUsed {
 				oldData[pk] = pkID
 				newData[pk] = pkID
@@ -936,6 +893,7 @@ func onServerData(data any, _ *ws.Conn) {
 			lg.ErrorC("unable to update", "table", table, "pk", pkID, "err", err)
 			return
 		}
+		flushTableCache(table)
 		if dahsboardUsed {
 			data[pk] = pkID
 			nodeManager.server.Publish("korm_db_dashboard_hooks", msg)
@@ -957,21 +915,46 @@ func onServerData(data any, _ *ws.Conn) {
 			lg.ErrorC("unable to update", "table", table, "err", err)
 			return
 		}
+		flushCache()
 		if dahsboardUsed {
 			nodeManager.server.Publish("korm_db_dashboard_hooks", msg)
 		}
 	case "node_restart":
 		if addr, ok := msg["addr"].(string); ok {
-			// Temporarily mark node as inactive
+			// First mark the node as inactive
 			if n, ok := nodeManager.nodes.Get(addr); ok {
 				n.Active = false
+
+				// Wait for the node to restart and try to reconnect
+				go func(node *Node) {
+					// Wait for restart to complete
+					time.Sleep(2 * time.Second)
+
+					// Try to re-add the node
+					err := nodeManager.AddNode(&Node{
+						Address: node.Address,
+						ID:      node.ID,
+						Secure:  node.Secure,
+					})
+					if err != nil && nodeManagerDebug {
+						time.Sleep(5 * time.Second)
+						err = nodeManager.AddNode(&Node{
+							Address: node.Address,
+							ID:      node.ID,
+							Secure:  node.Secure,
+						})
+						if err != nil {
+							lg.ErrorC("Failed to reconnect to restarted node:", "err", err)
+						}
+					}
+				}(n)
 			}
 		}
 	case "restart_node":
 		// Received restart command from another node
 		go func() {
 			time.Sleep(100 * time.Millisecond)
-			nodeManager.GracefulRestart()
+			lg.CheckError(nodeManager.gracefulRestart())
 		}()
 	case "node_info":
 		// Update node info received from remote node
@@ -985,48 +968,6 @@ func onServerData(data any, _ *ws.Conn) {
 			existingNode.Secure = secure
 		}
 	}
-}
-
-func RestartSelf() error {
-	self, err := os.Executable()
-	if err != nil {
-		return err
-	}
-	args := os.Args
-	env := os.Environ()
-	pid := os.Getpid()
-
-	// Start the new process
-	cmd := exec.Command(self, args[1:]...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
-	cmd.Env = env
-
-	// Start the new process
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-
-	// Give the new process time to start
-	time.Sleep(500 * time.Millisecond)
-
-	// Kill the current process
-	if runtime.GOOS == "windows" {
-		// On Windows, use taskkill with specific PID
-		killCmd := exec.Command("taskkill", "/F", "/PID", fmt.Sprint(pid))
-		killCmd.Run() // Ignore error as the process will be killed anyway
-	} else {
-		// On Unix systems, use SIGTERM
-		proc, err := os.FindProcess(pid)
-		if err == nil {
-			proc.Signal(syscall.SIGTERM)
-		}
-	}
-
-	// This line might not be reached due to the kill
-	os.Exit(0)
-	return nil
 }
 
 // Helper function to compare maps
@@ -1060,13 +1001,15 @@ func newNodeManager(server *ksbus.Server, secure ...bool) *NodeManager {
 	return nm
 }
 
-func (nm *NodeManager) AddNode(node *Node) {
+func (nm *NodeManager) AddNode(node *Node) error {
 	if nm == nil {
-		return
+		return fmt.Errorf("node manager offline")
 	}
 	if node.Address == "" {
-		lg.ErrorC("node address empty")
-		return
+		if nodeManagerDebug {
+			lg.ErrorC("node address empty")
+		}
+		return fmt.Errorf("node address empty")
 	}
 	if strings.HasPrefix(node.Address, ":") {
 		node.Address = "localhost" + node.Address
@@ -1089,8 +1032,11 @@ func (nm *NodeManager) AddNode(node *Node) {
 		if nodeManagerDebug {
 			lg.ErrorC("failed to sync data to node", "targetNode.Addr", node.Address, "err", err)
 		}
-		return
+		node.Active = false
+		nm.nodes.Set(node.Address, node)
+		return fmt.Errorf("address incorrect or node not available")
 	}
+	return nil
 }
 
 func (nm *NodeManager) RemoveNode(nodeAddr string) {
