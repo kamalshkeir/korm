@@ -653,7 +653,6 @@ func AutoMigrate[T any](tableName string, dbName ...string) error {
 	} else {
 		return errors.New("cannot migrate more than one database at the same time")
 	}
-
 	tbFoundDB := false
 	tables := GetAllTables(dbname)
 	for _, t := range tables {
@@ -668,12 +667,12 @@ func AutoMigrate[T any](tableName string, dbName ...string) error {
 		}
 	}
 
+	LinkModel[T](tableName, db.Name) // link here because can be migrated from another node
 	for _, t := range db.Tables {
 		if t.Name == tableName {
 			return nil
 		}
 	}
-	LinkModel[T](tableName, db.Name)
 	if tableName != "users" && tableName != "_triggers_queue" && tableName != "_tables_infos" {
 		if nodeManagerDebug {
 			fmt.Println("Adding Trigger Changes on", tableName)

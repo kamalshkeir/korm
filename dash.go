@@ -47,12 +47,12 @@ func cloneAndMigrateDashboard(migrateUser bool, staticAndTemplatesEmbeded ...emb
 
 	if len(staticAndTemplatesEmbeded) > 0 {
 		staticAndTemplatesFS = staticAndTemplatesEmbeded
-		lg.CheckError(serverBus.App.EmbededStatics(staticAndTemplatesEmbeded[0], staticDir, staticUrl))
-		err := serverBus.App.EmbededTemplates(staticAndTemplatesEmbeded[1], templatesDir)
+		lg.CheckError(serverBus.App().EmbededStatics(staticAndTemplatesEmbeded[0], staticDir, staticUrl))
+		err := serverBus.App().EmbededTemplates(staticAndTemplatesEmbeded[1], templatesDir)
 		lg.CheckError(err)
 	} else {
-		lg.CheckError(serverBus.App.LocalStatics(staticDir, staticUrl))
-		err := serverBus.App.LocalTemplates(templatesDir)
+		lg.CheckError(serverBus.App().LocalStatics(staticDir, staticUrl))
+		err := serverBus.App().LocalTemplates(templatesDir)
 		lg.CheckError(err)
 	}
 	if migrateUser {

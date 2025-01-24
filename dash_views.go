@@ -57,7 +57,7 @@ var DashView = func(c *ksmux.Context) {
 
 var RestartView = func(c *ksmux.Context) {
 	if serverBus != nil {
-		lg.CheckError(serverBus.App.Restart())
+		lg.CheckError(serverBus.App().Restart())
 	}
 }
 
