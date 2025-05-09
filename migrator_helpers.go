@@ -341,17 +341,9 @@ func LinkModel[T any](to_table_name string, dbName ...string) {
 	}
 }
 
-func flushTableCache(table string) {
-	if v, ok := caches.Get(table); ok {
-		v.Flush()
-	}
-}
-
 func flushCache() {
-	go func() {
-		caches.Flush()
-		cacheQ.Flush()
-		cacheAllTables.Flush()
-		cacheAllCols.Flush()
-	}()
+	caches.Flush()
+	cacheQ.Flush()
+	cacheAllTables.Flush()
+	cacheAllCols.Flush()
 }

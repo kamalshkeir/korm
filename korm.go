@@ -510,13 +510,7 @@ func Transaction(dbName ...string) (*sql.Tx, error) {
 
 // FlushCache send msg to the cache system to Flush all the cache, safe to use in concurrent mode, and safe to use in general, flushed every (korm.FlushCacheEvery)
 func FlushCache(tables ...string) {
-	if len(tables) > 0 {
-		for _, t := range tables {
-			flushTableCache(t)
-		}
-	} else {
-		flushCache()
-	}
+	flushCache()
 }
 
 // DisableCache disable the cache system, if and only if you are having problem with it, also you can korm.FlushCache on command too

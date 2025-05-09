@@ -863,7 +863,7 @@ func onServerData(msg map[string]any) {
 			lg.ErrorC("unable to create or update", "table", table, "pk", pkID, "err", err)
 			return
 		}
-		flushTableCache(table)
+		flushCache()
 		if dahsboardUsed {
 			data[pk] = pkID
 			nodeManager.server.Bus().Publish("korm_db_dashboard_hooks", msg, nil)
@@ -897,7 +897,7 @@ func onServerData(msg map[string]any) {
 				lg.ErrorC("unable to update", "table", table, "pk", pkID, "err", err)
 				return
 			}
-			flushTableCache(table)
+			flushCache()
 			if dahsboardUsed && nodeManager != nil && nodeManager.server != nil && nodeManager.server.Bus() != nil {
 				oldData[pk] = pkID
 				newData[pk] = pkID
@@ -928,7 +928,7 @@ func onServerData(msg map[string]any) {
 			lg.ErrorC("unable to update", "table", table, "pk", pkID, "err", err)
 			return
 		}
-		flushTableCache(table)
+		flushCache()
 		if dahsboardUsed {
 			data[pk] = pkID
 			nodeManager.server.Bus().Publish("korm_db_dashboard_hooks", msg, nil)

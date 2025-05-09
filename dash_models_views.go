@@ -408,6 +408,7 @@ var BulkDeleteRowPost = func(c *ksmux.Context) {
 		})
 		return
 	}
+	flushCache()
 	c.Json(map[string]any{
 		"success": "DELETED WITH SUCCESS",
 		"ids":     data.Ids,
@@ -473,6 +474,7 @@ var CreateModelView = func(c *ksmux.Context) {
 		inserted[formName[0]] = pathUploaded[0]
 	}
 
+	flushCache()
 	c.Json(map[string]any{
 		"success":  "Done !",
 		"inserted": inserted,
@@ -583,6 +585,7 @@ var UpdateRowPost = func(c *ksmux.Context) {
 		return
 	}
 
+	flushCache()
 	c.Json(map[string]any{
 		"success": ret,
 	})
@@ -623,6 +626,7 @@ func handleFilesUpload(files map[string][]*multipart.FileHeader, model string, i
 				}
 			}
 		}
+		flushCache()
 	}
 	return uploadedPath, formName, nil
 }
@@ -648,6 +652,7 @@ var DropTablePost = func(c *ksmux.Context) {
 			"error": "missing 'table' in body request",
 		})
 	}
+	flushCache()
 	c.Json(map[string]any{
 		"success": fmt.Sprintf("table %s Deleted !", data["table"]),
 	})
@@ -811,6 +816,7 @@ var ImportView = func(c *ksmux.Context) {
 		})
 		return
 	}
+	flushCache()
 
 	c.Json(map[string]any{
 		"success": "Import Done , you can see uploaded backups at ./" + mediaDir + "/backup folder",

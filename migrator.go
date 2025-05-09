@@ -12,6 +12,8 @@ import (
 	"github.com/kamalshkeir/lg"
 )
 
+var triggersTables = make(map[string]struct{}, 0)
+
 func GetTablesInfosFromDB(tables ...string) []TableEntity {
 	if len(tables) == 0 {
 		tables = GetAllTables(defaultDB)
@@ -666,19 +668,14 @@ func AutoMigrate[T any](tableName string, dbName ...string) error {
 			return err
 		}
 	}
-
-	LinkModel[T](tableName, db.Name) // link here because can be migrated from another node
-	for _, t := range db.Tables {
-		if t.Name == tableName {
-			return nil
-		}
-	}
+	LinkModel[T](tableName, db.Name)
 	if tableName != "users" && tableName != "_triggers_queue" && tableName != "_tables_infos" {
-		if nodeManagerDebug {
-			fmt.Println("Adding Trigger Changes on", tableName)
+		if _, ok := triggersTables[tableName]; !ok {
+			err = AddChangesTrigger(tableName)
+			if !lg.CheckError(err) {
+				triggersTables[tableName] = struct{}{}
+			}
 		}
-		err = AddChangesTrigger(tableName)
-		lg.CheckError(err)
 	}
 	return nil
 }

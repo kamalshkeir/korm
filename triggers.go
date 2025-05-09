@@ -82,17 +82,17 @@ func OnDrop(fn HookFunc) {
 func initCacheHooks() {
 	// Add hook for data changes
 	OnInsert(func(hd HookData) {
-		flushTableCache(hd.Table)
+		flushCache()
 	})
 
 	// Add hook for updates
 	OnSet(func(hd HookData) {
-		flushTableCache(hd.Table)
+		flushCache()
 	})
 
 	// Add hook for deletes
 	OnDelete(func(hd HookData) {
-		flushTableCache(hd.Table)
+		flushCache()
 	})
 
 	// Add hook for drops
@@ -356,7 +356,7 @@ func AddChangesTrigger(tableName string, dbName ...string) error {
 					}
 				}
 				if doFlush {
-					flushTableCache(tableName)
+					flushCache()
 				}
 				rows.Close()
 				if !hasRows {
@@ -426,7 +426,7 @@ func AddChangesTrigger(tableName string, dbName ...string) error {
 					time.Sleep(time.Second)
 					continue
 				}
-				flushTableCache(tableName)
+				flushCache()
 				if hhh, ok := hooks.Get(ddd.Operation); ok {
 					for _, h := range hhh {
 						h(ddd)
@@ -498,7 +498,7 @@ func AddChangesTrigger(tableName string, dbName ...string) error {
 				if lg.CheckError(err) {
 					continue
 				}
-				flushTableCache(tableName)
+				flushCache()
 				if hhh, ok := hooks.Get(ddd.Operation); ok {
 					for _, h := range hhh {
 						h(ddd)
