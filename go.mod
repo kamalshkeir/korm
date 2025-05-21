@@ -9,7 +9,7 @@ require (
 	github.com/kamalshkeir/kinput v0.1.0
 	github.com/kamalshkeir/kmap v1.1.8
 	github.com/kamalshkeir/ksmux v0.7.3
-	github.com/kamalshkeir/kstrct v1.9.19
+	github.com/kamalshkeir/kstrct v1.9.21
 	github.com/kamalshkeir/lg v0.1.4
 )
 
