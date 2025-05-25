@@ -175,12 +175,7 @@ func autoMigrate[T any](model *T, db *DatabaseEntity, tableName string, execute 
 				handleMigrationTime(mi)
 			default:
 				if strings.HasPrefix(ty, "[]") || strings.HasPrefix(ty, "*[]") {
-					if tag, ok := (*mi.fTags)[mi.fName]; ok {
-						tag = append(tag, "text")
-					} else {
-						(*mi.fTags)[mi.fName] = []string{"text"}
-					}
-					handleMigrationString(mi)
+					handleMigrationSliceByte(mi)
 					continue
 				}
 				if strings.HasPrefix(ty, "map") || strings.HasPrefix(ty, "*map") {
