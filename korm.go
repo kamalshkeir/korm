@@ -14,9 +14,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/kamalshkeir/kactor"
 	"github.com/kamalshkeir/kmap"
 	"github.com/kamalshkeir/ksmux"
+	"github.com/kamalshkeir/ksmux/ksps"
 	"github.com/kamalshkeir/kstrct"
 	"github.com/kamalshkeir/lg"
 )
@@ -33,7 +33,7 @@ var (
 	cacheAllCols            = kmap.New[string, map[string]string]()
 	cacheAllColsOrdered     = kmap.New[string, []string]()
 	relationsMap            = kmap.New[string, struct{}]()
-	serverBus               *kactor.BusServer
+	serverBus               *ksps.ServerBus
 	cacheQ                  = kmap.New[string, any](cacheMaxMemoryMb)
 	ErrTableNotFound        = errors.New("unable to find tableName")
 	ErrBigData              = kmap.ErrLargeData
@@ -270,9 +270,9 @@ func ManyToMany(table1, table2 string, dbName ...string) error {
 }
 
 // WithBus return ksbus.NewServer() that can be Run, RunTLS, RunAutoTLS
-func WithBus(config ...ksmux.Config) *kactor.BusServer {
+func WithBus(config ...ksmux.Config) *ksps.ServerBus {
 	if serverBus == nil {
-		serverBus = kactor.NewBusServer(config...)
+		serverBus = ksps.NewServer(config...)
 		if strings.HasPrefix(serverBus.App().Address(), ":") {
 			serverBus.App().Config.Address = "localhost" + serverBus.App().Address()
 		}
@@ -302,7 +302,7 @@ type DashOpts struct {
 }
 
 // WithDashboard enable admin dashboard
-func WithDashboard(addr string, options ...DashOpts) *kactor.BusServer {
+func WithDashboard(addr string, options ...DashOpts) *ksps.ServerBus {
 	dahsboardUsed = true
 	var opts *DashOpts
 	staticAndTemplatesEmbeded := []embed.FS{}
@@ -412,7 +412,7 @@ func WithDashboard(addr string, options ...DashOpts) *kactor.BusServer {
 }
 
 // WithDocs enable swagger docs at DocsUrl default to '/docs/'
-func WithDocs(generateJsonDocs bool, outJsonDocs string, handlerMiddlewares ...func(handler ksmux.Handler) ksmux.Handler) *kactor.BusServer {
+func WithDocs(generateJsonDocs bool, outJsonDocs string, handlerMiddlewares ...func(handler ksmux.Handler) ksmux.Handler) *ksps.ServerBus {
 	if serverBus == nil {
 		lg.DebugC("using default bus :9313")
 		serverBus = WithBus()
@@ -444,7 +444,7 @@ func WithDocs(generateJsonDocs bool, outJsonDocs string, handlerMiddlewares ...f
 }
 
 // WithEmbededDocs same as WithDocs but embeded, enable swagger docs at DocsUrl default to '/docs/'
-func WithEmbededDocs(embeded embed.FS, embededDirPath string, handlerMiddlewares ...func(handler ksmux.Handler) ksmux.Handler) *kactor.BusServer {
+func WithEmbededDocs(embeded embed.FS, embededDirPath string, handlerMiddlewares ...func(handler ksmux.Handler) ksmux.Handler) *ksps.ServerBus {
 	if serverBus == nil {
 		lg.DebugC("using default bus :9313")
 		serverBus = WithBus()
@@ -480,19 +480,19 @@ func WithEmbededDocs(embeded embed.FS, embededDirPath string, handlerMiddlewares
 }
 
 // WithMetrics enable path /metrics (default), it take http.Handler like promhttp.Handler()
-func WithMetrics(httpHandler http.Handler) *kactor.BusServer {
+func WithMetrics(httpHandler http.Handler) *ksps.ServerBus {
 	if serverBus == nil {
 		lg.DebugC("using default bus :9313")
 		serverBus = WithBus()
-		serverBus.WithMetrics(httpHandler)
+		serverBus.App().WithMetrics(httpHandler)
 		return serverBus
 	}
-	serverBus.WithMetrics(httpHandler)
+	serverBus.App().WithMetrics(httpHandler)
 	return serverBus
 }
 
 // WithPprof enable std library pprof at /debug/pprof, prefix default to 'debug'
-func WithPprof(path ...string) *kactor.BusServer {
+func WithPprof(path ...string) *ksps.ServerBus {
 	if serverBus == nil {
 		lg.DebugC("using default bus :9313")
 		serverBus = WithBus()

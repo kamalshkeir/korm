@@ -8,9 +8,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kamalshkeir/kactor"
 	"github.com/kamalshkeir/kmap"
 	"github.com/kamalshkeir/ksmux"
+	"github.com/kamalshkeir/ksmux/ksps"
+	"github.com/kamalshkeir/ksmux/ws"
 	"github.com/kamalshkeir/lg"
 )
 
@@ -30,7 +31,7 @@ type Node struct {
 // NodeManager handles node registration and data synchronization
 type NodeManager struct {
 	nodes        *kmap.SafeMap[string, *Node]
-	server       *kactor.BusServer
+	server       *ksps.ServerBus
 	database     string
 	secure       bool
 	inSync       bool
@@ -56,14 +57,14 @@ func (nm *NodeManager) startHeartbeat() {
 				nodes := nm.GetNodes()
 				for _, node := range nodes {
 					// Try to ping the node
-					success := nm.server.PublishToServer(node.Secure, node.Address, map[string]any{
+					err := nm.server.PublishToServer(node.Address, map[string]any{
 						"mtype": "ping",
 						"addr":  nm.server.App().Address(),
-						"id":    nm.server.ID(),
-					}, nil)
+						"id":    nm.server.ID,
+					}, node.Secure)
 
 					wasActive := node.Active
-					if !success {
+					if err != nil {
 						if n, ok := nm.nodes.Get(node.Address); ok {
 							n.Active = false
 						}
@@ -115,7 +116,7 @@ func WithNodeManager() *NodeManager {
 		nodeManager.server.App().Config.Address = "localhost" + nodeManager.server.App().Address()
 	}
 	if nodeManagerDebug {
-		fmt.Println("Server ID:", nodeManager.server.ID())
+		fmt.Println("Server ID:", nodeManager.server.ID)
 	}
 	db := GetDefaultDbMem()
 	if db.Name != "" {
@@ -182,13 +183,13 @@ func initHandlersDashboard(app *ksmux.Router) {
 		}
 
 		// Otherwise send restart message to remote node
-		success := nodeManager.server.PublishToServer(nodeManager.IsSecure(data.Address), data.Address, map[string]any{
+		err := nodeManager.server.PublishToServer(data.Address, map[string]any{
 			"mtype": "restart_node",
 			"addr":  nodeManager.server.App().Address(),
-			"id":    nodeManager.server.ID(),
-		}, nil)
+			"id":    nodeManager.server.ID,
+		}, nodeManager.IsSecure(data.Address))
 
-		if !success {
+		if err != nil {
 			n := nodeManager.GetNode(data.Address)
 			if n != nil && n.Active {
 				n.Active = false
@@ -287,11 +288,11 @@ func initHandlersDashboard(app *ksmux.Router) {
 			return
 		}
 		// send to the removed server to remove me too
-		_ = nodeManager.server.PublishToServer(n.Secure, data.Address, map[string]any{
+		_ = nodeManager.server.PublishToServer(data.Address, map[string]any{
 			"mtype": "node_offline",
 			"addr":  nodeManager.server.App().Address(),
-			"id":    nodeManager.server.ID(),
-		}, nil)
+			"id":    nodeManager.server.ID,
+		}, n.Secure)
 		nodeManager.RemoveNode(data.Address)
 		nodes := nodeManager.GetNodes()
 		secureNodes := 0
@@ -337,14 +338,14 @@ func initNodeManagerHooks(nodeManager *NodeManager) {
 				fmt.Println("----------------------------")
 			}
 			for _, node := range nodes {
-				if success := nodeManager.server.PublishToServer(node.Secure, node.Address, map[string]any{
+				if err := nodeManager.server.PublishToServer(node.Address, map[string]any{
 					"mtype": "insert_rec",
-					"id":    nodeManager.server.ID(),
+					"id":    nodeManager.server.ID,
 					"addr":  nodeManager.server.App().Address(),
 					"table": hd.Table,
 					"pk":    hd.Pk,
 					"data":  hd.Data,
-				}, nil); !success {
+				}, node.Secure); err != nil {
 					if node.Active {
 						node.Active = false
 						nodeManager.nodes.Set(node.Address, node)
@@ -369,15 +370,15 @@ func initNodeManagerHooks(nodeManager *NodeManager) {
 					fmt.Println("----------------------------")
 				}
 				for _, node := range nodes {
-					if success := nodeManager.server.PublishToServer(node.Secure, node.Address, map[string]any{
+					if err := nodeManager.server.PublishToServer(node.Address, map[string]any{
 						"mtype":    "update_rec",
-						"id":       nodeManager.server.ID(),
+						"id":       nodeManager.server.ID,
 						"addr":     nodeManager.server.App().Address(),
 						"table":    hd.Table,
 						"pk":       hd.Pk,
 						"old_data": hd.Old,
 						"new_data": hd.New,
-					}, nil); !success {
+					}, node.Secure); err != nil {
 						if node.Active {
 							node.Active = false
 							nodeManager.nodes.Set(node.Address, node)
@@ -403,14 +404,14 @@ func initNodeManagerHooks(nodeManager *NodeManager) {
 				fmt.Println("----------------------------")
 			}
 			for _, node := range nodes {
-				if success := nodeManager.server.PublishToServer(node.Secure, node.Address, map[string]any{
+				if err := nodeManager.server.PublishToServer(node.Address, map[string]any{
 					"mtype": "delete_rec",
-					"id":    nodeManager.server.ID(),
+					"id":    nodeManager.server.ID,
 					"addr":  nodeManager.server.App().Address(),
 					"table": hd.Table,
 					"pk":    hd.Pk,
 					"data":  hd.Data,
-				}, nil); !success {
+				}, node.Secure); err != nil {
 					lg.ErrorC("Failed to sync insert")
 				}
 			}
@@ -428,12 +429,12 @@ func initNodeManagerHooks(nodeManager *NodeManager) {
 				fmt.Println("----------------------------")
 			}
 			for _, node := range nodes {
-				if success := nodeManager.server.PublishToServer(node.Secure, node.Address, map[string]any{
+				if err := nodeManager.server.PublishToServer(node.Address, map[string]any{
 					"mtype": "drop_table",
-					"id":    nodeManager.server.ID(),
+					"id":    nodeManager.server.ID,
 					"addr":  nodeManager.server.App().Address(),
 					"table": hd.Table,
-				}, nil); !success {
+				}, node.Secure); err != nil {
 					lg.ErrorC("Failed to sync insert")
 				}
 			}
@@ -441,10 +442,11 @@ func initNodeManagerHooks(nodeManager *NodeManager) {
 	})
 }
 
-func onServerData(msg map[string]any) {
+func onServerData(msgAny any, _ *ws.Conn) {
 	if nodeManager == nil {
 		return
 	}
+	msg := msgAny.(map[string]any)
 	nodeManager.inSync = true
 	defer func() {
 		if nodeManager != nil {
@@ -472,12 +474,12 @@ func onServerData(msg map[string]any) {
 		// Respond to ping
 		// id := msg["id"].(string)
 		addr := msg["addr"].(string)
-		success := nodeManager.server.PublishToServer(nodeManager.IsSecure(addr), addr, map[string]any{
+		err := nodeManager.server.PublishToServer(addr, map[string]any{
 			"mtype": "pong",
 			"addr":  nodeManager.server.App().Address(),
-			"id":    nodeManager.server.ID(),
-		}, nil)
-		if !success {
+			"id":    nodeManager.server.ID,
+		}, nodeManager.IsSecure(addr))
+		if err != nil {
 			lg.ErrorC("Failed to respond to ping")
 		}
 	case "initsync":
@@ -608,11 +610,11 @@ func onServerData(msg map[string]any) {
 			}
 		}
 		flushCache()
-		if success := nodeManager.server.PublishToServer(nodeManager.IsSecure(addr), addr, map[string]any{
+		if err := nodeManager.server.PublishToServer(addr, map[string]any{
 			"mtype": "initsync",
 			"addr":  nodeManager.server.App().Address(),
-			"id":    nodeManager.server.ID(),
-		}, nil); !success {
+			"id":    nodeManager.server.ID,
+		}, nodeManager.IsSecure(addr)); err != nil {
 			if nodeManagerDebug {
 				fmt.Println("ERROR: failed to sync data to node", "targetNode.Addr", addr, "err", err)
 			}
@@ -656,12 +658,12 @@ func onServerData(msg map[string]any) {
 		}
 
 		// Send back our node info to update the remote node's list
-		if success := nodeManager.server.PublishToServer(secure, addr, map[string]any{
+		if err := nodeManager.server.PublishToServer(addr, map[string]any{
 			"mtype":  "node_info",
 			"addr":   nodeManager.server.App().Address(),
-			"id":     nodeManager.server.ID(),
+			"id":     nodeManager.server.ID,
 			"secure": nodeManager.secure,
-		}, nil); !success {
+		}, secure); err != nil {
 			lg.ErrorC("failed to send node info")
 		}
 
@@ -709,14 +711,14 @@ func onServerData(msg map[string]any) {
 			fmt.Println("tables not found on remote:", nf)
 		}
 		// send to remote migrate statement for missing tables
-		if success := nodeManager.server.PublishToServer(nodeManager.IsSecure(addr), addr, map[string]any{
+		if err := nodeManager.server.PublishToServer(addr, map[string]any{
 			"mtype":      "migrate",
 			"addr":       nodeManager.server.App().Address(),
-			"id":         nodeManager.server.ID(),
+			"id":         nodeManager.server.ID,
 			"tables":     nf,
 			"statements": dataToSend,
 			"tablesMem":  GetTablesInfosFromDB(),
-		}, nil); !success {
+		}, nodeManager.IsSecure(addr)); err != nil {
 			lg.ErrorC("failed to sync data to node", "targetNode.Addr", addr)
 			return
 		}
@@ -749,12 +751,12 @@ func onServerData(msg map[string]any) {
 					secureNodes++
 				}
 			}
-			nodeManager.server.PubSub().Publish("korm_db_dashboard_nm", map[string]any{
+			nodeManager.server.Publish("korm_db_dashboard_nm", map[string]any{
 				"nodes":  nodes,
 				"total":  len(nodes),
 				"active": activeNodes,
 				"secure": secureNodes,
-			}, nil)
+			})
 		}
 
 		pk := ""
@@ -866,7 +868,7 @@ func onServerData(msg map[string]any) {
 		flushCache()
 		if dahsboardUsed {
 			data[pk] = pkID
-			nodeManager.server.Bus().Publish("korm_db_dashboard_hooks", msg, nil)
+			nodeManager.server.Publish("korm_db_dashboard_hooks", msg)
 		}
 	case "update_rec":
 		id := msg["id"].(string)
@@ -898,10 +900,10 @@ func onServerData(msg map[string]any) {
 				return
 			}
 			flushCache()
-			if dahsboardUsed && nodeManager != nil && nodeManager.server != nil && nodeManager.server.Bus() != nil {
+			if dahsboardUsed && nodeManager != nil && nodeManager.server != nil {
 				oldData[pk] = pkID
 				newData[pk] = pkID
-				nodeManager.server.Bus().Publish("korm_db_dashboard_hooks", msg, nil)
+				nodeManager.server.Publish("korm_db_dashboard_hooks", msg)
 			}
 		}
 	case "delete_rec":
@@ -931,7 +933,7 @@ func onServerData(msg map[string]any) {
 		flushCache()
 		if dahsboardUsed {
 			data[pk] = pkID
-			nodeManager.server.Bus().Publish("korm_db_dashboard_hooks", msg, nil)
+			nodeManager.server.Publish("korm_db_dashboard_hooks", msg)
 		}
 	case "drop_table":
 		id := msg["id"].(string)
@@ -952,7 +954,7 @@ func onServerData(msg map[string]any) {
 		}
 		flushCache()
 		if dahsboardUsed {
-			nodeManager.server.Bus().Publish("korm_db_dashboard_hooks", msg, nil)
+			nodeManager.server.Publish("korm_db_dashboard_hooks", msg)
 		}
 	case "restart_node":
 		// Received restart command from another node
@@ -988,7 +990,7 @@ func mapsEqual(m1, m2 map[string]any) bool {
 }
 
 // newNodeManager creates a new node manager
-func newNodeManager(server *kactor.BusServer, secure ...bool) *NodeManager {
+func newNodeManager(server *ksps.ServerBus, secure ...bool) *NodeManager {
 	sec := false
 	if len(secure) > 0 && secure[0] {
 		sec = true
@@ -1028,14 +1030,14 @@ func (nm *NodeManager) AddNode(node *Node) error {
 	data := map[string]any{
 		"mtype":   "addNode",
 		"addr":    nm.server.App().Address(),
-		"id":      nm.server.ID(),
+		"id":      nm.server.ID,
 		"tables":  strings.Join(tables, ","),
 		"dialect": db.Dialect,
 		"secure":  nm.secure,
 	}
-	if success := nm.server.PublishToServer(node.Secure, node.Address, data, nil); !success {
+	if err := nm.server.PublishToServer(node.Address, data, node.Secure); err != nil {
 		if nodeManagerDebug {
-			lg.ErrorC("failed to add Node", "targetNode.Addr", node.Address)
+			lg.ErrorC("failed to add Node", "targetNode.Addr", node.Address, "err", err)
 		}
 		return fmt.Errorf("address incorrect or node not available")
 	}
@@ -1148,7 +1150,7 @@ func (nm *NodeManager) SyncData(targetNode *Node) error {
 				"count":    len(cleanData),
 			}
 
-			if success := nm.server.PublishToServer(nm.IsSecure(targetNode.Address), targetNode.Address, syncData, nil); !success {
+			if err := nm.server.PublishToServer(targetNode.Address, syncData, nm.IsSecure(targetNode.Address)); err != nil {
 				lg.ErrorC("failed to sync data to node", "targetNode.Id", targetNode.ID, "err", err)
 				return err
 			}
@@ -1180,11 +1182,11 @@ func (nm *NodeManager) Shutdown() {
 	nodes := nm.GetNodes()
 	for _, node := range nodes {
 		// Try to notify each node of our departure
-		_ = nm.server.PublishToServer(node.Secure, node.Address, map[string]any{
+		_ = nm.server.PublishToServer(node.Address, map[string]any{
 			"mtype": "node_offline",
 			"addr":  nm.server.App().Address(),
-			"id":    nm.server.ID(),
-		}, nil)
+			"id":    nm.server.ID,
+		}, node.Secure)
 	}
 
 	// Clear the nodes map
