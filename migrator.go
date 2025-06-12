@@ -163,22 +163,24 @@ func autoMigrate[T any](model *T, db *DatabaseEntity, tableName string, execute 
 				}
 			}
 			switch ty {
-			case "bool", "*bool":
-				handleMigrationBool(mi)
-			case "string", "*string", "[]string", "[]int", "[]int64", "[]float64", "[]any":
-				handleMigrationString(mi)
-			case "[]uint8", "[]byte", "*[]uint8", "*[]byte":
-				handleMigrationSliceByte(mi)
-			case "float64", "float32", "*float64", "*float32":
-				handleMigrationFloat(mi)
 			case "time.Time", "*time.Time":
 				handleMigrationTime(mi)
+			case "bool", "*bool":
+				handleMigrationBool(mi)
+			case "string", "*string":
+				handleMigrationString(mi)
+			case "int", "*int", "uint", "*uint", "int64", "*int64", "uint8", "*uint8", "uint16", "*uint16", "uint32", "*uint32", "uint64", "*uint64", "int32", "*int32", "int16", "*int16", "int8", "*int8":
+				handleMigrationInt(mi)
+			case "float64", "float32", "*float64", "*float32":
+				handleMigrationFloat(mi)
+			case "[]string", "[]*string", "*[]string", "[]int", "[]*int", "*[]int", "[]uint", "*[]uint", "[]*uint", "[]int64", "*[]int64", "[]*int64", "[]float64", "*[]float64", "[]*float64", "[]any", "*[]any", "[]uint8", "[]*uint8", "[]byte", "*[]uint8", "*[]byte":
+				handleMigrationSliceByte(mi)
 			default:
-				if strings.HasPrefix(ty, "[]") || strings.HasPrefix(ty, "*[]") {
-					handleMigrationSliceByte(mi)
+				if strings.Contains(ty, ".") {
+					// struct or slice of structs
 					continue
 				}
-				if strings.HasPrefix(ty, "map") || strings.HasPrefix(ty, "*map") {
+				if strings.HasPrefix(ty, "[]") || strings.HasPrefix(ty, "*[]") || strings.HasPrefix(ty, "map") || strings.HasPrefix(ty, "*map") {
 					handleMigrationSliceByte(mi)
 					continue
 				}
