@@ -145,7 +145,7 @@ func (b *BuilderS[T]) Insert(model *T) (int, error) {
 		return 0, ErrTableNotFound
 	}
 
-	t, err := GetMemoryTable(b.tableName)
+	t, err := GetMemoryTable(b.tableName, b.db.Name)
 	if lg.CheckError(err) {
 		return 0, err
 	}
@@ -178,17 +178,26 @@ func (b *BuilderS[T]) Insert(model *T) (int, error) {
 			mvalues[k] = 0
 			continue
 		}
-
 		if typ == "time.Time" || typ == "*time.Time" {
 			switch timestamp := v.(type) {
 			case time.Time:
 				mvalues[k] = timestamp.Unix()
 			case *time.Time:
-				mvalues[k] = timestamp.Unix()
+				if timestamp != nil {
+					mvalues[k] = timestamp.Unix()
+				} else {
+					delete(mvalues, k)
+					continue
+				}
 			case string:
 				mvalues[k] = strings.ReplaceAll(timestamp, "T", " ")
 			case *string:
-				mvalues[k] = strings.ReplaceAll(*timestamp, "T", " ")
+				if timestamp != nil {
+					mvalues[k] = strings.ReplaceAll(*timestamp, "T", " ")
+				} else {
+					delete(mvalues, k)
+					continue
+				}
 			default:
 				lg.ErrorC("type not handled", "type", typ)
 				continue
@@ -275,7 +284,7 @@ func (b *BuilderS[T]) InsertR(model *T) (T, error) {
 		return *new(T), ErrTableNotFound
 	}
 
-	t, err := GetMemoryTable(b.tableName)
+	t, err := GetMemoryTable(b.tableName, b.db.Name)
 	if lg.CheckError(err) {
 		return *new(T), err
 	}
@@ -308,17 +317,30 @@ func (b *BuilderS[T]) InsertR(model *T) (T, error) {
 			mvalues[k] = 0
 			continue
 		}
+		if v == nil {
+			continue
+		}
 
 		if typ == "time.Time" || typ == "*time.Time" {
 			switch timestamp := v.(type) {
 			case time.Time:
 				mvalues[k] = timestamp.Unix()
 			case *time.Time:
-				mvalues[k] = timestamp.Unix()
+				if timestamp != nil {
+					mvalues[k] = timestamp.Unix()
+				} else {
+					delete(mvalues, k)
+					continue
+				}
 			case string:
 				mvalues[k] = strings.ReplaceAll(timestamp, "T", " ")
 			case *string:
-				mvalues[k] = strings.ReplaceAll(*timestamp, "T", " ")
+				if timestamp != nil {
+					mvalues[k] = strings.ReplaceAll(*timestamp, "T", " ")
+				} else {
+					delete(mvalues, k)
+					continue
+				}
 			default:
 				lg.ErrorC("type not handled", "type", typ)
 				continue
@@ -379,146 +401,11 @@ func (b *BuilderS[T]) InsertR(model *T) (T, error) {
 			return *new(T), err
 		}
 	}
-	m, err := Model[T]().Where(t.Pk+"=?", id).One()
+	m, err := Model[T]().Database(b.db.Name).Where(t.Pk+"=?", id).One()
 	if err != nil {
 		return *new(T), err
 	}
 	return m, nil
-}
-
-// BulkInsert insert many row at the same time in one query
-func (b *BuilderS[T]) BulkInsert(models ...*T) ([]int, error) {
-	if b.trace {
-		trace := TraceData{
-			Query:     b.statement,
-			Args:      b.args,
-			Database:  b.db.Name,
-			StartTime: time.Now(),
-		}
-		defer func() {
-			trace.Duration = time.Since(trace.StartTime)
-			defaultTracer.addTrace(trace)
-		}()
-	}
-
-	if b == nil || b.tableName == "" {
-		return nil, ErrTableNotFound
-	}
-	tx, err := b.db.Conn.BeginTx(context.Background(), &sql.TxOptions{})
-	if err != nil {
-		return nil, err
-	}
-	ids := []int{}
-	pk := ""
-	for mm := range models {
-		names, mvalues, mTypes, mtags := getStructInfos(models[mm], true)
-		if len(names) < len(mvalues) {
-			return nil, errors.New("more values than fields")
-		}
-		placeholdersSlice := []string{}
-		values := []any{}
-		ignored := []int{}
-		for i, name := range names {
-			if v, ok := mvalues[name]; ok {
-				if v == true {
-					v = 1
-				} else if v == false {
-					v = 0
-				}
-				if fType, ok := mTypes[name]; ok && strings.HasSuffix(fType, "Time") {
-					switch tyV := v.(type) {
-					case time.Time:
-						v = tyV.Unix()
-					case string:
-						v = strings.ReplaceAll(tyV, "T", " ")
-					}
-				}
-				values = append(values, v)
-			} else {
-				return nil, fmt.Errorf("field value not found")
-			}
-
-			if tags, ok := mtags[name]; ok {
-				ig := false
-				for _, tag := range tags {
-					switch tag {
-					case "autoinc", "pk", "-":
-						ig = true
-						pk = name
-					default:
-						if strings.Contains(tag, "generated") {
-							ig = true
-						}
-					}
-				}
-				if ig {
-					ignored = append(ignored, i)
-				} else {
-					placeholdersSlice = append(placeholdersSlice, "?")
-				}
-			} else {
-				placeholdersSlice = append(placeholdersSlice, "?")
-			}
-		}
-		cum := 0
-		for _, ign := range ignored {
-			ii := ign - cum
-			delete(mvalues, names[ii])
-			names = append(names[:ii], names[ii+1:]...)
-			values = append(values[:ii], values[ii+1:]...)
-			cum++
-		}
-		ph := strings.Join(placeholdersSlice, ",")
-		fields_comma_separated := strings.Join(names, ",")
-		stat := strings.Builder{}
-		stat.WriteString("INSERT INTO " + b.tableName + " (")
-		stat.WriteString(fields_comma_separated)
-		stat.WriteString(") VALUES (")
-		stat.WriteString(ph)
-		stat.WriteString(");")
-		statem := stat.String()
-		AdaptPlaceholdersToDialect(&statem, b.db.Dialect)
-		if b.debug {
-			lg.InfoC("debug", "stat", statem, "args", values)
-		}
-
-		if b.db.Dialect != POSTGRES {
-			var res sql.Result
-			if b.ctx != nil {
-				res, err = b.db.Conn.ExecContext(b.ctx, statem, values...)
-			} else {
-				res, err = b.db.Conn.Exec(statem, values...)
-			}
-			if err != nil {
-				errRoll := tx.Rollback()
-				if errRoll != nil {
-					return nil, errRoll
-				}
-				return nil, err
-			}
-			idInserted, err := res.LastInsertId()
-			if err != nil {
-				return ids, err
-			}
-			ids = append(ids, int(idInserted))
-		} else {
-			var idInserted int
-			if b.ctx != nil {
-				err = b.db.Conn.QueryRowContext(b.ctx, statem+" RETURNING "+pk, values...).Scan(&idInserted)
-			} else {
-				err = b.db.Conn.QueryRow(statem+" RETURNING "+pk, values...).Scan(&idInserted)
-			}
-			if err != nil {
-				return ids, err
-			}
-			ids = append(ids, idInserted)
-		}
-	}
-	err = tx.Commit()
-	if err != nil {
-		return ids, err
-	}
-	return ids, nil
 }
 
 // AddRelated used for many to many, and after korm.ManyToMany, to add a class to a student or a student to a class, class or student should exist in the database before adding them
@@ -560,18 +447,18 @@ func (b *BuilderS[T]) AddRelated(relatedTable string, whereRelatedTable string, 
 		cols = relatedTable + "_id," + b.tableName + "_id"
 		wherecols = relatedTable + "_id = ? and " + b.tableName + "_id = ?"
 	}
-	memoryRelatedTable, err := GetMemoryTable(relatedTable)
+	memoryRelatedTable, err := GetMemoryTable(relatedTable, b.db.Name)
 	if err != nil {
 		return 0, fmt.Errorf("memory table not found: %s", relatedTable)
 	}
-	memoryTypedTable, err := GetMemoryTable(b.tableName)
+	memoryTypedTable, err := GetMemoryTable(b.tableName, b.db.Name)
 	if err != nil {
 		return 0, fmt.Errorf("memory table not found: %s", b.tableName)
 	}
 
 	adaptTimeToUnixArgs(&whereRelatedArgs)
 	whereRelatedTable = adaptConcatAndLen(whereRelatedTable, b.db.Dialect)
-	data, err := Table(relatedTable).Where(whereRelatedTable, whereRelatedArgs...).One()
+	data, err := Table(relatedTable).Database(b.db.Name).Where(whereRelatedTable, whereRelatedArgs...).One()
 	if err != nil {
 		return 0, err
 	}
@@ -589,7 +476,7 @@ func (b *BuilderS[T]) AddRelated(relatedTable string, whereRelatedTable string, 
 	if b.whereQuery == "" {
 		return 0, fmt.Errorf("you must specify a where for the typed struct")
 	}
-	typedModel, err := Table(b.tableName).Where(b.whereQuery, b.args...).One()
+	typedModel, err := Table(b.tableName).Database(b.db.Name).Where(b.whereQuery, b.args...).One()
 	if err != nil {
 		return 0, err
 	}
@@ -650,11 +537,11 @@ func (b *BuilderS[T]) DeleteRelated(relatedTable string, whereRelatedTable strin
 		relationTableName = "m2m_" + relatedTable + "_" + b.tableName
 		wherecols = relatedTable + "_id = ? and " + b.tableName + "_id = ?"
 	}
-	memoryRelatedTable, err := GetMemoryTable(relatedTable)
+	memoryRelatedTable, err := GetMemoryTable(relatedTable, b.db.Name)
 	if err != nil {
 		return 0, fmt.Errorf("memory table not found: %s", relatedTable)
 	}
-	memoryTypedTable, err := GetMemoryTable(b.tableName)
+	memoryTypedTable, err := GetMemoryTable(b.tableName, b.db.Name)
 	if err != nil {
 		return 0, fmt.Errorf("memory table not found: %s", b.tableName)
 	}
@@ -665,7 +552,7 @@ func (b *BuilderS[T]) DeleteRelated(relatedTable string, whereRelatedTable strin
 	} else if b.db != nil {
 		whereRelatedTable = adaptConcatAndLen(whereRelatedTable, b.db.Dialect)
 	}
-	data, err := Table(relatedTable).Where(whereRelatedTable, whereRelatedArgs...).One()
+	data, err := Table(relatedTable).Database(b.db.Name).Where(whereRelatedTable, whereRelatedArgs...).One()
 	if err != nil {
 		return 0, err
 	}
@@ -680,7 +567,7 @@ func (b *BuilderS[T]) DeleteRelated(relatedTable string, whereRelatedTable strin
 	if b.whereQuery == "" {
 		return 0, fmt.Errorf("you must specify a where for the typed struct")
 	}
-	typedModel, err := Table(b.tableName).Where(b.whereQuery, b.args...).One()
+	typedModel, err := Table(b.tableName).Database(b.db.Name).Where(b.whereQuery, b.args...).One()
 	if err != nil {
 		return 0, err
 	}
@@ -691,7 +578,7 @@ func (b *BuilderS[T]) DeleteRelated(relatedTable string, whereRelatedTable strin
 			ids[1] = v
 		}
 	}
-	n, err := Table(relationTableName).Where(wherecols, ids...).Delete()
+	n, err := Table(relationTableName).Database(b.db.Name).Where(wherecols, ids...).Delete()
 	if err != nil {
 		return 0, err
 	}
@@ -769,7 +656,7 @@ func (b *BuilderS[T]) GetRelated(relatedTable string, dest any) error {
 	if b.debug {
 		lg.InfoC("debug", "stat", b.statement, "args", b.args)
 	}
-	err := Table(relationTableName).queryS(dest, b.statement, b.args...)
+	err := Table(relationTableName).Database(b.db.Name).queryS(dest, b.statement, b.args...)
 	if err != nil {
 		return err
 	}
@@ -850,7 +737,7 @@ func (b *BuilderS[T]) JoinRelated(relatedTable string, dest any) error {
 	if b.debug {
 		lg.InfoC("debug", "stat", b.statement, "args", b.args)
 	}
-	err := Table(relationTableName).queryS(dest, b.statement, b.args...)
+	err := Table(relationTableName).Database(b.db.Name).queryS(dest, b.statement, b.args...)
 	if err != nil {
 		return err
 	}
@@ -1319,7 +1206,7 @@ func (b *BuilderS[T]) All() ([]T, error) {
 	}
 
 	var models []T
-	selector := To(&models)
+	selector := To(&models).Database(b.db.Name)
 	if b.trace {
 		selector.ctx = b.ctx
 		selector.trace = true
@@ -1800,6 +1687,9 @@ func (b *BuilderS[T]) One() (T, error) {
 	if b == nil || b.tableName == "" {
 		return *new(T), ErrTableNotFound
 	}
+	if b.db == nil {
+		b.db = &databases[0]
+	}
 	c := dbCache{
 		database:   b.db.Name,
 		table:      b.tableName,
@@ -1845,7 +1735,7 @@ func (b *BuilderS[T]) One() (T, error) {
 		lg.InfoC("debug", "stat", b.statement, "args", b.args)
 	}
 	var model []T
-	err := To(&model).Query(b.statement, b.args...)
+	err := To(&model).Database(b.db.Name).Query(b.statement, b.args...)
 	if err != nil {
 		return *new(T), err
 	} else if len(model) == 0 {

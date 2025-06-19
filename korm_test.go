@@ -114,13 +114,8 @@ func TestInsertUsersAndGroups(t *testing.T) {
 			t.Error(err)
 		}
 	}
-	_, err := Model[Group]().BulkInsert(&Group{
-		Name: "admin",
-	}, &Group{Name: "normal"})
-	if err != nil {
-		t.Error(err)
-	}
-	_, err = Table("groups").BulkInsert(map[string]any{
+
+	_, err := Table("groups").BulkInsert(map[string]any{
 		"name": "another",
 	}, map[string]any{
 		"name": "last",

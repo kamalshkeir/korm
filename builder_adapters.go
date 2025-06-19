@@ -52,7 +52,9 @@ func AdaptNamedParams(dialect, statement string, variables map[string]any, unsaf
 		case time.Time:
 			value = vt.Unix()
 		case *time.Time:
-			value = vt.Unix()
+			if vt != nil {
+				value = vt.Unix()
+			}
 		}
 
 		// Handle IN clause values
@@ -99,7 +101,9 @@ func AdaptNamedParams(dialect, statement string, variables map[string]any, unsaf
 			case time.Time:
 				value = vt.Unix()
 			case *time.Time:
-				value = vt.Unix()
+				if vt != nil {
+					value = vt.Unix()
+				}
 			case string:
 				value = "'" + vt + "'"
 			}
@@ -143,7 +147,9 @@ func adaptTimeToUnixArgs(args *[]any) {
 		case time.Time:
 			(*args)[i] = v.Unix()
 		case *time.Time:
-			(*args)[i] = v.Unix()
+			if v != nil {
+				(*args)[i] = v.Unix()
+			}
 		}
 	}
 }

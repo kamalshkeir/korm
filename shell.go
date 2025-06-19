@@ -284,7 +284,7 @@ func query(queryStatement string) {
 	if queryStatement == "" {
 		queryStatement = kinput.Input(kinput.Blue, "Query: ")
 	}
-	data, err := BuilderMap().QueryM(queryStatement)
+	data, err := BuilderMap().Database(usedDB.Name).QueryM(queryStatement)
 	if err == nil {
 		d, _ := json.MarshalIndent(data, "", "    ")
 		fmt.Printf(green, string(d))
@@ -305,7 +305,7 @@ func newuser(username, email, password string, admin bool) error {
 	if err != nil {
 		return err
 	}
-	_, err = Table("users").Insert(map[string]any{
+	_, err = Table("users").Database(usedDB.Name).Insert(map[string]any{
 		"uuid":     GenerateUUID(),
 		"email":    email,
 		"password": hash,

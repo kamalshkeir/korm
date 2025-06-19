@@ -509,7 +509,9 @@ func JSON_ARRAY(values []any, as string, dialect ...string) string {
 		case time.Time:
 			valuesString = append(valuesString, fmt.Sprint(vType.Unix()))
 		case *time.Time:
-			valuesString = append(valuesString, fmt.Sprint(vType.Unix()))
+			if vType != nil {
+				valuesString = append(valuesString, fmt.Sprint(vType.Unix()))
+			}
 		default:
 			valuesString = append(valuesString, fmt.Sprint(v))
 		}
@@ -563,7 +565,9 @@ func JSON_OBJECT(values []any, as string, dialect ...string) string {
 			case time.Time:
 				vv = fmt.Sprint(val.Unix())
 			case *time.Time:
-				vv = fmt.Sprint(val.Unix())
+				if val != nil {
+					vv = fmt.Sprint(val.Unix())
+				}
 			default:
 				vv = fmt.Sprint(v)
 			}
@@ -630,8 +634,8 @@ func (sl *Selector[T]) Database(dbName string) *Selector[T] {
 	db, err := GetMemoryDatabase(dbName)
 	if err == nil {
 		sl.db = db
-	} else {
-		lg.ErrorC("db not found", "dbname", dbName)
+	} else if sl.db == nil {
+		sl.db = &databases[0]
 	}
 	return sl
 }
@@ -1018,12 +1022,26 @@ func (sl *Selector[T]) Named(statement string, args map[string]any, unsafe ...bo
 	typ := fmt.Sprintf("%T", *new(T))
 	ref := reflect.ValueOf(sl.dest)
 
-	for i := range args {
-		switch v := args[i].(type) {
+	for k, vv := range args {
+		switch v := vv.(type) {
 		case time.Time:
-			args[i] = v.Unix()
+			args[k] = v.Unix()
 		case *time.Time:
-			args[i] = v.Unix()
+			if v != nil {
+				args[k] = v.Unix()
+			} else {
+				delete(args, k)
+				continue
+			}
+		case string:
+			args[k] = strings.ReplaceAll(v, "T", " ")
+		case *string:
+			if v != nil {
+				args[k] = strings.ReplaceAll(*v, "T", " ")
+			} else {
+				delete(args, k)
+				continue
+			}
 		}
 	}
 	var query string

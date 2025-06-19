@@ -285,6 +285,9 @@ func (b *BuilderM) All() ([]map[string]any, error) {
 	if b == nil || b.tableName == "" {
 		return nil, ErrTableNotFound
 	}
+	if b.db == nil {
+		b.db = &databases[0]
+	}
 
 	c := dbCache{
 		database:   b.db.Name,
@@ -334,7 +337,7 @@ func (b *BuilderM) All() ([]map[string]any, error) {
 	if b.debug {
 		lg.InfoC("debug", "statement", b.statement, "args", b.args)
 	}
-	models, err := b.QueryM(b.statement, b.args...)
+	models, err := b.Database(b.db.Name).QueryM(b.statement, b.args...)
 	if err != nil {
 		return nil, err
 	}
@@ -362,6 +365,9 @@ func (b *BuilderM) One() (map[string]any, error) {
 
 	if b == nil || b.tableName == "" {
 		return nil, ErrTableNotFound
+	}
+	if b.db == nil {
+		b.db = &databases[0]
 	}
 
 	c := dbCache{
@@ -454,6 +460,9 @@ func (b *BuilderM) Insert(rowData map[string]any) (int, error) {
 	if b == nil || b.tableName == "" {
 		return 0, ErrTableNotFound
 	}
+	if b.db == nil {
+		b.db = &databases[0]
+	}
 	pk := ""
 	var tbmem TableEntity
 	for _, t := range b.db.Tables {
@@ -495,8 +504,16 @@ func (b *BuilderM) Insert(rowData map[string]any) (int, error) {
 			switch tyV := v.(type) {
 			case time.Time:
 				v = tyV.Unix()
+			case *time.Time:
+				if tyV != nil {
+					v = tyV.Unix()
+				}
 			case string:
 				v = strings.ReplaceAll(tyV, "T", " ")
+			case *string:
+				if tyV != nil {
+					v = strings.ReplaceAll(*tyV, "T", " ")
+				}
 			}
 		}
 
@@ -569,6 +586,9 @@ func (b *BuilderM) InsertR(rowData map[string]any) (map[string]any, error) {
 		return nil, ErrTableNotFound
 	}
 
+	if b.db == nil {
+		b.db = &databases[0]
+	}
 	pk := ""
 	var tbmem TableEntity
 	for _, t := range b.db.Tables {
@@ -610,8 +630,16 @@ func (b *BuilderM) InsertR(rowData map[string]any) (map[string]any, error) {
 			switch tyV := v.(type) {
 			case time.Time:
 				v = tyV.Unix()
+			case *time.Time:
+				if tyV != nil {
+					v = tyV.Unix()
+				}
 			case string:
 				v = strings.ReplaceAll(tyV, "T", " ")
+			case *string:
+				if tyV != nil {
+					v = strings.ReplaceAll(*tyV, "T", " ")
+				}
 			}
 		}
 
@@ -658,7 +686,7 @@ func (b *BuilderM) InsertR(rowData map[string]any) (map[string]any, error) {
 			return nil, err
 		}
 	}
-	m, err := Table(b.tableName).Where(pk+"= ?", id).One()
+	m, err := Table(b.tableName).Database(b.db.Name).Where(pk+"= ?", id).One()
 	if err != nil {
 		return nil, err
 	}
@@ -682,6 +710,9 @@ func (b *BuilderM) BulkInsert(rowsData ...map[string]any) ([]int, error) {
 
 	if b == nil || b.tableName == "" {
 		return nil, ErrTableNotFound
+	}
+	if b.db == nil {
+		b.db = &databases[0]
 	}
 
 	tx, err := b.db.Conn.BeginTx(context.Background(), &sql.TxOptions{})
@@ -729,8 +760,16 @@ func (b *BuilderM) BulkInsert(rowsData ...map[string]any) ([]int, error) {
 				switch tyV := v.(type) {
 				case time.Time:
 					v = tyV.Unix()
+				case *time.Time:
+					if tyV != nil {
+						v = tyV.Unix()
+					}
 				case string:
 					v = strings.ReplaceAll(tyV, "T", " ")
+				case *string:
+					if tyV != nil {
+						v = strings.ReplaceAll(*tyV, "T", " ")
+					}
 				}
 			}
 			values = append(values, v)
@@ -806,6 +845,9 @@ func (b *BuilderM) Set(query string, args ...any) (int, error) {
 	if b == nil || b.tableName == "" {
 		return 0, ErrTableNotFound
 	}
+	if b.db == nil {
+		b.db = &databases[0]
+	}
 	if b.whereQuery == "" {
 		return 0, errors.New("you should use Where before Update")
 	}
@@ -851,6 +893,9 @@ func (b *BuilderM) SetM(data map[string]any) (int, error) {
 
 	if b == nil || b.tableName == "" {
 		return 0, ErrTableNotFound
+	}
+	if b.db == nil {
+		b.db = &databases[0]
 	}
 	if b.whereQuery == "" {
 		return 0, errors.New("you should use Where before Update")
@@ -905,6 +950,9 @@ func (b *BuilderM) Delete() (int, error) {
 	if b == nil || b.tableName == "" {
 		return 0, ErrTableNotFound
 	}
+	if b.db == nil {
+		b.db = &databases[0]
+	}
 	b.statement = "DELETE FROM " + b.tableName
 	if b.whereQuery != "" {
 		b.statement += " WHERE " + b.whereQuery
@@ -938,6 +986,9 @@ func (b *BuilderM) Drop() (int, error) {
 	if b == nil || b.tableName == "" {
 		return 0, ErrTableNotFound
 	}
+	if b.db == nil {
+		b.db = &databases[0]
+	}
 	if v, ok := hooks.Get("drop"); ok {
 		for _, vv := range v {
 			vv(HookData{
@@ -946,6 +997,7 @@ func (b *BuilderM) Drop() (int, error) {
 			})
 		}
 	}
+
 	b.statement = "DROP TABLE IF EXISTS " + b.tableName
 	var res sql.Result
 	var err error
@@ -968,6 +1020,9 @@ func (b *BuilderM) Drop() (int, error) {
 func (b *BuilderM) AddRelated(relatedTable string, whereRelatedTable string, whereRelatedArgs ...any) (int, error) {
 	if b == nil || b.tableName == "" {
 		return 0, errors.New("unable to find model, try korm.AutoMigrate before")
+	}
+	if b.db == nil {
+		b.db = &databases[0]
 	}
 
 	relationTableName := "m2m_" + b.tableName + "-" + b.db.Name + "-" + relatedTable
@@ -992,18 +1047,18 @@ func (b *BuilderM) AddRelated(relatedTable string, whereRelatedTable string, whe
 		wherecols = relatedTable + "_id = ? and " + b.tableName + "_id = ?"
 	}
 
-	memoryRelatedTable, err := GetMemoryTable(relatedTable)
+	memoryRelatedTable, err := GetMemoryTable(relatedTable, b.db.Name)
 	if err != nil {
 		return 0, fmt.Errorf("memory table not found: %s", relatedTable)
 	}
-	memoryTypedTable, err := GetMemoryTable(b.tableName)
+	memoryTypedTable, err := GetMemoryTable(b.tableName, b.db.Name)
 	if err != nil {
 		return 0, fmt.Errorf("memory table not found: %s", relatedTable)
 	}
 	ids := make([]any, 4)
 	adaptTimeToUnixArgs(&whereRelatedArgs)
 	whereRelatedTable = adaptConcatAndLen(whereRelatedTable, b.db.Dialect)
-	data, err := Table(relatedTable).Where(whereRelatedTable, whereRelatedArgs...).One()
+	data, err := Table(relatedTable).Database(b.db.Name).Where(whereRelatedTable, whereRelatedArgs...).One()
 	if err != nil {
 		return 0, err
 	}
@@ -1020,7 +1075,7 @@ func (b *BuilderM) AddRelated(relatedTable string, whereRelatedTable string, whe
 	if b.whereQuery == "" {
 		return 0, fmt.Errorf("you must specify a where for the typed struct")
 	}
-	typedModel, err := Table(b.tableName).Where(b.whereQuery, b.args...).One()
+	typedModel, err := Table(b.tableName).Database(b.db.Name).Where(b.whereQuery, b.args...).One()
 	if err != nil {
 		return 0, err
 	}
@@ -1049,6 +1104,9 @@ func (b *BuilderM) AddRelated(relatedTable string, whereRelatedTable string, whe
 func (b *BuilderM) GetRelated(relatedTable string, dest *[]map[string]any) error {
 	if b == nil || b.tableName == "" {
 		return errors.New("unable to find model, try db.Table before")
+	}
+	if b.db == nil {
+		b.db = &databases[0]
 	}
 	relationTableName := "m2m_" + b.tableName + "-" + b.db.Name + "-" + relatedTable
 	if _, ok := relationsMap.Get("m2m_" + b.tableName + "-" + b.db.Name + "-" + relatedTable); !ok {
@@ -1120,6 +1178,9 @@ func (b *BuilderM) JoinRelated(relatedTable string, dest *[]map[string]any) erro
 	if b == nil || b.tableName == "" {
 		return errors.New("unable to find model, try db.Table before")
 	}
+	if b.db == nil {
+		b.db = &databases[0]
+	}
 	relationTableName := "m2m_" + b.tableName + "-" + b.db.Name + "-" + relatedTable
 	if _, ok := relationsMap.Get("m2m_" + b.tableName + "-" + b.db.Name + "-" + relatedTable); !ok {
 		relationTableName = "m2m_" + relatedTable + "-" + b.db.Name + "-" + b.tableName
@@ -1176,7 +1237,7 @@ func (b *BuilderM) JoinRelated(relatedTable string, dest *[]map[string]any) erro
 		lg.InfoC("debug", "statement", b.statement, "args", b.args)
 	}
 	var err error
-	*dest, err = Table(relationTableName).QueryM(b.statement, b.args...)
+	*dest, err = Table(relationTableName).Database(b.db.Name).QueryM(b.statement, b.args...)
 	if err != nil {
 		return err
 	}
@@ -1207,11 +1268,11 @@ func (b *BuilderM) DeleteRelated(relatedTable string, whereRelatedTable string, 
 		relationTableName = "m2m_" + relatedTable + "_" + b.tableName
 		wherecols = relatedTable + "_id = ? and " + b.tableName + "_id = ?"
 	}
-	memoryRelatedTable, err := GetMemoryTable(relatedTable)
+	memoryRelatedTable, err := GetMemoryTable(relatedTable, b.db.Name)
 	if err != nil {
 		return 0, fmt.Errorf("memory table not found: %s", relatedTable)
 	}
-	memoryTypedTable, err := GetMemoryTable(b.tableName)
+	memoryTypedTable, err := GetMemoryTable(b.tableName, b.db.Name)
 	if err != nil {
 		return 0, fmt.Errorf("memory table not found: %s", relatedTable)
 	}
@@ -1219,7 +1280,7 @@ func (b *BuilderM) DeleteRelated(relatedTable string, whereRelatedTable string, 
 	adaptTimeToUnixArgs(&whereRelatedArgs)
 	whereRelatedTable = adaptConcatAndLen(whereRelatedTable, b.db.Dialect)
 
-	data, err := Table(relatedTable).Where(whereRelatedTable, whereRelatedArgs...).One()
+	data, err := Table(relatedTable).Database(b.db.Name).Where(whereRelatedTable, whereRelatedArgs...).One()
 	if err != nil {
 		return 0, err
 	}
@@ -1234,7 +1295,7 @@ func (b *BuilderM) DeleteRelated(relatedTable string, whereRelatedTable string, 
 	if b.whereQuery == "" {
 		return 0, fmt.Errorf("you must specify a where for the typed struct")
 	}
-	typedModel, err := Table(b.tableName).Where(b.whereQuery, b.args...).One()
+	typedModel, err := Table(b.tableName).Database(b.db.Name).Where(b.whereQuery, b.args...).One()
 	if err != nil {
 		return 0, err
 	}
@@ -1245,7 +1306,7 @@ func (b *BuilderM) DeleteRelated(relatedTable string, whereRelatedTable string, 
 			ids[1] = v
 		}
 	}
-	n, err := Table(relationTableName).Where(wherecols, ids...).Delete()
+	n, err := Table(relationTableName).Database(b.db.Name).Where(wherecols, ids...).Delete()
 	if err != nil {
 		return 0, err
 	}
@@ -1261,6 +1322,9 @@ func (b *BuilderM) QueryM(statement string, args ...any) ([]map[string]any, erro
 		b.ctx = context.WithValue(b.ctx, traceEnabledKey, true)
 	}
 
+	if b.db == nil {
+		b.db = &databases[0]
+	}
 	if b.db.Conn == nil {
 		return nil, errors.New("no connection")
 	}
@@ -1360,6 +1424,9 @@ func (b *BuilderM) QueryMNamed(statement string, args map[string]any, unsafe ...
 		b.ctx = context.WithValue(b.ctx, traceEnabledKey, true)
 	}
 
+	if b.db == nil {
+		b.db = &databases[0]
+	}
 	if b.db.Conn == nil {
 		return nil, errors.New("no connection")
 	}
@@ -1464,6 +1531,9 @@ func (b *BuilderM) QueryMNamed(statement string, args map[string]any, unsafe ...
 func (b *BuilderM) queryS(ptrStrctSlice any, statement string, args ...any) error {
 	if b == nil || b.tableName == "" {
 		return ErrTableNotFound
+	}
+	if b.db == nil {
+		b.db = &databases[0]
 	}
 	AdaptPlaceholdersToDialect(&statement, b.db.Dialect)
 	adaptTimeToUnixArgs(&args)

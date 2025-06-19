@@ -18,7 +18,7 @@ func GetTablesInfosFromDB(tables ...string) []TableEntity {
 	if len(tables) == 0 {
 		tables = GetAllTables(defaultDB)
 	}
-	tinfos, err := Model[TablesInfos]().Where("name IN (?)", tables).All()
+	tinfos, err := Model[TablesInfos]().Database(defaultDB).Where("name IN (?)", tables).All()
 	if lg.CheckError(err) {
 		return nil
 	}

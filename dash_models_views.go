@@ -30,7 +30,7 @@ var TablesView = func(c *ksmux.Context) {
 		TableName string `db:"table_name"`
 		Count     int    `db:"count"`
 	}
-	if err := To(&results).Query(query); lg.CheckError(err) {
+	if err := To(&results).Database(defaultDB).Query(query); lg.CheckError(err) {
 		c.Error("something wrong happened")
 		return
 	}
@@ -85,12 +85,12 @@ var TableGetAll = func(c *ksmux.Context) {
 	// Get total count for pagination
 	var total int64
 	var totalRows []int64
-	err = To(&totalRows).Query("SELECT COUNT(*) FROM " + model)
+	err = To(&totalRows).Database(defaultDB).Query("SELECT COUNT(*) FROM " + model)
 	if err == nil {
 		total = totalRows[0]
 	}
 
-	dbCols, cols := GetAllColumnsTypes(model)
+	dbCols, cols := GetAllColumnsTypes(model, defaultDB)
 	mmfkeysModels := map[string][]map[string]any{}
 	mmfkeys := map[string][]any{}
 	if t != nil {
@@ -196,7 +196,7 @@ var AllModelsGet = func(c *ksmux.Context) {
 			}
 		}
 	}
-	dbCols, cols := GetAllColumnsTypes(model)
+	dbCols, cols := GetAllColumnsTypes(model, defaultDB)
 	mmfkeysModels := map[string][]map[string]any{}
 	mmfkeys := map[string][]any{}
 	if t != nil {
@@ -365,7 +365,7 @@ var AllModelsSearch = func(c *ksmux.Context) {
 			query += " WHERE " + vStr
 		}
 	}
-	err = To(&totalRows).Query(query)
+	err = To(&totalRows).Database(defaultDB).Query(query)
 	if err == nil {
 		total = totalRows[0]
 	}
@@ -408,7 +408,9 @@ var BulkDeleteRowPost = func(c *ksmux.Context) {
 		})
 		return
 	}
-	flushCache()
+	if data.Table == "users" {
+		flushCache()
+	}
 	c.Json(map[string]any{
 		"success": "DELETED WITH SUCCESS",
 		"ids":     data.Ids,
@@ -474,7 +476,9 @@ var CreateModelView = func(c *ksmux.Context) {
 		inserted[formName[0]] = pathUploaded[0]
 	}
 
-	flushCache()
+	if data["table"][0] == "users" {
+		flushCache()
+	}
 	c.Json(map[string]any{
 		"success":  "Done !",
 		"inserted": inserted,
@@ -585,7 +589,9 @@ var UpdateRowPost = func(c *ksmux.Context) {
 		return
 	}
 
-	flushCache()
+	if data["table"][0] == "users" {
+		flushCache()
+	}
 	c.Json(map[string]any{
 		"success": ret,
 	})
@@ -626,7 +632,9 @@ func handleFilesUpload(files map[string][]*multipart.FileHeader, model string, i
 				}
 			}
 		}
-		flushCache()
+		if model == "users" {
+			flushCache()
+		}
 	}
 	return uploadedPath, formName, nil
 }
@@ -652,7 +660,9 @@ var DropTablePost = func(c *ksmux.Context) {
 			"error": "missing 'table' in body request",
 		})
 	}
-	flushCache()
+	if data["table"] == "users" {
+		flushCache()
+	}
 	c.Json(map[string]any{
 		"success": fmt.Sprintf("table %s Deleted !", data["table"]),
 	})
@@ -816,7 +826,9 @@ var ImportView = func(c *ksmux.Context) {
 		})
 		return
 	}
-	flushCache()
+	if table == "users" {
+		flushCache()
+	}
 
 	c.Json(map[string]any{
 		"success": "Import Done , you can see uploaded backups at ./" + mediaDir + "/backup folder",
