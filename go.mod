@@ -7,7 +7,7 @@ require (
 	github.com/kamalshkeir/argon v1.0.1
 	github.com/kamalshkeir/kinput v0.1.0
 	github.com/kamalshkeir/kmap v1.1.8
-	github.com/kamalshkeir/ksmux v0.8.1
+	github.com/kamalshkeir/ksmux v0.8.2
 	github.com/kamalshkeir/kstrct v1.9.22
 	github.com/kamalshkeir/lg v0.1.4
 )
