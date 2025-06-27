@@ -120,7 +120,7 @@ func WithNodeManager() *NodeManager {
 	}
 	db := GetDefaultDbMem()
 	if db.Name != "" {
-		dbTe := GetTablesInfosFromDB()
+		dbTe := GetTablesInfosFromDB(db.Name)
 		for _, teDB := range dbTe {
 			found := false
 			for _, t := range db.Tables {
@@ -603,7 +603,7 @@ func onServerData(msgAny any, _ *ws.Conn) {
 					if nodeManagerDebug {
 						fmt.Println("adding changes trigger for", tr)
 					}
-					err = AddChangesTrigger(tr)
+					err = AddChangesTrigger(tr, defaultDB)
 					lg.CheckError(err)
 					m[tr] = true
 				}
@@ -717,7 +717,7 @@ func onServerData(msgAny any, _ *ws.Conn) {
 			"id":         nodeManager.server.ID,
 			"tables":     nf,
 			"statements": dataToSend,
-			"tablesMem":  GetTablesInfosFromDB(),
+			"tablesMem":  GetTablesInfosFromDB(db.Name),
 		}, nodeManager.IsSecure(addr)); err != nil {
 			lg.ErrorC("failed to sync data to node", "targetNode.Addr", addr)
 			return

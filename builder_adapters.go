@@ -160,9 +160,10 @@ func adaptSetQuery(query *string) {
 	hasQuestionMark := false
 	hasEqual := false
 	for i := range q {
-		if q[i] == '?' {
+		switch q[i] {
+		case '?':
 			hasQuestionMark = true
-		} else if q[i] == '=' {
+		case '=':
 			hasEqual = true
 		}
 	}

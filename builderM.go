@@ -494,9 +494,10 @@ func (b *BuilderM) Insert(rowData map[string]any) (int, error) {
 		} else {
 			keys = append(keys, k)
 		}
-		if v == true {
+		switch v {
+		case true:
 			v = 1
-		} else if v == false {
+		case false:
 			v = 0
 		}
 
@@ -620,9 +621,10 @@ func (b *BuilderM) InsertR(rowData map[string]any) (map[string]any, error) {
 			keys = append(keys, k)
 		}
 
-		if v == true {
+		switch v {
+		case true:
 			v = 1
-		} else if v == false {
+		case false:
 			v = 0
 		}
 
@@ -751,9 +753,10 @@ func (b *BuilderM) BulkInsert(rowsData ...map[string]any) ([]int, error) {
 			} else {
 				keys = append(keys, k)
 			}
-			if v == true {
+			switch v {
+			case true:
 				v = 1
-			} else if v == false {
+			case false:
 				v = 0
 			}
 			if vvv, ok := tbmem.ModelTypes[k]; ok && strings.HasSuffix(vvv, "Time") {

@@ -56,7 +56,7 @@ func cloneAndMigrateDashboard(migrateUser bool, staticAndTemplatesEmbeded ...emb
 		lg.CheckError(err)
 	}
 	if migrateUser {
-		err := AutoMigrate[User]("users")
+		err := AutoMigrate[User]("users", defaultDB)
 		if lg.CheckError(err) {
 			return
 		}

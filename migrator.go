@@ -14,11 +14,11 @@ import (
 
 var triggersTables = make(map[string]struct{}, 0)
 
-func GetTablesInfosFromDB(tables ...string) []TableEntity {
+func GetTablesInfosFromDB(dbName string, tables ...string) []TableEntity {
 	if len(tables) == 0 {
-		tables = GetAllTables(defaultDB)
+		tables = GetAllTables(dbName)
 	}
-	tinfos, err := Model[TablesInfos]().Database(defaultDB).Where("name IN (?)", tables).All()
+	tinfos, err := Model[TablesInfos]().Database(dbName).Where("name IN (?)", tables).All()
 	if lg.CheckError(err) {
 		return nil
 	}
@@ -62,14 +62,15 @@ func GetTablesInfosFromDB(tables ...string) []TableEntity {
 func checkUpdatedAtTrigger(dialect, tableName, col, pk string) map[string][]string {
 	triggers := map[string][]string{}
 	t := "strftime('%s', 'now')"
-	if dialect == SQLITE || dialect == "sqlite" {
+	switch dialect {
+	case SQLITE, "sqlite":
 		st := "CREATE TRIGGER IF NOT EXISTS "
 		st += tableName + "_update_trig AFTER UPDATE ON " + tableName
 		st += " BEGIN update " + tableName + " SET " + col + " = " + t
 		st += " WHERE " + pk + " = " + "NEW." + pk + ";"
 		st += "End;"
 		triggers[col] = []string{st}
-	} else if dialect == POSTGRES {
+	case POSTGRES:
 		st := "CREATE OR REPLACE FUNCTION updated_at_trig() RETURNS trigger AS $$"
 		st += " BEGIN NEW." + col + " = extract(epoch from now());RETURN NEW;"
 		st += "END;$$ LANGUAGE plpgsql;"
@@ -78,7 +79,7 @@ func checkUpdatedAtTrigger(dialect, tableName, col, pk string) map[string][]stri
 		trigCreate += " BEFORE UPDATE ON public." + tableName
 		trigCreate += " FOR EACH ROW EXECUTE PROCEDURE updated_at_trig();"
 		triggers[col] = append(triggers[col], trigCreate)
-	} else {
+	default:
 		return nil
 	}
 	return triggers
@@ -157,18 +158,13 @@ func autoMigrate[T any](model *T, db *DatabaseEntity, tableName string, execute 
 				mindexes: &mindexes,
 				uindexes: &uindexes,
 			}
-			if ty[0] != '[' && strings.Contains(ty, "int") {
-				if ty[0] != '*' && ty[1] != '[' {
-					handleMigrationInt(mi)
-				}
-			}
 			switch ty {
 			case "time.Time", "*time.Time":
 				handleMigrationTime(mi)
-			case "bool", "*bool":
-				handleMigrationBool(mi)
 			case "string", "*string":
 				handleMigrationString(mi)
+			case "bool", "*bool":
+				handleMigrationBool(mi)
 			case "int", "*int", "uint", "*uint", "int64", "*int64", "uint8", "*uint8", "uint16", "*uint16", "uint32", "*uint32", "uint64", "*uint64", "int32", "*int32", "int16", "*int16", "int8", "*int8":
 				handleMigrationInt(mi)
 			case "float64", "float32", "*float64", "*float32":
@@ -211,7 +207,8 @@ func autoMigrate[T any](model *T, db *DatabaseEntity, tableName string, execute 
 	} else {
 		for col, tags := range mFieldName_Tags {
 			for _, tag := range tags {
-				if tag == "now" {
+				switch tag {
+				case "now":
 					createTrigger := fmt.Sprintf(`CREATE TRIGGER before_insert_%s_%s
 					BEFORE INSERT ON %s
 					FOR EACH ROW
@@ -223,7 +220,7 @@ func autoMigrate[T any](model *T, db *DatabaseEntity, tableName string, execute 
 						triggers = make(map[string][]string)
 					}
 					triggers["mysql_triggers"] = append(triggers["mysql_triggers"], createTrigger)
-				} else if tag == "update" {
+				case "update":
 					createTrigger := fmt.Sprintf(`CREATE TRIGGER before_update_%s_%s
 					BEFORE UPDATE ON %s
 					FOR EACH ROW
@@ -370,7 +367,7 @@ func autoMigrate[T any](model *T, db *DatabaseEntity, tableName string, execute 
 func autoMigrateAny(model any, db *DatabaseEntity, tableName string, execute bool) (string, error) {
 	toReturnstats := []string{}
 	dialect := db.Dialect
-	s := reflect.ValueOf(model)
+	s := reflect.ValueOf(model).Elem()
 	typeOfT := s.Type()
 	mFieldName_Type := map[string]string{}
 	mFieldName_Tags := map[string][]string{}
@@ -409,10 +406,15 @@ func autoMigrateAny(model any, db *DatabaseEntity, tableName string, execute boo
 		cols = append(cols, fname)
 	}
 	if pk == "" {
-		cols = append([]string{"id"}, cols...)
-		mFieldName_Type["id"] = "uint"
-		mFieldName_Tags["id"] = []string{"pk"}
-		pk = "id"
+		if v := strings.ToLower(typeOfT.Field(0).Name); strings.HasSuffix(v, "id") {
+			pk = v
+			mFieldName_Tags[pk] = []string{"pk"}
+		} else {
+			cols = append([]string{"id"}, cols...)
+			mFieldName_Type["id"] = "uint"
+			mFieldName_Tags["id"] = []string{"pk"}
+			pk = "id"
+		}
 	}
 
 	res := map[string]string{}
@@ -441,18 +443,32 @@ func autoMigrateAny(model any, db *DatabaseEntity, tableName string, execute boo
 				}
 			}
 			switch ty {
-			case "bool", "*bool":
-				handleMigrationBool(mi)
-			case "string", "*string", "[]string", "[]int", "[]int64", "[]float64", "[]any":
-				handleMigrationString(mi)
-			case "[]uint8", "[]byte", "*[]uint8", "*[]byte":
-				handleMigrationSliceByte(mi)
-			case "float64", "float32", "*float64", "*float32":
-				handleMigrationFloat(mi)
 			case "time.Time", "*time.Time":
 				handleMigrationTime(mi)
+			case "bool", "*bool":
+				handleMigrationBool(mi)
+			case "string", "*string":
+				handleMigrationString(mi)
+			case "int", "*int", "uint", "*uint", "int64", "*int64", "uint8", "*uint8", "uint16", "*uint16", "uint32", "*uint32", "uint64", "*uint64", "int32", "*int32", "int16", "*int16", "int8", "*int8":
+				handleMigrationInt(mi)
+			case "float64", "float32", "*float64", "*float32":
+				handleMigrationFloat(mi)
+			case "[]string", "[]*string", "*[]string", "[]int", "[]*int", "*[]int", "[]uint", "*[]uint", "[]*uint", "[]int64", "*[]int64", "[]*int64", "[]float64", "*[]float64", "[]*float64", "[]any", "*[]any", "[]uint8", "[]*uint8", "[]byte", "*[]uint8", "*[]byte":
+				handleMigrationSliceByte(mi)
 			default:
+				if strings.Contains(ty, ".") {
+					// struct or slice of structs
+					continue
+				}
+				if strings.HasPrefix(ty, "[]") || strings.HasPrefix(ty, "*[]") || strings.HasPrefix(ty, "map") || strings.HasPrefix(ty, "*map") {
+					handleMigrationSliceByte(mi)
+					continue
+				}
 				if tags, ok := mFieldName_Tags[fName]; ok {
+					if strings.Contains(strings.Join(tags, ","), "json") {
+						handleMigrationSliceByte(mi)
+						continue
+					}
 					if !strings.Contains(strings.Join(tags, ","), "generated") && !strings.Contains(ty, "int") {
 						lg.Errorf("%s of type %s not handled", fName, ty)
 					}
@@ -475,7 +491,8 @@ func autoMigrateAny(model any, db *DatabaseEntity, tableName string, execute boo
 	} else {
 		for col, tags := range mFieldName_Tags {
 			for _, tag := range tags {
-				if tag == "now" {
+				switch tag {
+				case "now":
 					createTrigger := fmt.Sprintf(`CREATE TRIGGER before_insert_%s_%s
 					BEFORE INSERT ON %s
 					FOR EACH ROW
@@ -487,7 +504,7 @@ func autoMigrateAny(model any, db *DatabaseEntity, tableName string, execute boo
 						triggers = make(map[string][]string)
 					}
 					triggers["mysql_triggers"] = append(triggers["mysql_triggers"], createTrigger)
-				} else if tag == "update" {
+				case "update":
 					createTrigger := fmt.Sprintf(`CREATE TRIGGER before_update_%s_%s
 					BEFORE UPDATE ON %s
 					FOR EACH ROW
@@ -674,10 +691,10 @@ func AutoMigrate[T any](tableName string, dbName ...string) error {
 			return err
 		}
 	}
-	LinkModel[T](tableName, db.Name)
+	LinkModel[T](tableName, dbname)
 	if tableName != "users" && tableName != "_triggers_queue" && tableName != "_tables_infos" {
 		if _, ok := triggersTables[tableName]; !ok {
-			err = AddChangesTrigger(tableName)
+			err = AddChangesTrigger(tableName, dbname)
 			if !lg.CheckError(err) {
 				triggersTables[tableName] = struct{}{}
 			}

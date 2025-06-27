@@ -176,9 +176,9 @@ func New(dbType Dialect, dbName string, dbDriver driver.Driver, dbDSN ...string)
 			Tables:  []TableEntity{},
 		})
 	}
-	err = AutoMigrate[TablesInfos]("_tables_infos")
+	err = AutoMigrate[TablesInfos]("_tables_infos", dbName)
 	lg.CheckError(err)
-	err = AutoMigrate[TriggersQueue]("_triggers_queue")
+	err = AutoMigrate[TriggersQueue]("_triggers_queue", dbName)
 	lg.CheckError(err)
 
 	initCacheHooks()
