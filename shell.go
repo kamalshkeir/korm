@@ -15,11 +15,10 @@ import (
 )
 
 const (
-	red     = "\033[1;31m%v\033[0m\n"
-	green   = "\033[1;32m%v\033[0m\n"
-	yellow  = "\033[1;33m%v\033[0m\n"
-	blue    = "\033[1;34m%v\033[0m\n"
-	magenta = "\033[5;35m%v\033[0m\n"
+	red    = "\033[1;31m%v\033[0m\n"
+	green  = "\033[1;32m%v\033[0m\n"
+	yellow = "\033[1;33m%v\033[0m\n"
+	blue   = "\033[1;34m%v\033[0m\n"
 )
 
 var usedDB DatabaseEntity

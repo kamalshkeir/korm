@@ -707,7 +707,8 @@ func (sl *Selector[T]) Query(statement string, args ...any) error {
 
 	var stt string
 	if useCache && !sl.nocache {
-		stt = statement + fmt.Sprint(args...)
+		// Include database name in cache key to prevent cross-database cache pollution
+		stt = sl.db.Name + "::" + statement + fmt.Sprint(args...)
 		if v, ok := cacheQ.Get(stt); ok {
 			if len(*sl.dest) == 0 {
 				*sl.dest = v.([]T)
@@ -1010,7 +1011,8 @@ func (sl *Selector[T]) Named(statement string, args map[string]any, unsafe ...bo
 
 	var stt string
 	if useCache && !sl.nocache {
-		stt = statement + fmt.Sprint(args)
+		// Include database name in cache key to prevent cross-database cache pollution
+		stt = sl.db.Name + "::" + statement + fmt.Sprint(args)
 		if v, ok := cacheQ.Get(stt); ok {
 			if len(*sl.dest) == 0 {
 				*sl.dest = v.([]T)

@@ -301,8 +301,10 @@ func (b *BuilderM) All() ([]map[string]any, error) {
 		page:       b.page,
 		args:       fmt.Sprint(b.args...),
 	}
+	// Use database+table as cache key to prevent cross-database cache pollution
+	cacheKey := b.db.Name + "::m::" + b.tableName
 	if useCache && !b.nocache {
-		if v, ok := caches.Get(b.tableName); ok {
+		if v, ok := caches.Get(cacheKey); ok {
 			if vv, ok := v.Get(c); ok {
 				if vvs, ok := vv.([]map[string]any); ok {
 					return vvs, nil
@@ -342,13 +344,13 @@ func (b *BuilderM) All() ([]map[string]any, error) {
 		return nil, err
 	}
 	if useCache && !b.nocache {
-		if v, ok := caches.Get(b.tableName); ok {
+		if v, ok := caches.Get(cacheKey); ok {
 			v.Set(c, models)
-			caches.Set(b.tableName, v)
+			caches.Set(cacheKey, v)
 		} else {
 			new := kmap.New[dbCache, any]()
 			new.Set(c, models)
-			caches.Set(b.tableName, new)
+			caches.Set(cacheKey, new)
 		}
 	}
 	return models, nil
@@ -382,8 +384,10 @@ func (b *BuilderM) One() (map[string]any, error) {
 		page:       b.page,
 		args:       fmt.Sprint(b.args...),
 	}
+	// Use database+table as cache key to prevent cross-database cache pollution
+	cacheKey := b.db.Name + "::m::" + b.tableName
 	if useCache && !b.nocache {
-		if v, ok := caches.Get("s" + b.tableName); ok {
+		if v, ok := caches.Get(cacheKey); ok {
 			if vv, ok := v.Get(c); ok {
 				if vvmap, ok := vv.(map[string]any); ok {
 					return vvmap, nil
@@ -426,13 +430,13 @@ func (b *BuilderM) One() (map[string]any, error) {
 		return nil, ErrNoData
 	}
 	if useCache && !b.nocache {
-		if v, ok := caches.Get(b.tableName); ok {
+		if v, ok := caches.Get(cacheKey); ok {
 			v.Set(c, models[0])
-			caches.Set(b.tableName, v)
+			caches.Set(cacheKey, v)
 		} else {
 			new := kmap.New[dbCache, any]()
 			new.Set(c, models[0])
-			caches.Set("s"+b.tableName, new)
+			caches.Set(cacheKey, new)
 		}
 	}
 
@@ -1336,8 +1340,10 @@ func (b *BuilderM) QueryM(statement string, args ...any) ([]map[string]any, erro
 		statement: statement,
 		args:      fmt.Sprint(args...),
 	}
+	// Use database+table as cache key to prevent cross-database cache pollution
+	cacheKey := b.db.Name + "::m::" + b.tableName
 	if useCache && !b.nocache {
-		if v, ok := caches.Get("qmm" + b.tableName); ok {
+		if v, ok := caches.Get(cacheKey); ok {
 			if vv, ok := v.Get(c); ok {
 				if vvs, ok := vv.([]map[string]any); ok {
 					return vvs, nil
@@ -1400,13 +1406,13 @@ func (b *BuilderM) QueryM(statement string, args ...any) ([]map[string]any, erro
 		return nil, ErrNoData
 	}
 	if useCache && !b.nocache {
-		if v, ok := caches.Get("qmm" + b.tableName); ok {
+		if v, ok := caches.Get(b.db.Name + "::qmm" + b.tableName); ok {
 			v.Set(c, listMap)
-			caches.Set(b.tableName, v)
+			caches.Set(cacheKey, v)
 		} else {
 			new := kmap.New[dbCache, any]()
 			new.Set(c, listMap)
-			caches.Set(b.tableName, new)
+			caches.Set(cacheKey, new)
 		}
 	}
 	return listMap, nil
@@ -1442,8 +1448,10 @@ func (b *BuilderM) QueryMNamed(statement string, args map[string]any, unsafe ...
 		statement: statement,
 		args:      rgs,
 	}
+	// Use database+table as cache key to prevent cross-database cache pollution
+	cacheKey := b.db.Name + "::m::" + b.tableName
 	if useCache && !b.nocache {
-		if v, ok := caches.Get("qmnn" + b.tableName); ok {
+		if v, ok := caches.Get(cacheKey); ok {
 			if vv, ok := v.Get(c); ok {
 				if vvs, ok := vv.([]map[string]any); ok {
 					return vvs, nil
@@ -1519,13 +1527,13 @@ func (b *BuilderM) QueryMNamed(statement string, args map[string]any, unsafe ...
 		return nil, ErrNoData
 	}
 	if useCache && !b.nocache {
-		if v, ok := caches.Get("qmnn" + b.tableName); ok {
+		if v, ok := caches.Get(b.db.Name + "::qmnn" + b.tableName); ok {
 			v.Set(c, listMap)
-			caches.Set(b.tableName, v)
+			caches.Set(cacheKey, v)
 		} else {
 			new := kmap.New[dbCache, any]()
 			new.Set(c, listMap)
-			caches.Set(b.tableName, new)
+			caches.Set(cacheKey, new)
 		}
 	}
 	return listMap, nil

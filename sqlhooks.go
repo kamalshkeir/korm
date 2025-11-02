@@ -32,23 +32,30 @@ func (h *logAndCacheHook) Before(ctx context.Context, query string, args ...any)
 }
 
 func (h *logAndCacheHook) After(ctx context.Context, query string, args ...any) (context.Context, error) {
-	if !logQueries && ctx.Value(traceEnabledKey) == nil {
-		return ctx, nil
-	}
-
-	if strings.Contains(strings.ToUpper(query), "DROP") {
+	// Check for cache invalidation FIRST (before early return)
+	queryUpper := strings.ToUpper(query)
+	if strings.Contains(queryUpper, "INSERT") || strings.Contains(queryUpper, "UPDATE") || strings.Contains(queryUpper, "DELETE") || strings.Contains(queryUpper, "DROP") {
 		flushCache()
-		if v, ok := hooks.Get("drop"); ok {
-			for _, vv := range v {
-				vv(HookData{
-					Operation: "drop",
-					Data: map[string]any{
-						"query": query,
-						"args":  args,
-					},
-				})
+
+		// Call appropriate hooks
+		if strings.Contains(queryUpper, "DROP") {
+			if v, ok := hooks.Get("drop"); ok {
+				for _, vv := range v {
+					vv(HookData{
+						Operation: "drop",
+						Data: map[string]any{
+							"query": query,
+							"args":  args,
+						},
+					})
+				}
 			}
 		}
+	}
+
+	// Early return for logging/tracing
+	if !logQueries && ctx.Value(traceEnabledKey) == nil {
+		return ctx, nil
 	}
 
 	startTime, _ := ctx.Value(ksmux.ContextKey("trace_start")).(time.Time)

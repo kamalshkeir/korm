@@ -1,20 +1,88 @@
 package benchmarks
 
 import (
-	"log"
-	"os"
-	"strconv"
 	"testing"
 	"time"
 
 	"github.com/kamalshkeir/korm"
-	"github.com/kamalshkeir/lg"
 	//"gorm.io/driver/sqlite"
 	//"gorm.io/gorm"
 )
 
 var DB_BENCH_NAME = "bench"
 var NumberOfModel = 300 // min 300
+
+// func TestMain(m *testing.M) {
+// 	var err error
+// 	err = korm.New(korm.SQLITE, DB_BENCH_NAME, sqlitedriver.Use())
+// 	if lg.CheckError(err) {
+// 		return
+// 	}
+// 	// gormDB, err = gorm.Open(sqlite.Open("benchgorm.sqlite"), &gorm.Config{})
+// 	// if lg.CheckError(err) {
+// 	// 	return
+// 	// }
+// 	// migrate table test_table from struct TestTable
+// 	err = korm.AutoMigrate[TestTable]("test_table")
+// 	if lg.CheckError(err) {
+// 		return
+// 	}
+// 	t, _ := korm.Table("test_table").All()
+// 	if len(t) == 0 {
+// 		for i := 0; i < NumberOfModel; i++ {
+// 			_, err := korm.Model[TestTable]().Insert(&TestTable{
+// 				Email:    "test-" + strconv.Itoa(i) + "@example.com",
+// 				Content:  "Duis tortor odio, sodales quis lacinia quis, tincidunt id dolor. Curabitur tempor nunc at lacinia commodo. Aliquam sapien orci, rhoncus a cursus nec, accumsan ut tortor. Sed sed laoreet ipsum. Ut vulputate porttitor libero, non aliquet est rutrum nec. Nullam vitae viverra tortor.",
+// 				Password: "aaffsbfaaaj2sbfsdjqbfsa2bfesfb",
+// 				IsAdmin:  true,
+// 			})
+// 			lg.CheckError(err)
+// 		}
+// 	}
+// 	// gorm
+// 	// err = gormDB.AutoMigrate(&TestTableGorm{})
+// 	// if lg.CheckError(err) {
+// 	// 	return
+// 	// }
+// 	// dest := []TestTableGorm{}
+// 	// err = gormDB.Find(&dest, &TestTableGorm{}).Error
+// 	// if err != nil || len(dest) == 0 {
+// 	// 	for i := 0; i < NumberOfModel; i++ {
+// 	// 		err := gormDB.Create(&TestTableGorm{
+// 	// 			Email:    "test-" + strconv.Itoa(i) + "@example.com",
+// 	// 			Content:  "Duis tortor odio, sodales quis lacinia quis, tincidunt id dolor. Curabitur tempor nunc at lacinia commodo. Aliquam sapien orci, rhoncus a cursus nec, accumsan ut tortor. Sed sed laoreet ipsum. Ut vulputate porttitor libero, non aliquet est rutrum nec. Nullam vitae viverra tortor.",
+// 	// 			Password: "aaffsbfaaaj2sbfsdjqbfsa2bfesfb",
+// 	// 			IsAdmin:  true,
+// 	// 		}).Error
+// 	// 		if lg.CheckError(err) {
+// 	// 			return
+// 	// 		}
+// 	// 	}
+// 	// }
+
+// 	//run tests
+// 	exitCode := m.Run()
+
+// 	err = korm.Shutdown(DB_BENCH_NAME)
+// 	if lg.CheckError(err) {
+// 		return
+// 	}
+// 	// gormdb, _ := gormDB.DB()
+// 	// err = gormdb.Close()
+// 	// if lg.CheckError(err) {
+// 	// 	return
+// 	// }
+// 	// Cleanup for sqlite , remove file db
+// 	err = os.Remove(DB_BENCH_NAME + ".sqlite3")
+// 	if err != nil {
+// 		log.Fatal(err)
+// 	}
+// 	// err = os.Remove("benchgorm.sqlite")
+// 	// if err != nil {
+// 	// 	log.Fatal(err)
+// 	// }
+// 	os.Exit(exitCode)
+// }
 
 type TestTable struct {
 	Id        uint `korm:"pk"`
@@ -37,78 +105,6 @@ type TestTableGorm struct {
 }
 
 //var gormDB *gorm.DB
-
-func TestMain(m *testing.M) {
-	var err error
-	// err = korm.New(korm.SQLITE, DB_BENCH_NAME, sqlitedriver.Use())
-	// if lg.CheckError(err) {
-	// 	return
-	// }
-	// gormDB, err = gorm.Open(sqlite.Open("benchgorm.sqlite"), &gorm.Config{})
-	// if lg.CheckError(err) {
-	// 	return
-	// }
-	// migrate table test_table from struct TestTable
-	err = korm.AutoMigrate[TestTable]("test_table")
-	if lg.CheckError(err) {
-		return
-	}
-	t, _ := korm.Table("test_table").All()
-	if len(t) == 0 {
-		for i := 0; i < NumberOfModel; i++ {
-			_, err := korm.Model[TestTable]().Insert(&TestTable{
-				Email:    "test-" + strconv.Itoa(i) + "@example.com",
-				Content:  "Duis tortor odio, sodales quis lacinia quis, tincidunt id dolor. Curabitur tempor nunc at lacinia commodo. Aliquam sapien orci, rhoncus a cursus nec, accumsan ut tortor. Sed sed laoreet ipsum. Ut vulputate porttitor libero, non aliquet est rutrum nec. Nullam vitae viverra tortor.",
-				Password: "aaffsbfaaaj2sbfsdjqbfsa2bfesfb",
-				IsAdmin:  true,
-			})
-			lg.CheckError(err)
-		}
-	}
-	// gorm
-	// err = gormDB.AutoMigrate(&TestTableGorm{})
-	// if lg.CheckError(err) {
-	// 	return
-	// }
-	// dest := []TestTableGorm{}
-	// err = gormDB.Find(&dest, &TestTableGorm{}).Error
-	// if err != nil || len(dest) == 0 {
-	// 	for i := 0; i < NumberOfModel; i++ {
-	// 		err := gormDB.Create(&TestTableGorm{
-	// 			Email:    "test-" + strconv.Itoa(i) + "@example.com",
-	// 			Content:  "Duis tortor odio, sodales quis lacinia quis, tincidunt id dolor. Curabitur tempor nunc at lacinia commodo. Aliquam sapien orci, rhoncus a cursus nec, accumsan ut tortor. Sed sed laoreet ipsum. Ut vulputate porttitor libero, non aliquet est rutrum nec. Nullam vitae viverra tortor.",
-	// 			Password: "aaffsbfaaaj2sbfsdjqbfsa2bfesfb",
-	// 			IsAdmin:  true,
-	// 		}).Error
-	// 		if lg.CheckError(err) {
-	// 			return
-	// 		}
-	// 	}
-	// }
-
-	//run tests
-	exitCode := m.Run()
-
-	err = korm.Shutdown(DB_BENCH_NAME)
-	if lg.CheckError(err) {
-		return
-	}
-	// gormdb, _ := gormDB.DB()
-	// err = gormdb.Close()
-	// if lg.CheckError(err) {
-	// 	return
-	// }
-	// Cleanup for sqlite , remove file db
-	err = os.Remove(DB_BENCH_NAME + ".sqlite3")
-	if err != nil {
-		log.Fatal(err)
-	}
-	// err = os.Remove("benchgorm.sqlite")
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	os.Exit(exitCode)
-}
 
 // func BenchmarkGetAllS_GORM(b *testing.B) {
 // 	b.ReportAllocs()

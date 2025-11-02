@@ -408,9 +408,7 @@ var BulkDeleteRowPost = func(c *ksmux.Context) {
 		})
 		return
 	}
-	if data.Table == "users" {
-		flushCache()
-	}
+
 	c.Json(map[string]any{
 		"success": "DELETED WITH SUCCESS",
 		"ids":     data.Ids,
@@ -476,9 +474,6 @@ var CreateModelView = func(c *ksmux.Context) {
 		inserted[formName[0]] = pathUploaded[0]
 	}
 
-	if data["table"][0] == "users" {
-		flushCache()
-	}
 	c.Json(map[string]any{
 		"success":  "Done !",
 		"inserted": inserted,
@@ -589,9 +584,6 @@ var UpdateRowPost = func(c *ksmux.Context) {
 		return
 	}
 
-	if data["table"][0] == "users" {
-		flushCache()
-	}
 	c.Json(map[string]any{
 		"success": ret,
 	})
@@ -632,9 +624,6 @@ func handleFilesUpload(files map[string][]*multipart.FileHeader, model string, i
 				}
 			}
 		}
-		if model == "users" {
-			flushCache()
-		}
 	}
 	return uploadedPath, formName, nil
 }
@@ -659,9 +648,6 @@ var DropTablePost = func(c *ksmux.Context) {
 		c.Status(http.StatusBadRequest).Json(map[string]any{
 			"error": "missing 'table' in body request",
 		})
-	}
-	if data["table"] == "users" {
-		flushCache()
 	}
 	c.Json(map[string]any{
 		"success": fmt.Sprintf("table %s Deleted !", data["table"]),
@@ -825,9 +811,6 @@ var ImportView = func(c *ksmux.Context) {
 			"success": "some data could not be added, " + errors.Join(retErr...).Error(),
 		})
 		return
-	}
-	if table == "users" {
-		flushCache()
 	}
 
 	c.Json(map[string]any{
