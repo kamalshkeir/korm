@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -13,6 +14,13 @@ import (
 	"github.com/kamalshkeir/kstrct"
 	"github.com/kamalshkeir/lg"
 )
+
+// adaptAsSingleToDoubleQuotes replaces AS 'alias' with AS "alias" for PostgreSQL compatibility
+var asQuoteRegex = regexp.MustCompile(`(?i)\bAS\s+'([^']*)'`)
+
+func adaptAsSingleToDoubleQuotes(statement string) string {
+	return asQuoteRegex.ReplaceAllString(statement, `AS "$1"`)
+}
 
 type Selector[T any] struct {
 	nested  bool
@@ -107,7 +115,7 @@ func JSON_EXTRACT(dataJson string, opt ...JsonOption) string {
 			}
 		}
 		if opts.As != "" {
-			st += " AS " + opts.As
+			st += " AS \"" + opts.As + "\""
 		}
 		return st
 	case POSTGRES, "pg":
@@ -156,7 +164,7 @@ func JSON_EXTRACT(dataJson string, opt ...JsonOption) string {
 			paramsString = "JSONB_BUILD_ARRAY(" + paramsString + ")"
 		}
 		if opts.As != "" {
-			paramsString += " AS " + opts.As
+			paramsString += " AS \"" + opts.As + "\""
 		}
 		return paramsString
 	default:
@@ -253,7 +261,7 @@ func JSON_REMOVE(dataJson string, opt ...JsonOption) string {
 
 		}
 		if opts.As != "" {
-			st += " AS " + opts.As
+			st += " AS \"" + opts.As + "\""
 		}
 		return st
 	case POSTGRES, "pg":
@@ -291,7 +299,7 @@ func JSON_REMOVE(dataJson string, opt ...JsonOption) string {
 			}
 		}
 		if opts.As != "" {
-			st += " AS " + opts.As
+			st += " AS \"" + opts.As + "\""
 		}
 		return st
 
@@ -391,7 +399,7 @@ func JSON_SET(dataJson string, opt ...JsonOption) string {
 			}
 		}
 		if opts.As != "" {
-			st += " AS " + opts.As
+			st += " AS \"" + opts.As + "\""
 		}
 		return st
 	case POSTGRES, "pg":
@@ -477,13 +485,13 @@ func JSON_SET(dataJson string, opt ...JsonOption) string {
 				}
 			}
 			if opts.As != "" {
-				res += " AS " + opts.As
+				res += " AS \"" + opts.As + "\""
 			}
 			return res
 		}
 		st += ")"
 		if opts.As != "" {
-			st += " AS " + opts.As
+			st += " AS \"" + opts.As + "\""
 		}
 		return st
 	default:
@@ -521,13 +529,13 @@ func JSON_ARRAY(values []any, as string, dialect ...string) string {
 	case SQLITE, MYSQL, "sqlite":
 		st := "JSON_ARRAY(" + strings.Join(valuesString, ", ") + ")"
 		if as != "" {
-			st += " AS " + as
+			st += " AS \"" + as + "\""
 		}
 		return st
 	case POSTGRES, "pg":
 		st := "JSONB_BUILD_ARRAY(" + strings.Join(valuesString, ", ") + ")"
 		if as != "" {
-			st += " AS " + as
+			st += " AS \"" + as + "\""
 		}
 		return st
 	default:
@@ -580,13 +588,13 @@ func JSON_OBJECT(values []any, as string, dialect ...string) string {
 	case SQLITE, MYSQL, "sqlite":
 		st := "JSON_OBJECT(" + strings.Join(valuesString, ", ") + ")"
 		if as != "" {
-			st += " AS " + as
+			st += " AS \"" + as + "\""
 		}
 		return st
 	case POSTGRES, "pg":
 		st := "JSONB_BUILD_OBJECT(" + strings.Join(valuesString, ", ") + ")"
 		if as != "" {
-			st += " AS " + as
+			st += " AS \"" + as + "\""
 		}
 		return st
 	default:
@@ -614,7 +622,7 @@ func JSON_CAST(value string, as string, dialect ...string) string {
 		st = "JSON_EXTRACT(" + value + ", '$')"
 	}
 	if as != "" {
-		st += " AS " + as
+		st += " AS \"" + as + "\""
 	}
 	return st
 }
@@ -724,11 +732,14 @@ func (sl *Selector[T]) Query(statement string, args ...any) error {
 	statement, args = In(statement, args...)
 	AdaptPlaceholdersToDialect(&statement, sl.db.Dialect)
 	adaptTimeToUnixArgs(&args)
+	// Replace AS 'alias' with AS "alias" for PostgreSQL compatibility
+	statement = adaptAsSingleToDoubleQuotes(statement)
 	var rows *sql.Rows
 	var err error
 	if sl.debug {
 		lg.Info("DEBUG SELECTOR", "statement", statement, "args", fmt.Sprintf("%v", args))
 	}
+
 	if sl.ctx != nil {
 		rows, err = sl.db.Conn.QueryContext(sl.ctx, statement, args...)
 	} else {
@@ -1060,6 +1071,8 @@ func (sl *Selector[T]) Named(statement string, args map[string]any, unsafe ...bo
 			return err
 		}
 	}
+	// Replace AS 'alias' with AS "alias" for PostgreSQL compatibility
+	query = adaptAsSingleToDoubleQuotes(query)
 	var rows *sql.Rows
 	var err error
 	if sl.debug {
