@@ -556,7 +556,7 @@ func (b *BuilderM) Insert(rowData map[string]any) (int, error) {
 		}
 	} else {
 		if b.debug {
-			lg.InfoC("debug", "statement", b.statement+" RETURNING "+pk, "args", values)
+			lg.InfoC("debug", "statement", statement+" RETURNING "+pk, "args", values)
 		}
 		var err error
 		if b.ctx != nil {
@@ -1393,10 +1393,9 @@ func (b *BuilderM) QueryM(statement string, args ...any) ([]map[string]any, erro
 
 		m := map[string]any{}
 		for i := range columns {
-			if b.db.Dialect == MYSQL || b.db.Dialect == MARIA {
-				if v, ok := modelsPtrs[i].([]byte); ok {
-					modelsPtrs[i] = string(v)
-				}
+			// Convert []byte to string for all dialects
+			if v, ok := modelsPtrs[i].([]byte); ok {
+				modelsPtrs[i] = string(v)
 			}
 			m[columns[i]] = modelsPtrs[i]
 		}
@@ -1514,10 +1513,9 @@ func (b *BuilderM) QueryMNamed(statement string, args map[string]any, unsafe ...
 
 		m := map[string]any{}
 		for i := range columns {
-			if b.db.Dialect == MYSQL || b.db.Dialect == MARIA {
-				if v, ok := modelsPtrs[i].([]byte); ok {
-					modelsPtrs[i] = string(v)
-				}
+			// Convert []byte to string for all dialects
+			if v, ok := modelsPtrs[i].([]byte); ok {
+				modelsPtrs[i] = string(v)
 			}
 			m[columns[i]] = modelsPtrs[i]
 		}
@@ -1600,19 +1598,17 @@ func (b *BuilderM) queryS(ptrStrctSlice any, statement string, args ...any) erro
 		m := map[string]any{}
 		if b.selected != "" && b.selected != "*" {
 			for i, key := range strings.Split(b.selected, ",") {
-				if b.db.Dialect == MYSQL || b.db.Dialect == MARIA {
-					if v, ok := modelsPtrs[i].([]byte); ok {
-						modelsPtrs[i] = string(v)
-					}
+				// Convert []byte to string for all dialects
+				if v, ok := modelsPtrs[i].([]byte); ok {
+					modelsPtrs[i] = string(v)
 				}
 				m[key] = modelsPtrs[i]
 			}
 		} else {
 			for i, key := range columns {
-				if b.db.Dialect == MYSQL || b.db.Dialect == MARIA {
-					if v, ok := modelsPtrs[i].([]byte); ok {
-						modelsPtrs[i] = string(v)
-					}
+				// Convert []byte to string for all dialects
+				if v, ok := modelsPtrs[i].([]byte); ok {
+					modelsPtrs[i] = string(v)
 				}
 				m[key] = modelsPtrs[i]
 			}

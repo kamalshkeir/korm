@@ -782,11 +782,10 @@ loop:
 		if err != nil {
 			return err
 		}
-		if sl.db.Dialect == MYSQL {
-			for i, kvv := range kv {
-				if v, ok := kvv.Value.([]byte); ok {
-					kv[i] = kstrct.KV{Key: kvv.Key, Value: string(v)}
-				}
+		// Convert []byte to string for all dialects (MySQL, SQLite, PostgreSQL can all return []byte for certain column types)
+		for i, kvv := range kv {
+			if v, ok := kvv.Value.([]byte); ok {
+				kv[i] = kstrct.KV{Key: kvv.Key, Value: string(v)}
 			}
 		}
 		switch {
@@ -1119,11 +1118,10 @@ loop:
 		if err != nil {
 			return err
 		}
-		if sl.db.Dialect == MYSQL {
-			for i, kvv := range kv {
-				if v, ok := kvv.Value.([]byte); ok {
-					kv[i] = kstrct.KV{Key: kvv.Key, Value: string(v)}
-				}
+		// Convert []byte to string for all dialects (MySQL, SQLite, PostgreSQL can all return []byte for certain column types)
+		for i, kvv := range kv {
+			if v, ok := kvv.Value.([]byte); ok {
+				kv[i] = kstrct.KV{Key: kvv.Key, Value: string(v)}
 			}
 		}
 		switch {

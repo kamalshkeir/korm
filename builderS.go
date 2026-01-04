@@ -1339,10 +1339,9 @@ func (b *BuilderS[T]) ToChan(ptrChan *chan T) ([]T, error) {
 
 		m := make(map[string]any, len(columns))
 		for i, key := range columns {
-			if b.db.Dialect == MYSQL || b.db.Dialect == MARIA {
-				if v, ok := values[i].([]byte); ok {
-					values[i] = string(v)
-				}
+			// Convert []byte to string for all dialects
+			if v, ok := values[i].([]byte); ok {
+				values[i] = string(v)
 			}
 			m[key] = values[i]
 		}
@@ -1506,10 +1505,9 @@ func (b *BuilderS[T]) QuerySNamed(statement string, args map[string]any, unsafe 
 
 		m := map[string]any{}
 		for i, key := range columns {
-			if b.db.Dialect == MYSQL || b.db.Dialect == MARIA {
-				if v, ok := values[i].([]byte); ok {
-					values[i] = string(v)
-				}
+			// Convert []byte to string for all dialects
+			if v, ok := values[i].([]byte); ok {
+				values[i] = string(v)
 			}
 			m[key] = values[i]
 		}
@@ -1640,10 +1638,9 @@ func (b *BuilderS[T]) QueryS(statement string, args ...any) ([]T, error) {
 
 		m := make(map[string]any, len(columns))
 		for i, key := range columns {
-			if b.db.Dialect == MYSQL || b.db.Dialect == MARIA {
-				if v, ok := values[i].([]byte); ok {
-					values[i] = string(v)
-				}
+			// Convert []byte to string for all dialects
+			if v, ok := values[i].([]byte); ok {
+				values[i] = string(v)
 			}
 			m[key] = values[i]
 		}

@@ -186,6 +186,7 @@ func New(dbType Dialect, dbName string, dbDriver driver.Driver, dbDSN ...string)
 }
 
 // WithShell enable shell, go run main.go shell
+// make sure you put it AFTER WithDashboard if dash used
 func WithShell() {
 	runned := InitShell()
 	if runned {

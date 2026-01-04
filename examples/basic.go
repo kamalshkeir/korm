@@ -33,7 +33,7 @@ type Another struct {
 // 	srv := korm.WithDashboard(":9313", korm.DashOpts{
 // 		WithTracing: true,
 // 	})
-// 	korm.WithShell()
+// 	korm.WithShell() // ⚠️ if dashboard used, korm.WithShell should be after WithDashboard
 
 // 	srv.App.Get("/", func(c *ksmux.Context) {
 // 		c.Json(map[string]any{

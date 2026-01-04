@@ -86,7 +86,7 @@
 
 - [Built-in Authentication](#auth-middleware-example) using `korm.Auth` , `korm.Admin` or `korm.BasicAuth` middlewares, whenever Auth and Admin middlewares are used, you get access to the `.User` model and variable `.IsAuthenticated` from any template html like this example [admin_nav.html](#example-admin-and-auth-user-model-and-isauthenticated) 
 
-- [Interactive Shell](#interactive-shell), to CRUD in your databases from command line, use `korm.WithShell()`
+- [Interactive Shell](#interactive-shell), to CRUD in your databases from command line, use `korm.WithShell()` , ⚠️ if dashboard used, korm.WithShell should be after WithDashboard
 
 - [AutoMigrate](#automigrate) directly from struct
 
@@ -196,7 +196,7 @@ func main() {
 	defer korm.Shutdown()
 
 	server := korm.WithDashboard(":9313")
-	korm.WithShell()
+	korm.WithShell() // ⚠️ if dashboard used, korm.WithShell should be after WithDashboard
 
 	err = korm.AutoMigrate[Class]("classes")
 	lg.CheckError(err)
@@ -351,7 +351,7 @@ korm.To[T any](dest *[]T, nestedSlice ...bool) *Selector[T] // scan query to any
 (sl *Selector[T]) Named(statement string, args map[string]any, unsafe ...bool) error
 korm.WithBus(...opts) *ksbus.Server // Usage: WithBus(...opts) or share an existing one
 korm.WithDashboard(address, ...opts) *ksbus.Server
-korm.WithShell()
+korm.WithShell() // ⚠️ if dashboard used, korm.WithShell should be after WithDashboard
 korm.WithDocs(generateJsonDocs bool, outJsonDocs string, handlerMiddlewares ...func(handler kmux.Handler) kmux.Handler) *ksbus.Server
 korm.WithEmbededDocs(embeded embed.FS, embededDirPath string, handlerMiddlewares ...func(handler kmux.Handler) kmux.Handler) *ksbus.Server
 korm.WithMetrics(httpHandler http.Handler) *ksbus.Server
@@ -572,7 +572,7 @@ func main() {
 
 
 	serverBus := korm.WithDashboard("localhost:9313")
-	korm.WithShell()
+	korm.WithShell() // ⚠️ if dashboard used, korm.WithShell should be after WithDashboard
 	// you can overwrite Admin and Auth middleware used for dashboard (dash_middlewares.go) 
 	//korm.Auth = func(handler ksmux.Handler) ksmux.Handler {}
 	//korm.Admin = func(handler ksmux.Handler) ksmux.Handler {}
@@ -620,7 +620,7 @@ func main() {
 	defer korm.Shutdown()
 	
 	srv := korm.WithDashboard("localhost:9313")
-	korm.WithShell()
+	korm.WithShell() // ⚠️ if dashboard used, korm.WithShell should be after WithDashboard
 	lg.Printfs("mgrunning on http://localhost:9313\n")
 	app := srv.App
 
@@ -780,7 +780,7 @@ func main() {
 	err := korm.New(korm.SQLITE,"db1", sqlitedriver.Use())
 	if lg.CheckError(err) {return}
 
-	korm.WithShell()
+	korm.WithShell() // ⚠️ if dashboard used, korm.WithShell should be after WithDashboard
 	serverBus := korm.WithBus(ksbus.ServerOpts{
 		ID              string
 		Address         string
@@ -933,7 +933,7 @@ func main() {
 	}
 
 	serverBus := korm.WithDashboard("localhost:9313")
-	korm.WithShell()
+	korm.WithShell() // ⚠️ if dashboard used, korm.WithShell should be after WithDashboard
 	mux := serverBus.App
 	// add global middlewares
 	mux.Use((midws ...func(http.Handler) http.Handler))
@@ -1256,7 +1256,7 @@ func main() {
 	defer korm.Shutdown()
 
 	server := korm.WithDashboard("localhost:9313")
-	korm.WithShell()
+	korm.WithShell() // ⚠️ if dashboard used, korm.WithShell should be after WithDashboard
 
 	err = korm.AutoMigrate[Class]("classes")
 	lg.CheckError(err)
