@@ -55,6 +55,7 @@ var (
 //
 //	Example:
 //	  korm.New(korm.SQLITE, "db", sqlitedriver.Use())
+//	  korm.New(korm.SQLITE, "db", sqlitedriver.Use(),"?disable_wal")
 //	  korm.New(korm.MYSQL,"dbName", mysqldriver.Use(), "user:password@localhost:3333")
 //	  korm.New(korm.POSTGRES,"dbName", pgdriver.Use(), "user:password@localhost:5432")
 func New(dbType Dialect, dbName string, dbDriver driver.Driver, dbDSN ...string) error {
@@ -145,15 +146,33 @@ func New(dbType Dialect, dbName string, dbDriver driver.Driver, dbDSN ...string)
 		return err
 	}
 	if dbType == SQLITE {
-		// add foreign key support
+		// 1. Toujours activer les clés étrangères
 		query := `PRAGMA foreign_keys = ON;`
+
+		// 2. Détecter si on doit activer le WAL
+		// On l'active si :
+		// - "disable_wal" n'est pas présent
+		// - ET soit "journal_mode=WAL" est présent, soit aucun "journal_mode=" n'est présent
+
+		isExplicitlyDisabled := strings.Contains(options, "disable_wal")
+		isOtherJournalMode := strings.Contains(options, "journal_mode=") && !strings.Contains(options, "journal_mode=WAL")
+
+		if !isExplicitlyDisabled && !isOtherJournalMode {
+			// On active le WAL par défaut ou si explicitement demandé
+			// On ne rajoute le pragma que s'il n'est pas déjà dans le DSN pour éviter les conflits
+			if !strings.Contains(options, "journal_mode=") {
+				query += " PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;"
+			}
+			conn.SetMaxOpenConns(10) // Performant
+		} else {
+			// Mode "Safe" / Classique (DELETE, TRUNCATE, etc.)
+			conn.SetMaxOpenConns(1) // Sécurisé pour éviter "database is locked"
+		}
+
 		_, err := conn.Exec(query)
 		if err != nil {
-			lg.ErrorC("failed to enable foreign keys", "err", err)
+			lg.ErrorC("failed to enable sqlite pragmas", "err", err)
 		}
-	}
-	if dbType == SQLITE {
-		conn.SetMaxOpenConns(1)
 	} else {
 		conn.SetMaxOpenConns(MaxOpenConns)
 	}
