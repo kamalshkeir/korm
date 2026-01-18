@@ -20,6 +20,7 @@ var (
 	dahsboardUsed      = false
 	adminPathNameGroup = "/admin"
 	terminalUIEnabled  = false
+	kanbanUIEnabled    = false
 	// Debug when true show extra useful logs for queries executed for migrations and queries statements
 	Debug = false
 	// FlushCacheEvery execute korm.FlushCache() every 10 min by default, you should not worry about it, but useful that you can change it
@@ -52,4 +53,21 @@ func SetAdminPath(path string) {
 	} else {
 		adminPathNameGroup = path
 	}
+}
+
+type Board struct {
+	Id          int       `korm:"pk" json:"id,omitempty"`
+	Name        string    `json:"name,omitempty"`
+	Description string    `json:"description,omitempty"`
+	UpdatedAt   time.Time `korm:"update" json:"updated_at"`
+}
+
+type Task struct {
+	Id          int    `korm:"pk" json:"id,omitempty"`
+	BoardId     int    `korm:"fk:_boards.id:cascade:cascade" json:"board_id"`
+	Title       string `json:"title,omitempty"`
+	Description string `korm:"text" json:"description,omitempty"`
+	Status      string `korm:"check: status IN ('todo','doing','done')" json:"status,omitempty"`
+	Priority    string `korm:"check: priority IN ('low','medium','high')" json:"priority,omitempty"`
+	Position    int    `json:"position"`
 }

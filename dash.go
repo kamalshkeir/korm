@@ -18,7 +18,7 @@ type StatsFunc struct {
 	Func func() string
 }
 
-func cloneAndMigrateDashboard(migrateUser bool, staticAndTemplatesEmbeded ...embed.FS) {
+func cloneAndMigrateDashboard(staticAndTemplatesEmbeded ...embed.FS) {
 	AddDashStats(StatsFunc{
 		Name: "Total records",
 		Func: statsNbRecords,
@@ -55,8 +55,16 @@ func cloneAndMigrateDashboard(migrateUser bool, staticAndTemplatesEmbeded ...emb
 		err := serverBus.App().LocalTemplates(templatesDir)
 		lg.CheckError(err)
 	}
-	if migrateUser {
-		err := AutoMigrate[User]("users", defaultDB)
+	err := AutoMigrate[User]("users", defaultDB)
+	if lg.CheckError(err) {
+		return
+	}
+	if kanbanUIEnabled {
+		err = AutoMigrate[Board]("_boards", defaultDB)
+		if lg.CheckError(err) {
+			return
+		}
+		err = AutoMigrate[Task]("_tasks", defaultDB)
 		if lg.CheckError(err) {
 			return
 		}

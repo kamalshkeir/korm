@@ -692,7 +692,7 @@ func AutoMigrate[T any](tableName string, dbName ...string) error {
 		}
 	}
 	LinkModel[T](tableName, dbname)
-	if tableName != "users" && tableName != "_triggers_queue" && tableName != "_tables_infos" {
+	if tableName != "users" && !strings.HasPrefix(tableName, "_") {
 		if _, ok := triggersTables[tableName]; !ok {
 			err = AddChangesTrigger(tableName, dbname)
 			if !lg.CheckError(err) {

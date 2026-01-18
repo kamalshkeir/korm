@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/kamalshkeir/kmap"
 	"github.com/kamalshkeir/ksmux"
@@ -61,6 +62,161 @@ var TracingGetView = func(c *ksmux.Context) {
 
 var TerminalGetView = func(c *ksmux.Context) {
 	c.Html("admin/admin_terminal.html", nil)
+}
+
+var KanbanView = func(c *ksmux.Context) {
+	id := c.Param("id")
+	idInt, err := strconv.Atoi(id)
+	if err != nil {
+		c.Status(404).Text("Board not found")
+		return
+	}
+	board, err := Model[Board]().NoCache().Where("id = ?", idInt).One()
+	if err != nil {
+		c.Status(404).Text("Board not found")
+		return
+	}
+
+	tasks, _ := Model[Task]().NoCache().Where("board_id = ?", idInt).OrderBy("position").All()
+
+	c.Html("admin/admin_kanban.html", map[string]any{
+		"Board": board,
+		"Tasks": tasks,
+	})
+}
+
+var KanbanListView = func(c *ksmux.Context) {
+	boards, _ := Model[Board]().NoCache().All()
+	c.Html("admin/admin_kanban_list.html", map[string]any{
+		"Boards": boards,
+	})
+}
+
+var KanbanBoardCreate = func(c *ksmux.Context) {
+	var payload struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+	}
+	if err := c.BodyStruct(&payload); err != nil {
+		c.Error("Invalid request body")
+		return
+	}
+
+	if payload.Name == "" {
+		c.Error("Name is required")
+		return
+	}
+
+	board := Board{
+		Name:        payload.Name,
+		Description: payload.Description,
+		UpdatedAt:   time.Now(),
+	}
+
+	if _, err := Model[Board]().Insert(&board); err != nil {
+		c.Status(500).Error("Could not create board")
+		return
+	}
+
+	c.Json(map[string]any{"success": true, "board": board})
+}
+
+var KanbanBoardDelete = func(c *ksmux.Context) {
+	var payload struct {
+		Id int `json:"id"`
+	}
+	if err := c.BodyStruct(&payload); err != nil {
+		c.Status(400).Error("Invalid request body")
+		return
+	}
+
+	if _, err := Model[Board]().Where("id = ?", payload.Id).Delete(); err != nil {
+		c.Status(500).Error("Could not delete board")
+		return
+	}
+
+	c.Json(map[string]any{"success": true})
+}
+
+var KanbanTaskCreate = func(c *ksmux.Context) {
+	var payload struct {
+		BoardId     int    `json:"board_id"`
+		Title       string `json:"title"`
+		Description string `json:"description"`
+		Status      string `json:"status"`
+		Priority    string `json:"priority"`
+	}
+	if err := c.BodyStruct(&payload); err != nil {
+		c.Status(400).Error("Invalid request body")
+		return
+	}
+
+	if payload.Title == "" {
+		c.Status(400).Error("Title is required")
+		return
+	}
+
+	// Default priority if empty
+	if payload.Priority == "" {
+		payload.Priority = "medium"
+	}
+
+	task := Task{
+		BoardId:     payload.BoardId,
+		Title:       payload.Title,
+		Description: payload.Description,
+		Status:      payload.Status,
+		Priority:    payload.Priority,
+		Position:    0,
+	}
+
+	if _, err := Model[Task]().Insert(&task); err != nil {
+		c.Status(500).Error("Could not create task")
+		return
+	}
+
+	c.Json(map[string]any{"success": true, "task": task})
+}
+
+var KanbanTaskDelete = func(c *ksmux.Context) {
+	var payload struct {
+		Id int `json:"id"`
+	}
+	if err := c.BodyStruct(&payload); err != nil {
+		c.Status(400).Error("Invalid request body")
+		return
+	}
+
+	if _, err := Model[Task]().Where("id = ?", payload.Id).Delete(); err != nil {
+		c.Status(500).Error("Could not delete task")
+		return
+	}
+
+	c.Json(map[string]any{"success": true})
+}
+
+var KanbanTaskMove = func(c *ksmux.Context) {
+	var payload struct {
+		TaskIds []int  `json:"task_ids"`
+		Status  string `json:"status"`
+	}
+	if err := c.BodyStruct(&payload); err != nil {
+		c.Status(400).Error("Invalid request body")
+		return
+	}
+
+	for i, id := range payload.TaskIds {
+		_, err := Model[Task]().Where("id = ?", id).SetM(map[string]any{
+			"status":   payload.Status,
+			"position": i,
+		})
+		if err != nil {
+			c.Status(500).Error("Could not update task position")
+			return
+		}
+	}
+
+	c.Json(map[string]any{"success": true})
 }
 
 // WebSocket endpoint for terminal

@@ -315,6 +315,7 @@ type DashOpts struct {
 	Path               string // default /admin
 	RepoUser           string // default kamalshkeir
 	RepoName           string // default korm-dash
+	WithKanban         bool   // add kanban to the dashboard
 	WithTracing        bool   // add tracing handling page in dash and enable tracing
 	WithTerminal       bool   // add terminal session handling page in dash
 	WithNodeManager    bool   // add node manager handling page in dash
@@ -400,7 +401,10 @@ func WithDashboard(addr string, options ...DashOpts) *ksps.ServerBus {
 			serverBus = WithBus()
 		}
 	}
-	cloneAndMigrateDashboard(true, staticAndTemplatesEmbeded...)
+	if opts != nil && opts.WithKanban {
+		kanbanUIEnabled = true
+	}
+	cloneAndMigrateDashboard(staticAndTemplatesEmbeded...)
 
 	reqqCounter := false
 	if opts != nil && opts.WithRequestCounter {

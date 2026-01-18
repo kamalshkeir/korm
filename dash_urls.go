@@ -15,6 +15,7 @@ func init() {
 		(*data)["static_url"] = staticUrl
 		(*data)["trace_enabled"] = defaultTracer.enabled
 		(*data)["terminal_enabled"] = terminalUIEnabled
+		(*data)["kanban_enabled"] = kanbanUIEnabled
 		(*data)["nodemanager_enabled"] = nodeManager != nil
 		user, ok := c.GetKey(kormKeyUser)
 		if ok {
@@ -89,5 +90,14 @@ func initAdminUrlPatterns(withReqCounter bool, r *ksmux.Router) {
 		adminGroup.Get("/terminal", Admin(TerminalGetView))
 		adminGroup.Post("/terminal/execute", Admin(TerminalExecute))
 		adminGroup.Get("/terminal/complete", Admin(TerminalComplete))
+	}
+	if kanbanUIEnabled {
+		adminGroup.Get("/kanbans", Admin(KanbanListView))
+		adminGroup.Post("/kanbans/create", Admin(KanbanBoardCreate))
+		adminGroup.Post("/kanbans/delete", Admin(KanbanBoardDelete))
+		adminGroup.Post("/kanbans/tasks/create", Admin(KanbanTaskCreate))
+		adminGroup.Post("/kanbans/tasks/move", Admin(KanbanTaskMove))
+		adminGroup.Post("/kanbans/tasks/delete", Admin(KanbanTaskDelete))
+		adminGroup.Get("/kanbans/:id", Admin(KanbanView))
 	}
 }
