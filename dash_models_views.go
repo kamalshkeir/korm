@@ -16,6 +16,7 @@ import (
 	"github.com/kamalshkeir/argon"
 	"github.com/kamalshkeir/ksmux"
 	"github.com/kamalshkeir/lg"
+	"github.com/kamalshkeir/ulid"
 )
 
 var TablesView = func(c *ksmux.Context) {
@@ -424,12 +425,6 @@ var CreateModelView = func(c *ksmux.Context) {
 		switch key {
 		case "table":
 			continue
-		case "uuid":
-			if v := m[key]; v == "" {
-				m[key] = GenerateUUID()
-			} else {
-				m[key] = val[0]
-			}
 		case "password":
 			hash, _ := argon.Hash(val[0])
 			m[key] = hash
@@ -444,7 +439,19 @@ var CreateModelView = func(c *ksmux.Context) {
 		case "pk":
 			continue
 		default:
-			if key != "" && val[0] != "" && val[0] != "null" {
+			if strings.Contains(key, "ulid") {
+				if v := m[key]; v == "" {
+					m[key] = ulid.Make().String()
+				} else {
+					m[key] = val[0]
+				}
+			} else if strings.Contains(key, "uuid") {
+				if v := m[key]; v == "" {
+					m[key] = GenerateUUID()
+				} else {
+					m[key] = val[0]
+				}
+			} else if key != "" && val[0] != "" && val[0] != "null" {
 				m[key] = val[0]
 			}
 		}

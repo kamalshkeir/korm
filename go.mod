@@ -1,6 +1,6 @@
 module github.com/kamalshkeir/korm
 
-go 1.24.3
+go 1.25.4
 
 require (
 	github.com/kamalshkeir/aes v1.1.2
@@ -10,6 +10,7 @@ require (
 	github.com/kamalshkeir/ksmux v0.8.7
 	github.com/kamalshkeir/kstrct v1.9.22
 	github.com/kamalshkeir/lg v0.1.4
+	github.com/kamalshkeir/ulid v1.0.0
 )
 
 require (
