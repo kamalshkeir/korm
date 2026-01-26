@@ -11,7 +11,6 @@ import (
 	"github.com/kamalshkeir/kmap"
 	"github.com/kamalshkeir/ksmux"
 	"github.com/kamalshkeir/ksmux/ksps"
-	"github.com/kamalshkeir/ksmux/ws"
 	"github.com/kamalshkeir/lg"
 )
 
@@ -442,11 +441,11 @@ func initNodeManagerHooks(nodeManager *NodeManager) {
 	})
 }
 
-func onServerData(msgAny any, _ *ws.Conn) {
+func onServerData(msgAny ksps.Message) {
 	if nodeManager == nil {
 		return
 	}
-	msg := msgAny.(map[string]any)
+	msg := msgAny.Data.(map[string]any)
 	nodeManager.inSync = true
 	defer func() {
 		if nodeManager != nil {
