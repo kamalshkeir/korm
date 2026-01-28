@@ -54,10 +54,6 @@ func BuilderMap() *BuilderM {
 
 // Database allow to choose database to execute query on
 func (b *BuilderM) Database(dbName string) *BuilderM {
-	if b == nil || b.tableName == "" {
-		lg.Error("korm.Table(tableName) first", "db", dbName)
-		return b
-	}
 	db, err := GetMemoryDatabase(dbName)
 	if lg.CheckError(err) {
 		db = &databases[0]
@@ -255,9 +251,6 @@ func (b *BuilderM) Context(ctx context.Context) *BuilderM {
 
 // Debug print prepared statement and values for this operation
 func (b *BuilderM) Debug() *BuilderM {
-	if b == nil || b.tableName == "" {
-		return nil
-	}
 	b.debug = true
 	return b
 }
@@ -1355,6 +1348,9 @@ func (b *BuilderM) QueryM(statement string, args ...any) ([]map[string]any, erro
 	adaptTimeToUnixArgs(&args)
 	var rows *sql.Rows
 	var err error
+	if b.debug {
+		lg.Info("", "query", statement, "args", args)
+	}
 	if b.ctx != nil {
 		rows, err = b.db.Conn.QueryContext(b.ctx, statement, args...)
 	} else {

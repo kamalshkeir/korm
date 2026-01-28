@@ -94,10 +94,6 @@ func ModelTable[T any](tableName string, model ...T) *BuilderS[T] {
 
 // Database allow to choose database to execute query on
 func (b *BuilderS[T]) Database(dbName string) *BuilderS[T] {
-	if b == nil || b.tableName == "" {
-		lg.Error("korm.Model[T any]() first", "db", dbName)
-		return b
-	}
 	for i := range databases {
 		if databases[i].Name == dbName {
 			b.db = &databases[i]
@@ -1137,9 +1133,6 @@ func (b *BuilderS[T]) OrderBy(fields ...string) *BuilderS[T] {
 
 // Debug print prepared statement and values for this operation
 func (b *BuilderS[T]) Debug() *BuilderS[T] {
-	if b == nil || b.tableName == "" {
-		return nil
-	}
 	b.debug = true
 	return b
 }
