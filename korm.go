@@ -313,6 +313,7 @@ type DashOpts struct {
 	StaticDir          string // default BaseDir/static
 	TemplatesDir       string // default BaseDir/templates
 	Path               string // default /admin
+	FuncMaps           map[string]any
 	RepoUser           string // default kamalshkeir
 	RepoName           string // default korm-dash
 	WithKanban         bool   // add kanban to the dashboard
@@ -400,6 +401,9 @@ func WithDashboard(addr string, options ...DashOpts) *ksps.ServerBus {
 		} else {
 			serverBus = WithBus()
 		}
+	}
+	if len(opts.FuncMaps) > 0 {
+		serverBus.App().NewFuncMap(opts.FuncMaps)
 	}
 	if opts != nil && opts.WithKanban {
 		kanbanUIEnabled = true
