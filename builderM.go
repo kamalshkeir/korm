@@ -262,6 +262,9 @@ func (b *BuilderM) NoCache() *BuilderM {
 
 // All get all data
 func (b *BuilderM) All() ([]map[string]any, error) {
+	if b == nil || b.tableName == "" {
+		return nil, ErrTableNotFound
+	}
 	if b.trace {
 		trace := TraceData{
 			Query:     b.statement,
@@ -273,10 +276,6 @@ func (b *BuilderM) All() ([]map[string]any, error) {
 			trace.Duration = time.Since(trace.StartTime)
 			defaultTracer.addTrace(trace)
 		}()
-	}
-
-	if b == nil || b.tableName == "" {
-		return nil, ErrTableNotFound
 	}
 	if b.db == nil {
 		b.db = &databases[0]
@@ -351,15 +350,14 @@ func (b *BuilderM) All() ([]map[string]any, error) {
 
 // One get single row
 func (b *BuilderM) One() (map[string]any, error) {
+	if b == nil || b.tableName == "" {
+		return nil, ErrTableNotFound
+	}
 	if b.trace {
 		if b.ctx == nil {
 			b.ctx = context.Background()
 		}
 		b.ctx = context.WithValue(b.ctx, traceEnabledKey, true)
-	}
-
-	if b == nil || b.tableName == "" {
-		return nil, ErrTableNotFound
 	}
 	if b.db == nil {
 		b.db = &databases[0]
@@ -438,6 +436,9 @@ func (b *BuilderM) One() (map[string]any, error) {
 
 // Insert add row to a table using input map, and return PK of the inserted row
 func (b *BuilderM) Insert(rowData map[string]any) (int, error) {
+	if b == nil || b.tableName == "" {
+		return 0, ErrTableNotFound
+	}
 	if b.trace {
 		trace := TraceData{
 			Query:     b.statement,
@@ -453,9 +454,6 @@ func (b *BuilderM) Insert(rowData map[string]any) (int, error) {
 
 	if len(rowData) == 0 {
 		return 0, fmt.Errorf("cannot insert empty map, rowData:%v", rowData)
-	}
-	if b == nil || b.tableName == "" {
-		return 0, ErrTableNotFound
 	}
 	if b.db == nil {
 		b.db = &databases[0]
@@ -567,6 +565,9 @@ func (b *BuilderM) Insert(rowData map[string]any) (int, error) {
 
 // InsertR add row to a table using input map, and return the inserted row
 func (b *BuilderM) InsertR(rowData map[string]any) (map[string]any, error) {
+	if b == nil || b.tableName == "" {
+		return nil, ErrTableNotFound
+	}
 	if b.trace {
 		trace := TraceData{
 			Query:     b.statement,
@@ -578,10 +579,6 @@ func (b *BuilderM) InsertR(rowData map[string]any) (map[string]any, error) {
 			trace.Duration = time.Since(trace.StartTime)
 			defaultTracer.addTrace(trace)
 		}()
-	}
-
-	if b == nil || b.tableName == "" {
-		return nil, ErrTableNotFound
 	}
 
 	if b.db == nil {
@@ -694,6 +691,9 @@ func (b *BuilderM) InsertR(rowData map[string]any) (map[string]any, error) {
 
 // BulkInsert insert many row at the same time in one query
 func (b *BuilderM) BulkInsert(rowsData ...map[string]any) ([]int, error) {
+	if b == nil || b.tableName == "" {
+		return nil, ErrTableNotFound
+	}
 	if b.trace {
 		trace := TraceData{
 			Query:     b.statement,
@@ -705,10 +705,6 @@ func (b *BuilderM) BulkInsert(rowsData ...map[string]any) ([]int, error) {
 			trace.Duration = time.Since(trace.StartTime)
 			defaultTracer.addTrace(trace)
 		}()
-	}
-
-	if b == nil || b.tableName == "" {
-		return nil, ErrTableNotFound
 	}
 	if b.db == nil {
 		b.db = &databases[0]
@@ -829,6 +825,9 @@ func (b *BuilderM) BulkInsert(rowsData ...map[string]any) ([]int, error) {
 
 // Set used to update, Set("email,is_admin","example@mail.com",true) or Set("email = ? AND is_admin = ?","example@mail.com",true)
 func (b *BuilderM) Set(query string, args ...any) (int, error) {
+	if b == nil || b.tableName == "" {
+		return 0, ErrTableNotFound
+	}
 	if b.trace {
 		trace := TraceData{
 			Query:     b.statement,
@@ -840,10 +839,6 @@ func (b *BuilderM) Set(query string, args ...any) (int, error) {
 			trace.Duration = time.Since(trace.StartTime)
 			defaultTracer.addTrace(trace)
 		}()
-	}
-
-	if b == nil || b.tableName == "" {
-		return 0, ErrTableNotFound
 	}
 	if b.db == nil {
 		b.db = &databases[0]
@@ -878,6 +873,9 @@ func (b *BuilderM) Set(query string, args ...any) (int, error) {
 }
 
 func (b *BuilderM) SetM(data map[string]any) (int, error) {
+	if b == nil || b.tableName == "" {
+		return 0, ErrTableNotFound
+	}
 	if b.trace {
 		trace := TraceData{
 			Query:     b.statement,
@@ -889,10 +887,6 @@ func (b *BuilderM) SetM(data map[string]any) (int, error) {
 			trace.Duration = time.Since(trace.StartTime)
 			defaultTracer.addTrace(trace)
 		}()
-	}
-
-	if b == nil || b.tableName == "" {
-		return 0, ErrTableNotFound
 	}
 	if b.db == nil {
 		b.db = &databases[0]
@@ -934,6 +928,9 @@ func (b *BuilderM) SetM(data map[string]any) (int, error) {
 
 // Delete data from database, can be multiple, depending on the where, return affected rows(Not every database or database driver may support affected rows)
 func (b *BuilderM) Delete() (int, error) {
+	if b == nil || b.tableName == "" {
+		return 0, ErrTableNotFound
+	}
 	if b.trace {
 		trace := TraceData{
 			Query:     b.statement,
@@ -945,10 +942,6 @@ func (b *BuilderM) Delete() (int, error) {
 			trace.Duration = time.Since(trace.StartTime)
 			defaultTracer.addTrace(trace)
 		}()
-	}
-
-	if b == nil || b.tableName == "" {
-		return 0, ErrTableNotFound
 	}
 	if b.db == nil {
 		b.db = &databases[0]

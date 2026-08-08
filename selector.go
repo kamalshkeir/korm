@@ -708,6 +708,16 @@ func ResetStruct(input interface{}) error {
 }
 
 func (sl *Selector[T]) Query(statement string, args ...any) error {
+	if sl == nil || sl.dest == nil {
+		return errors.New("selector or destination is nil")
+	}
+	if sl.db == nil {
+		if len(databases) > 0 {
+			sl.db = &databases[0]
+		} else {
+			return errors.New("no database connection available")
+		}
+	}
 	// Ensure we have a context with trace flag if tracing is enabled
 	if sl.trace && sl.ctx == nil {
 		sl.ctx = context.WithValue(context.Background(), traceEnabledKey, true)
@@ -1012,6 +1022,16 @@ loop:
 }
 
 func (sl *Selector[T]) Named(statement string, args map[string]any, unsafe ...bool) error {
+	if sl == nil || sl.dest == nil {
+		return errors.New("selector or destination is nil")
+	}
+	if sl.db == nil {
+		if len(databases) > 0 {
+			sl.db = &databases[0]
+		} else {
+			return errors.New("no database connection available")
+		}
+	}
 	if sl.trace {
 		if sl.ctx == nil {
 			sl.ctx = context.Background()

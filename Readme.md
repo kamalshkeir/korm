@@ -58,8 +58,6 @@
 ### It Has :
 - <strong>New:</strong>  When using korm.WithDashboard, now you have access to all logs in realtime (websockets) from admin dashboard when you log using lg pkg. By default only 10 last logs are keeped in memory, you can increase it using lg.SaveLogs(50) for keeping last 50 logs
 
-- <strong>New:</strong>  Automatic check your structs (schema) against database tables, prompt you with changes, and so it can add or remove columns by adding or removing fields to the struct, it is Disabled by default, use `korm.EnableCheck()` to enable it
-
 - <strong>New:</strong>  [Handle Nested or Embeded structs](#example-nested-or-embeded-structs) and slice of structs through joins, like sqlx, but sqlx doesn't handle slice of structs
 
 - <strong>New:</strong> korm.QueryNamed, QueryNamedS, korm.ExecNamed, korm.ExecContextNamed and WhereNamed(query string, args map[string]any) like :Where("email = :email",map[string]any{"email":"abc@mail.com"}) 

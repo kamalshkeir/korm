@@ -1,22 +1,12 @@
 package korm
 
 import (
-	"fmt"
-	"os"
 	"strings"
 	"unicode"
 
-	"github.com/kamalshkeir/kinput"
 	"github.com/kamalshkeir/kstrct"
 	"github.com/kamalshkeir/lg"
 )
-
-var checkEnabled = false
-
-// WithSchemaCheck enable struct changes check
-func WithSchemaCheck() {
-	checkEnabled = true
-}
 
 type kormFkey struct {
 	FromTableField string
@@ -227,114 +217,6 @@ func LinkModel[T any](to_table_name string, dbName ...string) {
 						"tags":        strings.Join(tags_in, ";;"),
 					})
 					lg.CheckError(err)
-				}
-			}
-		}
-	}
-	// sync models struct types with db tables
-	if checkEnabled {
-		if len(colsNameType) > len(fields) {
-			removedCols := []string{}
-			colss := []string{}
-			for dbcol := range colsNameType {
-				found := false
-				for _, fname := range fields {
-					if fname == dbcol {
-						found = true
-					}
-				}
-				if !found {
-					// remove dbcol from db
-					lg.Printfs("rd⚠️ field '%s' has been removed from '%T'\n", dbcol, *new(T))
-					removedCols = append(removedCols, dbcol)
-				} else {
-					colss = append(colss, dbcol)
-				}
-			}
-			if len(removedCols) > 0 {
-				choice, err := kinput.String(kinput.Yellow, "> do we remove extra columns ? (Y/n): ")
-				lg.CheckError(err)
-				switch choice {
-				case "y", "Y":
-					temp := to_table_name + "_temp"
-					tempQuery, err := autoMigrate(new(T), db, temp, true)
-					if lg.CheckError(err) {
-						return
-					}
-					if Debug {
-						fmt.Println("DEBUG:SYNC:", tempQuery)
-					}
-					cls := strings.Join(colss, ",")
-					_, err = db.Conn.Exec("INSERT INTO " + temp + " (" + cls + ") SELECT " + cls + " FROM " + to_table_name)
-					if lg.CheckError(err) {
-						return
-					}
-					_, err = Table(to_table_name + "_old").Database(db.Name).Drop()
-					if lg.CheckError(err) {
-						return
-					}
-					_, err = db.Conn.Exec("ALTER TABLE " + to_table_name + " RENAME TO " + to_table_name + "_old")
-					if lg.CheckError(err) {
-						return
-					}
-					_, err = db.Conn.Exec("ALTER TABLE " + temp + " RENAME TO " + to_table_name)
-					if lg.CheckError(err) {
-						return
-					}
-					lg.Printfs("grDone, you can still find your old table with the same data %s\n", to_table_name+"_old")
-					os.Exit(0)
-				default:
-					return
-				}
-			}
-		} else if len(colsNameType) < len(fields) {
-			addedFields := []string{}
-			for _, fname := range fields {
-				if _, ok := colsNameType[fname]; !ok {
-					lg.Printfs("rd⚠️ column '%s' is missing from table '%s'\n", fname, to_table_name)
-					addedFields = append(addedFields, fname)
-				}
-			}
-			if len(addedFields) > 0 {
-				choice, err := kinput.String(kinput.Yellow, "> do we add missing columns ? (Y/n): ")
-				lg.CheckError(err)
-				switch choice {
-				case "y", "Y":
-					temp := to_table_name + "_temp"
-					tempQuery, err := autoMigrate(new(T), db, temp, true)
-					if lg.CheckError(err) {
-						return
-					}
-					if Debug {
-						fmt.Println("DEBUG:SYNC:", tempQuery)
-					}
-					var colss []string
-
-					for k := range colsNameType {
-						colss = append(colss, k)
-					}
-					cls := strings.Join(colss, ",")
-					_, err = db.Conn.Exec("INSERT INTO " + temp + " (" + cls + ") SELECT " + cls + " FROM " + to_table_name)
-					if lg.CheckError(err) {
-						lg.Printfs("query: %s\n", "INSERT INTO "+temp+" ("+cls+") SELECT "+cls+" FROM "+to_table_name)
-						return
-					}
-					_, err = Table(to_table_name + "_old").Database(db.Name).Drop()
-					if lg.CheckError(err) {
-						return
-					}
-					_, err = db.Conn.Exec("ALTER TABLE " + to_table_name + " RENAME TO " + to_table_name + "_old")
-					if lg.CheckError(err) {
-						return
-					}
-					_, err = db.Conn.Exec("ALTER TABLE " + temp + " RENAME TO " + to_table_name)
-					if lg.CheckError(err) {
-						return
-					}
-					lg.Printfs("grDone, you can still find your old table with the same data %s\n", to_table_name+"_old")
-					os.Exit(0)
-				default:
-					return
 				}
 			}
 		}
