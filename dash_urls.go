@@ -16,7 +16,6 @@ func init() {
 		(*data)["trace_enabled"] = defaultTracer.enabled
 		(*data)["terminal_enabled"] = terminalUIEnabled
 		(*data)["kanban_enabled"] = kanbanUIEnabled
-		(*data)["nodemanager_enabled"] = nodeManager != nil
 		user, ok := c.GetKey(kormKeyUser)
 		if ok {
 			(*data)["IsAuthenticated"] = true

@@ -103,42 +103,50 @@ func (b *BuilderM) Where(query string, args ...any) *BuilderM {
 				// Handle slice for IN clause
 				switch v := args[argIndex].(type) {
 				case []int:
-					result.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+					result.WriteString(strings.Repeat("?,", len(v)-1))
+					result.WriteString("?")
 					for _, val := range v {
 						expandedArgs = append(expandedArgs, val)
 					}
 				case []int64:
-					result.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+					result.WriteString(strings.Repeat("?,", len(v)-1))
+					result.WriteString("?")
 					for _, val := range v {
 						expandedArgs = append(expandedArgs, val)
 					}
 				case []uint:
-					result.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+					result.WriteString(strings.Repeat("?,", len(v)-1))
+					result.WriteString("?")
 					for _, val := range v {
 						expandedArgs = append(expandedArgs, val)
 					}
 				case []uint8:
-					result.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+					result.WriteString(strings.Repeat("?,", len(v)-1))
+					result.WriteString("?")
 					for _, val := range v {
 						expandedArgs = append(expandedArgs, val)
 					}
 				case []float32:
-					result.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+					result.WriteString(strings.Repeat("?,", len(v)-1))
+					result.WriteString("?")
 					for _, val := range v {
 						expandedArgs = append(expandedArgs, val)
 					}
 				case []float64:
-					result.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+					result.WriteString(strings.Repeat("?,", len(v)-1))
+					result.WriteString("?")
 					for _, val := range v {
 						expandedArgs = append(expandedArgs, val)
 					}
 				case []string:
-					result.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+					result.WriteString(strings.Repeat("?,", len(v)-1))
+					result.WriteString("?")
 					for _, val := range v {
 						expandedArgs = append(expandedArgs, val)
 					}
 				case []any:
-					result.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+					result.WriteString(strings.Repeat("?,", len(v)-1))
+					result.WriteString("?")
 					expandedArgs = append(expandedArgs, v...)
 				default:
 					// Not a slice, treat as normal arg
@@ -518,7 +526,11 @@ func (b *BuilderM) Insert(rowData map[string]any) (int, error) {
 	}
 	placeholders := strings.Join(placeholdersSlice, ",")
 	stat := strings.Builder{}
-	stat.WriteString("INSERT INTO " + quote + b.tableName + quote + " (")
+	stat.WriteString("INSERT INTO ")
+	stat.WriteString(quote)
+	stat.WriteString(b.tableName)
+	stat.WriteString(quote)
+	stat.WriteString(" (")
 	stat.WriteString(strings.Join(keys, ","))
 	stat.WriteString(") VALUES (")
 	stat.WriteString(placeholders)
@@ -644,7 +656,11 @@ func (b *BuilderM) InsertR(rowData map[string]any) (map[string]any, error) {
 	}
 	placeholders := strings.Join(placeholdersSlice, ",")
 	stat := strings.Builder{}
-	stat.WriteString("INSERT INTO " + quote + b.tableName + quote + " (")
+	stat.WriteString("INSERT INTO ")
+	stat.WriteString(quote)
+	stat.WriteString(b.tableName)
+	stat.WriteString(quote)
+	stat.WriteString(" (")
 	stat.WriteString(strings.Join(keys, ","))
 	stat.WriteString(") VALUES (")
 	stat.WriteString(placeholders)
@@ -774,7 +790,11 @@ func (b *BuilderM) BulkInsert(rowsData ...map[string]any) ([]int, error) {
 		placeholders := strings.Join(placeholdersSlice, ",")
 
 		stat := strings.Builder{}
-		stat.WriteString("INSERT INTO " + quote + b.tableName + quote + " (")
+		stat.WriteString("INSERT INTO ")
+		stat.WriteString(quote)
+		stat.WriteString(b.tableName)
+		stat.WriteString(quote)
+		stat.WriteString(" (")
 		stat.WriteString(strings.Join(keys, ","))
 		stat.WriteString(") VALUES (")
 		stat.WriteString(placeholders)

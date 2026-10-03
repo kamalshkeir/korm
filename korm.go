@@ -319,7 +319,6 @@ type DashOpts struct {
 	WithKanban         bool   // add kanban to the dashboard
 	WithTracing        bool   // add tracing handling page in dash and enable tracing
 	WithTerminal       bool   // add terminal session handling page in dash
-	WithNodeManager    bool   // add node manager handling page in dash
 	WithRequestCounter bool   // add request counter dashboard,default false
 }
 
@@ -420,9 +419,6 @@ func WithDashboard(addr string, options ...DashOpts) *ksps.ServerBus {
 	}
 	if opts != nil && opts.WithTerminal {
 		terminalUIEnabled = true
-	}
-	if opts != nil && opts.WithNodeManager && nodeManager == nil {
-		WithNodeManager()
 	}
 	initAdminUrlPatterns(reqqCounter, serverBus.App())
 	if len(os.Args) == 1 {

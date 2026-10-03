@@ -74,22 +74,26 @@ func AdaptNamedParams(dialect, statement string, variables map[string]any, unsaf
 			// Handle different slice types for IN clause
 			switch v := value.(type) {
 			case []int:
-				buf.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+				buf.WriteString(strings.Repeat("?,", len(v)-1))
+				buf.WriteString("?")
 				for _, val := range v {
 					anys = append(anys, val)
 				}
 			case []uint:
-				buf.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+				buf.WriteString(strings.Repeat("?,", len(v)-1))
+				buf.WriteString("?")
 				for _, val := range v {
 					anys = append(anys, val)
 				}
 			case []string:
-				buf.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+				buf.WriteString(strings.Repeat("?,", len(v)-1))
+				buf.WriteString("?")
 				for _, val := range v {
 					anys = append(anys, val)
 				}
 			case []any:
-				buf.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+				buf.WriteString(strings.Repeat("?,", len(v)-1))
+				buf.WriteString("?")
 				anys = append(anys, v...)
 			default:
 				buf.WriteString("?")
@@ -249,7 +253,8 @@ func In(query string, args ...any) (string, []any) {
 					for i, val := range v {
 						anySlice[i] = val
 					}
-					result.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+					result.WriteString(strings.Repeat("?,", len(v)-1))
+					result.WriteString("?")
 					expandedArgs = append(expandedArgs, anySlice...)
 				case []string:
 					// Convert []string to []any
@@ -257,7 +262,8 @@ func In(query string, args ...any) (string, []any) {
 					for i, val := range v {
 						anySlice[i] = val
 					}
-					result.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+					result.WriteString(strings.Repeat("?,", len(v)-1))
+					result.WriteString("?")
 					expandedArgs = append(expandedArgs, anySlice...)
 				case []int64:
 					// Convert []int to []any
@@ -265,7 +271,8 @@ func In(query string, args ...any) (string, []any) {
 					for i, val := range v {
 						anySlice[i] = val
 					}
-					result.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+					result.WriteString(strings.Repeat("?,", len(v)-1))
+					result.WriteString("?")
 					expandedArgs = append(expandedArgs, anySlice...)
 				case []uint:
 					// Convert []uint to []any
@@ -273,7 +280,8 @@ func In(query string, args ...any) (string, []any) {
 					for i, val := range v {
 						anySlice[i] = val
 					}
-					result.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+					result.WriteString(strings.Repeat("?,", len(v)-1))
+					result.WriteString("?")
 					expandedArgs = append(expandedArgs, anySlice...)
 				case []uint8:
 					// Convert []uint to []any
@@ -281,7 +289,8 @@ func In(query string, args ...any) (string, []any) {
 					for i, val := range v {
 						anySlice[i] = val
 					}
-					result.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+					result.WriteString(strings.Repeat("?,", len(v)-1))
+					result.WriteString("?")
 					expandedArgs = append(expandedArgs, anySlice...)
 				case []int32:
 					// Convert []int to []any
@@ -289,7 +298,8 @@ func In(query string, args ...any) (string, []any) {
 					for i, val := range v {
 						anySlice[i] = val
 					}
-					result.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+					result.WriteString(strings.Repeat("?,", len(v)-1))
+					result.WriteString("?")
 					expandedArgs = append(expandedArgs, anySlice...)
 				case []int16:
 					// Convert []int to []any
@@ -297,7 +307,8 @@ func In(query string, args ...any) (string, []any) {
 					for i, val := range v {
 						anySlice[i] = val
 					}
-					result.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+					result.WriteString(strings.Repeat("?,", len(v)-1))
+					result.WriteString("?")
 					expandedArgs = append(expandedArgs, anySlice...)
 				case []int8:
 					// Convert []int to []any
@@ -305,7 +316,8 @@ func In(query string, args ...any) (string, []any) {
 					for i, val := range v {
 						anySlice[i] = val
 					}
-					result.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+					result.WriteString(strings.Repeat("?,", len(v)-1))
+					result.WriteString("?")
 					expandedArgs = append(expandedArgs, anySlice...)
 				case []uint16:
 					// Convert []uint to []any
@@ -313,7 +325,8 @@ func In(query string, args ...any) (string, []any) {
 					for i, val := range v {
 						anySlice[i] = val
 					}
-					result.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+					result.WriteString(strings.Repeat("?,", len(v)-1))
+					result.WriteString("?")
 					expandedArgs = append(expandedArgs, anySlice...)
 				case []uint32:
 					// Convert []uint to []any
@@ -321,7 +334,8 @@ func In(query string, args ...any) (string, []any) {
 					for i, val := range v {
 						anySlice[i] = val
 					}
-					result.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+					result.WriteString(strings.Repeat("?,", len(v)-1))
+					result.WriteString("?")
 					expandedArgs = append(expandedArgs, anySlice...)
 				case []float32:
 					// Convert []uint to []any
@@ -329,7 +343,8 @@ func In(query string, args ...any) (string, []any) {
 					for i, val := range v {
 						anySlice[i] = val
 					}
-					result.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+					result.WriteString(strings.Repeat("?,", len(v)-1))
+					result.WriteString("?")
 					expandedArgs = append(expandedArgs, anySlice...)
 				case []float64:
 					// Convert []uint to []any
@@ -337,10 +352,12 @@ func In(query string, args ...any) (string, []any) {
 					for i, val := range v {
 						anySlice[i] = val
 					}
-					result.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+					result.WriteString(strings.Repeat("?,", len(v)-1))
+					result.WriteString("?")
 					expandedArgs = append(expandedArgs, anySlice...)
 				case []any:
-					result.WriteString(strings.Repeat("?,", len(v)-1) + "?")
+					result.WriteString(strings.Repeat("?,", len(v)-1))
+					result.WriteString("?")
 					expandedArgs = append(expandedArgs, v...)
 				default:
 					// Not a slice, treat as normal arg

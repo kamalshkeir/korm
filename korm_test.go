@@ -115,10 +115,15 @@ func TestInsertUsersAndGroups(t *testing.T) {
 		}
 	}
 
+	// Le groupe "admin" est inséré ici parce que tous les tests de relations
+	// (AddRelated, DeleteRelated, GetRelated, JoinRelated) le cherchent par
+	// Where("name = ?", "admin"). Sans lui ils échouent tous sur ErrNoData.
 	_, err := Table("groups").BulkInsert(map[string]any{
 		"name": "another",
 	}, map[string]any{
 		"name": "last",
+	}, map[string]any{
+		"name": "admin",
 	})
 	if err != nil {
 		t.Error(err)
@@ -163,7 +168,7 @@ func TestDeleteRelatedM(t *testing.T) {
 
 func TestGetRelatedM(t *testing.T) {
 	users := []map[string]any{}
-	err := Table("groups").Where("name", "admin").GetRelated("users", &users)
+	err := Table("groups").Where("groups.name = ?", "admin").GetRelated("users", &users)
 	if err != nil {
 		t.Error(err)
 	}
@@ -232,7 +237,7 @@ func TestGeneratedAs(t *testing.T) {
 
 func TestJoinRelatedM(t *testing.T) {
 	users := []map[string]any{}
-	err := Table("groups").Where("name = ?", "admin").JoinRelated("users", &users)
+	err := Table("groups").Where("groups.name = ?", "admin").JoinRelated("users", &users)
 	if err != nil {
 		t.Error(err)
 	}
