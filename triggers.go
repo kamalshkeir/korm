@@ -2,6 +2,8 @@ package korm
 
 import (
 	"encoding/json"
+	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -21,7 +23,8 @@ func init() {
 }
 
 var (
-	hooks = kmap.New[string, []HookFunc]()
+	hooks                 = kmap.New[string, []HookFunc]()
+	triggersWorkerStarted = kmap.New[string, bool]()
 )
 
 type sizeDb struct {
@@ -290,10 +293,13 @@ func AddChangesTrigger(tableName string, dbName ...string) error {
 		}
 	}
 
-	// Get table columns for constructing the change data
-	cols := t.Types
+	// Get fresh table columns from database for constructing change data
+	cols, _ := GetAllColumnsTypes(tableName, dName)
 	if len(cols) == 0 {
-		return ErrTableNotFound
+		cols = t.Types
+		if len(cols) == 0 {
+			return ErrTableNotFound
+		}
 	}
 
 	switch db.Dialect {
@@ -313,9 +319,11 @@ func AddChangesTrigger(tableName string, dbName ...string) error {
 		AddTrigger(tableName, "", "AFTER UPDATE", updateStmt, dName)
 		AddTrigger(tableName, "", "AFTER DELETE", deleteStmt, dName)
 
-		// Start background worker to publish changes
-		go func() {
-			for {
+		// Start background worker to publish changes if not already running for this db
+		if started, ok := triggersWorkerStarted.Get(dName); !ok || !started {
+			triggersWorkerStarted.Set(dName, true)
+			go func() {
+				for {
 				tx, err := db.Conn.Begin()
 				if err != nil {
 					time.Sleep(time.Second)
@@ -355,6 +363,7 @@ func AddChangesTrigger(tableName string, dbName ...string) error {
 						}
 					}
 				}
+				lg.CheckError(rows.Err())
 				if doFlush {
 					flushCache()
 				}
@@ -373,6 +382,7 @@ func AddChangesTrigger(tableName string, dbName ...string) error {
 				time.Sleep(time.Second)
 			}
 		}()
+	}
 
 	case POSTGRES:
 		// Postgres trigger for each operation
@@ -385,9 +395,11 @@ func AddChangesTrigger(tableName string, dbName ...string) error {
 		AddTrigger(tableName, "", "AFTER UPDATE", updateStmt, dName)
 		AddTrigger(tableName, "", "AFTER DELETE", deleteStmt, dName)
 
-		// Start background worker to publish changes
-		go func() {
-			for {
+		// Start background worker to publish changes if not already running for this db
+		if started, ok := triggersWorkerStarted.Get(dName); !ok || !started {
+			triggersWorkerStarted.Set(dName, true)
+			go func() {
+				for {
 				// Start transaction
 				tx, err := db.Conn.Begin()
 				if err != nil {
@@ -435,6 +447,7 @@ func AddChangesTrigger(tableName string, dbName ...string) error {
 				time.Sleep(time.Second)
 			}
 		}()
+	}
 
 	case MYSQL:
 		// MySQL trigger for each operation
@@ -454,9 +467,11 @@ func AddChangesTrigger(tableName string, dbName ...string) error {
 		AddTrigger(tableName, "", "AFTER UPDATE", updateStmt, dName)
 		AddTrigger(tableName, "", "AFTER DELETE", deleteStmt, dName)
 
-		// Start background worker to publish changes
-		go func() {
-			for {
+		// Start background worker to publish changes if not already running for this db
+		if started, ok := triggersWorkerStarted.Get(dName); !ok || !started {
+			triggersWorkerStarted.Set(dName, true)
+			go func() {
+				for {
 				// Start transaction
 				tx, err := db.Conn.Begin()
 				if err != nil {
@@ -508,15 +523,86 @@ func AddChangesTrigger(tableName string, dbName ...string) error {
 			}
 		}()
 	}
+	}
 
 	return nil
 }
 
-// Helper function to build JSON field pairs for triggers
+// Helper function to build JSON field pairs for triggers with deterministic sorted order
 func buildJsonFields(prefix string, cols map[string]string) string {
-	pairs := make([]string, 0, len(cols))
+	keys := make([]string, 0, len(cols))
 	for col := range cols {
+		keys = append(keys, col)
+	}
+	sort.Strings(keys)
+	pairs := make([]string, 0, len(keys))
+	for _, col := range keys {
 		pairs = append(pairs, "'"+col+"',"+prefix+"."+col)
 	}
 	return strings.Join(pairs, ",")
 }
+
+// RecreateTableTriggers drops and re-creates KORM change triggers (and updated_at trigger if applicable)
+// for tableName based on the current columns in the database.
+func RecreateTableTriggers(tableName string, dbName ...string) error {
+	dName := defaultDB
+	if len(dbName) > 0 {
+		dName = dbName[0]
+	}
+
+	db, err := GetMemoryDatabase(dName)
+	if err != nil {
+		return err
+	}
+
+	// 1. Refresh in-memory table columns if table exists in memory
+	cols, _ := GetAllColumnsTypes(tableName, dName)
+	if len(cols) > 0 {
+		for i := range db.Tables {
+			if db.Tables[i].Name == tableName {
+				db.Tables[i].Types = cols
+				break
+			}
+		}
+	}
+
+	// 2. Refresh changes trigger if table qualifies
+	if tableName != "users" && !strings.HasPrefix(tableName, "_") {
+		if err := AddChangesTrigger(tableName, dName); err != nil {
+			return err
+		}
+	}
+
+	// 3. Refresh updated_at trigger if table has updated_at column
+	pk := ""
+	for _, t := range db.Tables {
+		if t.Name == tableName {
+			pk = t.Pk
+			break
+		}
+	}
+	if pk == "" {
+		pk = "id"
+	}
+
+	if _, hasUpdatedAt := cols["updated_at"]; hasUpdatedAt {
+		trigs := checkUpdatedAtTrigger(db.Dialect, tableName, "updated_at", pk)
+		for _, stmts := range trigs {
+			for _, stmt := range stmts {
+				_ = Exec(dName, stmt)
+			}
+		}
+	} else {
+		// Drop updated_at trigger if it exists
+		switch db.Dialect {
+		case POSTGRES, COCKROACH:
+			_ = Exec(dName, fmt.Sprintf(`DROP TRIGGER IF EXISTS "%s_updated_at_update_trig" ON "%s";`, tableName, tableName))
+			_ = Exec(dName, fmt.Sprintf(`DROP FUNCTION IF EXISTS "%s_updated_at_trig"();`, tableName))
+		default:
+			_ = Exec(dName, fmt.Sprintf("DROP TRIGGER IF EXISTS `%s_update_trig`;", tableName))
+		}
+	}
+
+	return nil
+}
+

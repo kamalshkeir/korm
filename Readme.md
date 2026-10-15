@@ -88,6 +88,8 @@
 
 - [AutoMigrate](#automigrate) directly from struct
 
+- [Schema Diff & Dry-Run](#schema-diff-dry-run), compare Go models with physical database and get proposed migration SQL queries without executing anything
+
 - Compatible with official database/sql,  so you can do your queries yourself using sql.DB  `korm.GetConnection()``, and overall a painless integration of your existing codebases using database/sql
 
 - [Router/Mux](https://github.com/kamalshkeir/ksmux) accessible from the serverBus after calling `korm.WithBus(...opts)` or `korm.WithDashboard(addr, ...opts)`
@@ -337,6 +339,31 @@ all, _ := korm.Model[User]()
                    .All()
 ```
 
+### Schema Diff (Dry-Run)
+
+Inspect differences between your Go model structs and the physical database tables at runtime or on-demand, and review proposed migration SQL queries without executing them:
+
+```shell
+# In terminal directly:
+go run main.go shell diff
+
+# Or for a specific table:
+go run main.go shell diff users
+```
+
+Or programmatically in Go:
+```go
+diffs, err := korm.CheckSchema()
+if err == nil {
+    korm.PrintSchemaDiff(diffs)
+}
+```
+
+**Key Capabilities :**
+- **Safe & Non-Destructive** : Performs a complete dry-run inspection of tables, columns, indexes, and constraints without running any `ALTER` or `DROP` queries.
+- **Dialect-Aware** : Proposes tailored SQL for SQLite, PostgreSQL, CockroachDB, and MySQL / MariaDB (e.g. SQLite-safe `ADD COLUMN` avoiding illegal inline `UNIQUE` constraints).
+- **Foreign Key & Rename Intelligence** : Automatically detects column renames (`old ➔ new`) and alerts when dropped or renamed columns have active foreign key dependencies across models or database tables.
+- **KORM Triggers & Constraints** : Automatically proposes trigger refreshes (for SQLite/MySQL change tracking triggers and `updated_at`) and handles dynamic default conversions.
 
 ### API
 ```go
@@ -1126,7 +1153,7 @@ korm.WithEmbededDocs(embeded embed.FS, dirPath, korm.BasicAuth)
 ### Interactive shell
 ```shell
 Commands :  
-[databases, use, tables, columns, migrate, createsuperuser, createuser, query, getall, get, drop, delete, clear/cls, q/quit/exit, help/commands]
+[databases, use, tables, columns, diff, migrate, createsuperuser, createuser, query, getall, get, drop, delete, clear/cls, q/quit/exit, help/commands]
   'databases':
 	  list all connected databases
 
@@ -1139,6 +1166,10 @@ Commands :
   'columns':
 	  list all columns of a table
 	  (accept but not required extra param like : 'columns' or 'columns users')
+
+  'diff':
+	  show diff between Go models and DB schema and propose SQL queries without executing
+	  (accepts optional table name like : 'diff' or 'diff users')
 
   'migrate':
 	  migrate or execute sql file

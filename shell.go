@@ -42,6 +42,9 @@ const helpS string = `
   'columns':
 	  list all columns of a table
 
+  'diff':
+	  show diff between Go models and DB schema and propose SQL queries without executing
+
   'migrate':
 	  migrate or execute sql file
 
@@ -81,7 +84,7 @@ const helpS string = `
 	  show this help message
 `
 
-const commandsS string = "Commands :  [databases, use, tables, columns, migrate, query, getall, get, drop, delete, createsuperuser, createuser, clear/cls, q/q!/quit/exit, help/commands]"
+const commandsS string = "Commands :  [databases, use, tables, columns, diff, migrate, query, getall, get, drop, delete, createsuperuser, createuser, clear/cls, q/q!/quit/exit, help/commands]"
 
 // InitShell init the shell and return true if used to stop main
 func InitShell() bool {
@@ -154,6 +157,8 @@ func handleCommand(commands []string) bool {
 		fmt.Printf(yellow, helpS)
 	case "commands":
 		fmt.Printf(yellow, commandsS)
+	case "diff":
+		handleDiffCommand(commands)
 	case "migrate":
 		var path string
 		if len(commands) > 1 {

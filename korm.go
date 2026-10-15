@@ -601,6 +601,7 @@ func GetAllTables(dbName ...string) []string {
 			}
 			tables = append(tables, table)
 		}
+		lg.CheckError(rows.Err())
 	case MYSQL, MARIA:
 		rows, err := db.Conn.Query("SELECT table_name,table_schema FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE' AND table_schema ='" + name + "'")
 		if lg.CheckError(err) {
@@ -616,6 +617,7 @@ func GetAllTables(dbName ...string) []string {
 			}
 			tables = append(tables, table)
 		}
+		lg.CheckError(rows.Err())
 	case SQLITE, "":
 		rows, err := db.Conn.Query(`select name FROM sqlite_master WHERE type ='table' AND name NOT LIKE 'sqlite_%';`)
 		if lg.CheckError(err) {
@@ -631,6 +633,7 @@ func GetAllTables(dbName ...string) []string {
 			}
 			tables = append(tables, table)
 		}
+		lg.CheckError(rows.Err())
 	default:
 		lg.ErrorC("database type not supported, should be sqlite3, postgres, cockroach, maria or mysql")
 		return nil
@@ -696,6 +699,7 @@ func GetAllColumnsTypes(table string, dbName ...string) (map[string]string, []st
 			columns[singleColName] = singleColType
 			colsSlice = append(colsSlice, singleColName)
 		}
+		lg.CheckError(row.Err())
 		if useCache {
 			cacheAllCols.Set(dName+table, columns)
 		}
@@ -718,6 +722,7 @@ func GetAllColumnsTypes(table string, dbName ...string) (map[string]string, []st
 		columns[singleColName] = singleColType
 		colsSlice = append(colsSlice, singleColName)
 	}
+	lg.CheckError(row.Err())
 	if useCache {
 		cacheAllCols.Set(dName+table, columns)
 		cacheAllColsOrdered.Set(dName+table, colsSlice)
