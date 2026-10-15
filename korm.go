@@ -854,3 +854,23 @@ func DisallowTerminalCommands(commands ...string) {
 		delete(terminalAllowedCommands, cmd)
 	}
 }
+
+// Query executes statement and returns a slice of T ([]T).
+func Query[T any](statement string, args ...any) ([]T, error) {
+	return Select[T](true).Query(statement, args...)
+}
+
+// QueryOne executes statement and returns a single record of T. Returns ErrNoData if not found.
+func QueryOne[T any](statement string, args ...any) (T, error) {
+	return Select[T](true).One(statement, args...)
+}
+
+// QueryNamed executes statement with named arguments and returns a slice of T ([]T).
+func QueryNamed[T any](statement string, args map[string]any, unsafe ...bool) ([]T, error) {
+	return Select[T](true).Named(statement, args, unsafe...)
+}
+
+// QueryNamedOne executes statement with named arguments and returns a single record of T. Returns ErrNoData if not found.
+func QueryNamedOne[T any](statement string, args map[string]any, unsafe ...bool) (T, error) {
+	return Select[T](true).NamedOne(statement, args, unsafe...)
+}

@@ -27,11 +27,12 @@ var TablesView = func(c *ksmux.Context) {
 	}
 	query := strings.Join(q, ` UNION ALL `)
 
-	var results []struct {
+	type tableResult struct {
 		TableName string `db:"table_name"`
 		Count     int    `db:"count"`
 	}
-	if err := To(&results).Database(defaultDB).Query(query); lg.CheckError(err) {
+	results, err := Select[tableResult]().Database(defaultDB).Query(query)
+	if lg.CheckError(err) {
 		c.Error("something wrong happened")
 		return
 	}
@@ -85,9 +86,8 @@ var TableGetAll = func(c *ksmux.Context) {
 
 	// Get total count for pagination
 	var total int64
-	var totalRows []int64
-	err = To(&totalRows).Database(defaultDB).Query("SELECT COUNT(*) FROM " + model)
-	if err == nil {
+	totalRows, err := Select[int64]().Database(defaultDB).Query("SELECT COUNT(*) FROM " + model)
+	if err == nil && len(totalRows) > 0 {
 		total = totalRows[0]
 	}
 
@@ -101,8 +101,7 @@ var TableGetAll = func(c *ksmux.Context) {
 				spTo := strings.Split(fkey.ToTableField, ".")
 				if len(spTo) == 2 {
 					q := "select * from " + spTo[0] + " order by " + spTo[1]
-					mm := []map[string]any{}
-					err := To(&mm).Query(q)
+					mm, err := Select[map[string]any]().Query(q)
 					if !lg.CheckError(err) {
 						ress := []any{}
 						for _, res := range mm {
@@ -207,8 +206,7 @@ var AllModelsGet = func(c *ksmux.Context) {
 				spTo := strings.Split(fkey.ToTableField, ".")
 				if len(spTo) == 2 {
 					q := "select * from " + spTo[0] + " order by " + spTo[1]
-					mm := []map[string]any{}
-					err := To(&mm).Query(q)
+					mm, err := Select[map[string]any]().Query(q)
 					if !lg.CheckError(err) {
 						ress := []any{}
 						for _, res := range mm {
@@ -302,8 +300,7 @@ var AllModelsSearch = func(c *ksmux.Context) {
 			spTo := strings.Split(fkey.ToTableField, ".")
 			if len(spTo) == 2 {
 				q := "select * from " + spTo[0] + " order by " + spTo[1]
-				mm := []map[string]any{}
-				err := To(&mm).Query(q)
+				mm, err := Select[map[string]any]().Query(q)
 				if !lg.CheckError(err) {
 					ress := []any{}
 					for _, res := range mm {
@@ -359,15 +356,14 @@ var AllModelsSearch = func(c *ksmux.Context) {
 
 	// Get total count for pagination
 	var total int64
-	var totalRows []int64
 	query := "SELECT COUNT(*) FROM " + model
 	if v, ok := body["query"]; ok {
 		if vStr, ok := v.(string); ok && vStr != "" {
 			query += " WHERE " + vStr
 		}
 	}
-	err = To(&totalRows).Database(defaultDB).Query(query)
-	if err == nil {
+	totalRows, err := Select[int64]().Database(defaultDB).Query(query)
+	if err == nil && len(totalRows) > 0 {
 		total = totalRows[0]
 	}
 

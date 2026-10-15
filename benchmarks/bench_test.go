@@ -149,14 +149,13 @@ func BenchmarkQueryS(b *testing.B) {
 	}
 }
 
-func BenchmarkTo(b *testing.B) {
+func BenchmarkSelect(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		a := []TestTable{}
-		err := korm.To(&a).Query("select * from test_table where is_admin = ?", true)
+		a, err := korm.Select[TestTable]().Query("select * from test_table where is_admin = ?", true)
 		if err != nil {
-			b.Error("error BenchmarkTo:", err)
+			b.Error("error BenchmarkSelect:", err)
 		}
 		if len(a) != NumberOfModel || a[0].Email != "test-0@example.com" {
 			b.Error("Failed:", len(a), a[0].Email)
@@ -164,16 +163,15 @@ func BenchmarkTo(b *testing.B) {
 	}
 }
 
-func BenchmarkToNamed(b *testing.B) {
+func BenchmarkSelectNamed(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		a := []TestTable{}
-		err := korm.To(&a).Named("select * from test_table where is_admin = :ad", map[string]any{
+		a, err := korm.Select[TestTable]().Named("select * from test_table where is_admin = :ad", map[string]any{
 			"ad": true,
 		})
 		if err != nil {
-			b.Error("error BenchmarkToNamed:", err)
+			b.Error("error BenchmarkSelectNamed:", err)
 		}
 		if len(a) != NumberOfModel || a[0].Email != "test-0@example.com" {
 			b.Error("Failed:", len(a), a[0].Email)

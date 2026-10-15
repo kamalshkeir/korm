@@ -1205,13 +1205,12 @@ func (b *BuilderS[T]) All() ([]T, error) {
 		lg.InfoC("debug", "stat", b.statement, "args", b.args)
 	}
 
-	var models []T
-	selector := To(&models).Database(b.db.Name)
+	selector := Select[T]().Database(b.db.Name)
 	if b.trace {
 		selector.ctx = b.ctx
 		selector.trace = true
 	}
-	err := selector.Query(b.statement, b.args...)
+	models, err := selector.Query(b.statement, b.args...)
 	if err != nil {
 		return nil, err
 	}
@@ -1738,8 +1737,7 @@ func (b *BuilderS[T]) One() (T, error) {
 	if b.debug {
 		lg.InfoC("debug", "stat", b.statement, "args", b.args)
 	}
-	var model []T
-	err := To(&model).Database(b.db.Name).Query(b.statement, b.args...)
+	model, err := Select[T]().Database(b.db.Name).Query(b.statement, b.args...)
 	if err != nil {
 		return *new(T), err
 	} else if len(model) == 0 {

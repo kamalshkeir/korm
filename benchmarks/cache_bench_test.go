@@ -275,18 +275,16 @@ func BenchmarkCacheComparison_One(b *testing.B) {
 func BenchmarkCacheComparison_Query(b *testing.B) {
 	b.Run("WithCache", func(b *testing.B) {
 		korm.FlushCache()
-		data := []TestTable{}
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			korm.To(&data).Query("SELECT * FROM test_table WHERE is_admin = ?", true)
+			korm.Select[TestTable]().Query("SELECT * FROM test_table WHERE is_admin = ?", true)
 		}
 	})
 
 	b.Run("WithoutCache", func(b *testing.B) {
-		data := []TestTable{}
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			korm.To(&data).NoCache().Query("SELECT * FROM test_table WHERE is_admin = ?", true)
+			korm.Select[TestTable]().NoCache().Query("SELECT * FROM test_table WHERE is_admin = ?", true)
 		}
 	})
 }

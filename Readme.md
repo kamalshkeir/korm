@@ -207,22 +207,22 @@ func main() {
 	// go run main.go shell to createsuperuser
 	// connect to admin and create some data to query
 
-	// nested structs with joins, scan the result to the channel directly after each row
-	// so instead of receiving a slice, you will receive data on the channel[0] of the passed slice
-	studentsChan := []chan Student{make(chan Student)}
+	// Stream rows directly to a channel as they arrive:
+	studentsChan := make(chan Student)
 	go func() {
-		for s := range studentsChan[0] {
+		for s := range studentsChan {
 			fmt.Println("chan students:", s)
 		}
 	}()
-	err = korm.To(&studentsChan).Query("select students.*,classes.id as 'classes.id',classes.name as 'classes.name'  from students join classes where classes.id = students.class")
+	_, err = korm.Select[chan Student]().Channel(studentsChan).Query("select students.*,classes.id as 'classes.id',classes.name as 'classes.name'  from students join classes where classes.id = students.class")
 	lg.CheckError(err)
 	fmt.Println()
 
-	// Named with nested (second argument of 'To') filled automatically from join, support nested slices and structs
-	classes := []Class{}
+	// 🚀 Modern Generic Queries: No pointer passing, no pre-allocated slice variables!
+
+	// Named query with joins and nested relations:
 	query := "select classes.*, students.id as 'students.id',students.name as 'students.name' from classes join students on students.class = classes.id order by :order_here"
-	err = korm.To(&classes, true).Named(query,map[string]any{
+	classes, err := korm.QueryNamed[Class](query, map[string]any{
 		"order_here": "classes.id",
 	})
 	lg.CheckError(err)
@@ -231,43 +231,45 @@ func main() {
 	}
 	fmt.Println()
 
-	// // not nested, only remove second arg true from 'To' method
-	students := []Student{}
-	err = korm.To(&students, true).Query("select students.*,classes.id as 'classes.id',classes.name as 'classes.name'  from students join classes where classes.id = students.class")
+	// Queries with joins and nested structs:
+	students, err := korm.Query[Student]("select students.*,classes.id as 'classes.id',classes.name as 'classes.name'  from students join classes where classes.id = students.class")
 	lg.CheckError(err)
 	for _, s := range students {
 		fmt.Println("student:", s)
 	}
 	fmt.Println()
 
-	maps := []map[string]any{}
-	err = korm.To(&maps).Query("select * from students")
+	// Direct maps slice:
+	maps, err := korm.Query[map[string]any]("select * from students")
 	lg.CheckError(err)
 	fmt.Println("maps =", maps)
 	fmt.Println()
 
-	names := []*string{}
-	err = korm.To(&names).Query("select name from students")
+	// Direct primitive slices:
+	names, err := korm.Query[string]("select name from students")
 	lg.CheckError(err)
 	fmt.Println("names =", names)
 	fmt.Println()
 
-	ids := []int{}
-	err = korm.To(&ids).Query("select id from students")
+	ids, err := korm.Query[int]("select id from students")
 	lg.CheckError(err)
 	fmt.Println("ids =", ids)
 	fmt.Println()
 
-	bools := []bool{}
-	err = korm.To(&bools).Query("select is_admin from users")
+	bools, err := korm.Query[bool]("select is_admin from users")
 	lg.CheckError(err)
 	fmt.Println("bools =", bools)
 	fmt.Println()
 
-	times := []time.Time{}
-	err = korm.To(&times).Query("select created_at from users")
+	times, err := korm.Query[time.Time]("select created_at from users")
 	lg.CheckError(err)
 	fmt.Println("times =", times)
+
+	// Fetch a single record directly (returns ErrNoData if not found):
+	firstStudent, err := korm.QueryOne[Student]("select * from students where id = ?", 1)
+	if err == nil {
+		fmt.Println("first student =", firstStudent)
+	}
 
 	server.Run()
 }
@@ -370,10 +372,24 @@ if err == nil {
 korm.New(dbType Dialect, dbName string, dbDriver driver.Driver, dbDSN ...string) error
 korm.LogQueries()
 korm.GetConnection(dbName ...string) *sql.DB
-korm.To[T any](dest *[]T, nestedSlice ...bool) *Selector[T] // scan query to any type slice, even channels and slices with nested structs and joins
+
+// 🚀 Modern, Type-Safe Query API (zero pointer passing required!)
+korm.Query[T any](statement string, args ...any) ([]T, error)
+korm.QueryOne[T any](statement string, args ...any) (T, error)
+korm.QueryNamed[T any](statement string, args map[string]any, unsafe ...bool) ([]T, error)
+korm.QueryNamedOne[T any](statement string, args map[string]any, unsafe ...bool) (T, error)
+
+// Fluent Selector for advanced options (Database, NoCache, Debug, Tracing, Context)
+korm.Select[T any](nestedSlice ...bool) *Selector[T]
+(sl *Selector[T]) Database(dbName string) *Selector[T]
+(sl *Selector[T]) NoCache() *Selector[T]
+(sl *Selector[T]) Debug() *Selector[T]
+(sl *Selector[T]) Trace() *Selector[T]
 (sl *Selector[T]) Ctx(ct context.Context) *Selector[T]
-(sl *Selector[T]) Query(statement string, args ...any) error
-(sl *Selector[T]) Named(statement string, args map[string]any, unsafe ...bool) error
+(sl *Selector[T]) Query(statement string, args ...any) ([]T, error)
+(sl *Selector[T]) Named(statement string, args map[string]any, unsafe ...bool) ([]T, error)
+(sl *Selector[T]) One(statement string, args ...any) (T, error)
+(sl *Selector[T]) NamedOne(statement string, args map[string]any, unsafe ...bool) (T, error)
 korm.WithBus(...opts) *ksbus.Server // Usage: WithBus(...opts) or share an existing one
 korm.WithDashboard(address, ...opts) *ksbus.Server
 korm.WithShell() // ⚠️ if dashboard used, korm.WithShell should be after WithDashboard
@@ -1297,61 +1313,53 @@ func main() {
 	// connect to admin and create some data to query
 
 	// nested structs with joins, scan the result to the channel directly after each row
-	// so instead of receiving a slice, you will receive data on the channel[0] of the passed slice
-	studentsChan := []chan Student{make(chan Student)}
+	// Stream rows directly to a channel as they arrive:
+	studentsChan := make(chan Student)
 	go func() {
-		for s := range studentsChan[0] {
+		for s := range studentsChan {
 			fmt.Println("chan students:", s)
 		}
 	}()
-	err = korm.To(&studentsChan).Query("select students.*,classes.id as 'classes.id',classes.name as 'classes.name'  from students join classes where classes.id = students.class")
+	_, err = korm.Select[chan Student]().Channel(studentsChan).Query("select students.*,classes.id as 'classes.id',classes.name as 'classes.name'  from students join classes where classes.id = students.class")
 	lg.CheckError(err)
 	fmt.Println()
 
-	// nested (second argument of 'Scan') filled automatically from join, support nested slices and structs
-	classes := []Class{}
-	err = korm.To(&classes, true).Query("select classes.*, students.id as 'students.id',students.name as 'students.name' from classes join students on students.class = classes.id order by classes.id")
+	// 🚀 Type-safe queries: Returns typed slice/struct directly!
+	classes, err := korm.Query[Class]("select classes.*, students.id as 'students.id',students.name as 'students.name' from classes join students on students.class = classes.id order by classes.id")
 	lg.CheckError(err)
 	for _, s := range classes {
 		fmt.Println("class:", s)
 	}
 	fmt.Println()
 
-	// // not nested, only remove second arg true from Scan method
-	students := []Student{}
-	err = korm.To(&students, true).Query("select students.*,classes.id as 'classes.id',classes.name as 'classes.name'  from students join classes where classes.id = students.class")
+	students, err := korm.Query[Student]("select students.*,classes.id as 'classes.id',classes.name as 'classes.name'  from students join classes where classes.id = students.class")
 	lg.CheckError(err)
 	for _, s := range students {
 		fmt.Println("student:", s)
 	}
 	fmt.Println()
 
-	maps := []map[string]any{}
-	err = korm.To(&maps).Query("select * from students")
+	maps, err := korm.Query[map[string]any]("select * from students")
 	lg.CheckError(err)
 	fmt.Println("maps =", maps)
 	fmt.Println()
 
-	names := []*string{}
-	err = korm.To(&names).Query("select name from students")
+	names, err := korm.Query[string]("select name from students")
 	lg.CheckError(err)
 	fmt.Println("names =", names)
 	fmt.Println()
 
-	ids := []int{}
-	err = korm.To(&ids).Query("select id from students")
+	ids, err := korm.Query[int]("select id from students")
 	lg.CheckError(err)
 	fmt.Println("ids =", ids)
 	fmt.Println()
 
-	bools := []bool{}
-	err = korm.To(&bools).Query("select is_admin from users")
+	bools, err := korm.Query[bool]("select is_admin from users")
 	lg.CheckError(err)
 	fmt.Println("bools =", bools)
 	fmt.Println()
 
-	times := []time.Time{}
-	err = korm.To(&times).Query("select created_at from users")
+	times, err := korm.Query[time.Time]("select created_at from users")
 	lg.CheckError(err)
 	fmt.Println("times =", times)
 
@@ -1699,8 +1707,7 @@ q := korm.JSON_EXTRACT(`{"a": {"c": 3}, "b": 2}`, korm.JsonOption{
 })
 fmt.Println("q ==", q) // q == JSON_EXTRACT('{"a": {"c": 3}, "b": 2}','$.a.c','$.b') AS data
 
-var data []map[string]any
-err := korm.To(&data).Query("SELECT " + q)
+data, err := korm.Select[map[string]any]().Query("SELECT " + q)
 lg.CheckError(err)
 
 fmt.Println("data=", data) // data= [map[data:[3,2]]]
