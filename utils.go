@@ -266,7 +266,7 @@ func indexExists(conn *sql.DB, tableName, indexName string, dialect Dialect) boo
 	case SQLITE:
 		query = `SELECT name FROM sqlite_master 
 				 WHERE type='index' AND tbl_name=? AND name=?`
-	case POSTGRES:
+	case POSTGRES, COCKROACH:
 		query = `SELECT indexname FROM pg_indexes 
 				 WHERE tablename = $1 AND indexname = $2`
 	case MYSQL, MARIA:

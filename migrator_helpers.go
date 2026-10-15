@@ -17,11 +17,16 @@ type kormFkey struct {
 // LinkModel link a struct model to a  db_table_name
 func LinkModel[T any](to_table_name string, dbName ...string) {
 	var db *DatabaseEntity
-	if len(dbName) == 0 && len(databases) > 0 {
-		db = &databases[0]
+	if len(dbName) == 0 {
+		if len(databases) > 0 {
+			db = &databases[0]
+		} else {
+			lg.ErrorC("no database connected")
+			return
+		}
 	} else {
 		dbb, err := GetMemoryDatabase(dbName[0])
-		if lg.CheckError(err) {
+		if lg.CheckError(err) || dbb == nil {
 			return
 		}
 		db = dbb
@@ -39,13 +44,11 @@ func LinkModel[T any](to_table_name string, dbName ...string) {
 	fields, _, ftypes, ftags := getStructInfos(new(T))
 	pk := ""
 	if !tFound {
-	tagsLoop:
 		for col, tags := range ftags {
 			for i := range tags {
 				tags[i] = strings.TrimSpace(tags[i])
 				if tags[i] == "pk" || tags[i] == "autoinc" {
 					pk = col
-					break tagsLoop
 				}
 			}
 		}
@@ -99,9 +102,10 @@ func LinkModel[T any](to_table_name string, dbName ...string) {
 			}
 		}
 		if pk == "" {
-			if strings.HasSuffix(fields[0], "id") {
+			if len(fields) > 0 && isFallbackPkName(fields[0]) {
 				pk = fields[0]
 			} else {
+				fields = append([]string{"id"}, fields...)
 				pk = "id"
 			}
 		}
