@@ -381,6 +381,7 @@ korm.QueryNamedOne[T any](statement string, args map[string]any, unsafe ...bool)
 
 // Fluent Selector for advanced options (Database, NoCache, Debug, Tracing, Context)
 korm.Select[T any](nestedSlice ...bool) *Selector[T]
+korm.SelectTo[T any](dest *[]T, nestedSlice ...bool) *Selector[T] // scan into an existing slice pointer (ideal for anonymous structs)
 (sl *Selector[T]) Database(dbName string) *Selector[T]
 (sl *Selector[T]) NoCache() *Selector[T]
 (sl *Selector[T]) Debug() *Selector[T]

@@ -43,6 +43,18 @@ func Select[T any](nestedSlice ...bool) *Selector[T] {
 	return s
 }
 
+// SelectTo creates a Selector targeting an existing slice pointer (e.g. for anonymous structs).
+func SelectTo[T any](dest *[]T, nestedSlice ...bool) *Selector[T] {
+	s := &Selector[T]{
+		dest: dest,
+		db:   &databases[0],
+	}
+	if len(nestedSlice) > 0 && nestedSlice[0] {
+		s.nested = true
+	}
+	return s
+}
+
 func (sl *Selector[T]) Database(dbName string) *Selector[T] {
 	db, err := GetMemoryDatabase(dbName)
 	if err == nil {
