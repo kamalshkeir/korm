@@ -19,6 +19,11 @@ import (
 	"github.com/kamalshkeir/ulid"
 )
 
+type tableResult struct {
+	TableName string `db:"table_name"`
+	Count     int    `db:"count"`
+}
+
 var TablesView = func(c *ksmux.Context) {
 	allTables := GetAllTables(defaultDB)
 	q := []string{}
@@ -27,10 +32,6 @@ var TablesView = func(c *ksmux.Context) {
 	}
 	query := strings.Join(q, ` UNION ALL `)
 
-	type tableResult struct {
-		TableName string `db:"table_name"`
-		Count     int    `db:"count"`
-	}
 	results, err := Select[tableResult]().Database(defaultDB).Query(query)
 	if lg.CheckError(err) {
 		c.Error("something wrong happened")

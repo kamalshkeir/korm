@@ -357,10 +357,6 @@ func statsNbRecords() string {
 	}
 	query := strings.Join(q, ` UNION ALL `)
 
-	type tableResult struct {
-		TableName string `db:"table_name"`
-		Count     int    `db:"count"`
-	}
 	results, err := Select[tableResult]().Query(query)
 	if lg.CheckError(err) {
 		return "0"

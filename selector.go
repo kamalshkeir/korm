@@ -116,20 +116,22 @@ func (sl *Selector[T]) Query(statement string, args ...any) ([]T, error) {
 		sl.ctx = context.WithValue(context.Background(), traceEnabledKey, true)
 	}
 
+	typ := fmt.Sprintf("%T", *new(T))
+	ref := reflect.ValueOf(*new(T))
+
 	var stt string
 	if useCache && !sl.nocache {
-		// Include database name in cache key to prevent cross-database cache pollution
-		stt = sl.db.Name + "::" + statement + fmt.Sprint(args...)
+		// Include database name and type in cache key to prevent cross-database and cross-type cache collisions
+		stt = sl.db.Name + "::" + typ + "::" + statement + fmt.Sprint(args...)
 		if v, ok := cacheQ.Get(stt); ok {
-			if len(*sl.dest) == 0 {
-				*sl.dest = v.([]T)
-				return *sl.dest, nil
+			if cached, ok := v.([]T); ok {
+				if len(*sl.dest) == 0 {
+					*sl.dest = cached
+					return *sl.dest, nil
+				}
 			}
 		}
 	}
-
-	typ := fmt.Sprintf("%T", *new(T))
-	ref := reflect.ValueOf(*new(T))
 
 	// Expand IN clause arguments before dialect adaptation
 	statement, args = In(statement, args...)
@@ -432,20 +434,22 @@ func (sl *Selector[T]) Named(statement string, args map[string]any, unsafe ...bo
 		sl.ctx = context.WithValue(sl.ctx, traceEnabledKey, true)
 	}
 
+	typ := fmt.Sprintf("%T", *new(T))
+	ref := reflect.ValueOf(sl.dest)
+
 	var stt string
 	if useCache && !sl.nocache {
-		// Include database name in cache key to prevent cross-database cache pollution
-		stt = sl.db.Name + "::" + statement + fmt.Sprint(args)
+		// Include database name and type in cache key to prevent cross-database and cross-type cache collisions
+		stt = sl.db.Name + "::" + typ + "::" + statement + fmt.Sprint(args)
 		if v, ok := cacheQ.Get(stt); ok {
-			if len(*sl.dest) == 0 {
-				*sl.dest = v.([]T)
-				return *sl.dest, nil
+			if cached, ok := v.([]T); ok {
+				if len(*sl.dest) == 0 {
+					*sl.dest = cached
+					return *sl.dest, nil
+				}
 			}
 		}
 	}
-
-	typ := fmt.Sprintf("%T", *new(T))
-	ref := reflect.ValueOf(sl.dest)
 
 	for k, vv := range args {
 		switch v := vv.(type) {
