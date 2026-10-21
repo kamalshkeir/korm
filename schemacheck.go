@@ -584,6 +584,15 @@ func CompareModelWithDB(schema ModelSchema, db *DatabaseEntity, reverseFK ...map
 		prevSnapshot = &prevEntities[0]
 	}
 
+	var dropTriggerSQL []string
+	var dropFKSQL []string
+	var dropColSQL []string
+	var renameColSQL []string
+	var alterColSQL []string
+	var addColSQL []string
+	var addIndexSQL []string
+	var createTriggerSQL []string
+
 	// 3. Detect ADDED columns (in Code Model, not in DB)
 	for _, colName := range schema.ColOrder {
 		col := schema.Columns[colName]
@@ -623,7 +632,7 @@ func CompareModelWithDB(schema ModelSchema, db *DatabaseEntity, reverseFK ...map
 			sqlAlter := fmt.Sprintf("ALTER TABLE `%s` ADD COLUMN `%s` %s;", schema.TableName, colName, colSQLDef)
 			colDiff.SQL = sqlAlter
 			diff.AddedCols = append(diff.AddedCols, colDiff)
-			diff.SuggestedSQL = append(diff.SuggestedSQL, sqlAlter)
+			addColSQL = append(addColSQL, sqlAlter)
 
 			// If column requires a unique or case-insensitive unique index (especially for SQLite):
 			if col.IsIUnique || (col.IsUnique && (db.Dialect == SQLITE || db.Dialect == "")) {
@@ -633,11 +642,11 @@ func CompareModelWithDB(schema ModelSchema, db *DatabaseEntity, reverseFK ...map
 				}
 				idxSQL := generateIndexSQL(schema.TableName, colName, idxType, db.Dialect)
 				diff.AddedIndexes = append(diff.AddedIndexes, idxSQL)
-				diff.SuggestedSQL = append(diff.SuggestedSQL, idxSQL)
+				addIndexSQL = append(addIndexSQL, idxSQL)
 			} else if col.Index == "normal" || col.Index == "desc" {
 				idxSQL := generateIndexSQL(schema.TableName, colName, col.Index, db.Dialect)
 				diff.AddedIndexes = append(diff.AddedIndexes, idxSQL)
-				diff.SuggestedSQL = append(diff.SuggestedSQL, idxSQL)
+				addIndexSQL = append(addIndexSQL, idxSQL)
 			}
 		}
 	}
@@ -683,9 +692,9 @@ func CompareModelWithDB(schema ModelSchema, db *DatabaseEntity, reverseFK ...map
 				fkConstraintName := fmt.Sprintf("fk_%s_%s", schema.TableName, dbColName)
 				switch db.Dialect {
 				case MYSQL, MARIA:
-					diff.SuggestedSQL = append(diff.SuggestedSQL, fmt.Sprintf("ALTER TABLE `%s` DROP FOREIGN KEY `%s`;", schema.TableName, fkConstraintName))
+					dropFKSQL = append(dropFKSQL, fmt.Sprintf("ALTER TABLE `%s` DROP FOREIGN KEY `%s`;", schema.TableName, fkConstraintName))
 				case POSTGRES, COCKROACH:
-					diff.SuggestedSQL = append(diff.SuggestedSQL, fmt.Sprintf("ALTER TABLE \"%s\" DROP CONSTRAINT IF EXISTS \"%s\";", schema.TableName, fkConstraintName))
+					dropFKSQL = append(dropFKSQL, fmt.Sprintf("ALTER TABLE \"%s\" DROP CONSTRAINT IF EXISTS \"%s\";", schema.TableName, fkConstraintName))
 				}
 			}
 
@@ -696,11 +705,12 @@ func CompareModelWithDB(schema ModelSchema, db *DatabaseEntity, reverseFK ...map
 				colDiff.SQL = fmt.Sprintf("ALTER TABLE `%s` DROP COLUMN `%s`;", schema.TableName, dbColName)
 			}
 			diff.DroppedCols = append(diff.DroppedCols, colDiff)
-			diff.SuggestedSQL = append(diff.SuggestedSQL, colDiff.SQL)
+			dropColSQL = append(dropColSQL, colDiff.SQL)
 		}
 	}
 
 	// 5. Detect possible RENAMED columns (Heuristic: 1 dropped + 1 added with matching previous snapshot)
+	isRename := false
 	if len(diff.DroppedCols) == 1 && len(diff.AddedCols) == 1 && prevSnapshot != nil {
 		droppedCol := diff.DroppedCols[0]
 		addedCol := diff.AddedCols[0]
@@ -721,13 +731,8 @@ func CompareModelWithDB(schema ModelSchema, db *DatabaseEntity, reverseFK ...map
 			diff.Warnings = append(diff.Warnings, renameDiff.Warning)
 		}
 		diff.RenamedCols = append(diff.RenamedCols, renameDiff)
-
-		// When a rename is detected, replace the noisy ADD+DROP suggestions with clean RENAME + Index
-		cleanSQL := []string{renameSQL}
-		for _, idxSQL := range diff.AddedIndexes {
-			cleanSQL = append(cleanSQL, idxSQL)
-		}
-		diff.SuggestedSQL = cleanSQL
+		renameColSQL = append(renameColSQL, renameSQL)
+		isRename = true
 	}
 
 	// 6. Detect ALTERED columns (type / size / nullability changes on existing columns)
@@ -747,10 +752,10 @@ func CompareModelWithDB(schema ModelSchema, db *DatabaseEntity, reverseFK ...map
 				switch db.Dialect {
 				case POSTGRES, COCKROACH:
 					colDiff.SQL = fmt.Sprintf("ALTER TABLE `%s` ALTER COLUMN `%s` TYPE %s;", schema.TableName, colName, col.SQLType)
-					diff.SuggestedSQL = append(diff.SuggestedSQL, colDiff.SQL)
+					alterColSQL = append(alterColSQL, colDiff.SQL)
 				case MYSQL, MARIA:
 					colDiff.SQL = fmt.Sprintf("ALTER TABLE `%s` MODIFY COLUMN `%s` %s;", schema.TableName, colName, col.SQLType)
-					diff.SuggestedSQL = append(diff.SuggestedSQL, colDiff.SQL)
+					alterColSQL = append(alterColSQL, colDiff.SQL)
 				default: // SQLite does not support ALTER COLUMN
 					diff.Warnings = append(diff.Warnings, fmt.Sprintf("SQLite cannot alter column type for '%s'. Recreating the table via a temp table is required.", colName))
 				}
@@ -771,7 +776,7 @@ func CompareModelWithDB(schema ModelSchema, db *DatabaseEntity, reverseFK ...map
 					idxSQL := generateIndexSQL(schema.TableName, colName, col.Index, db.Dialect)
 					if idxSQL != "" {
 						diff.AddedIndexes = append(diff.AddedIndexes, idxSQL)
-						diff.SuggestedSQL = append(diff.SuggestedSQL, idxSQL)
+						addIndexSQL = append(addIndexSQL, idxSQL)
 					}
 				}
 			}
@@ -783,11 +788,29 @@ func CompareModelWithDB(schema ModelSchema, db *DatabaseEntity, reverseFK ...map
 	// if referencing deleted/renamed columns. ADD COLUMN does not break existing triggers.
 	hasBreakingChanges := len(diff.DroppedCols) > 0 || len(diff.RenamedCols) > 0
 	if diff.ExistsInDB && hasBreakingChanges {
-		trigSQL := buildTriggerRefreshSQL(schema, db.Dialect, dbCols)
-		if len(trigSQL) > 0 {
+		dropTriggerSQL, createTriggerSQL = buildTriggerRefreshSQL(schema, db.Dialect, dbCols)
+		if len(dropTriggerSQL) > 0 || len(createTriggerSQL) > 0 {
 			diff.TriggersNeedRefresh = true
-			diff.SuggestedSQL = append(diff.SuggestedSQL, trigSQL...)
 		}
+	}
+
+	// 9. Assemble SuggestedSQL in strict dependency order:
+	// CRITICAL for SQLite: Drop triggers BEFORE dropping columns!
+	// SQLite will error with "error in trigger ... after drop column: no such column: NEW.col"
+	// if a trigger referencing that column still exists when ALTER TABLE DROP COLUMN runs.
+	if isRename {
+		diff.SuggestedSQL = append(diff.SuggestedSQL, dropTriggerSQL...)
+		diff.SuggestedSQL = append(diff.SuggestedSQL, renameColSQL...)
+		diff.SuggestedSQL = append(diff.SuggestedSQL, addIndexSQL...)
+		diff.SuggestedSQL = append(diff.SuggestedSQL, createTriggerSQL...)
+	} else {
+		diff.SuggestedSQL = append(diff.SuggestedSQL, dropTriggerSQL...)
+		diff.SuggestedSQL = append(diff.SuggestedSQL, dropFKSQL...)
+		diff.SuggestedSQL = append(diff.SuggestedSQL, dropColSQL...)
+		diff.SuggestedSQL = append(diff.SuggestedSQL, alterColSQL...)
+		diff.SuggestedSQL = append(diff.SuggestedSQL, addColSQL...)
+		diff.SuggestedSQL = append(diff.SuggestedSQL, addIndexSQL...)
+		diff.SuggestedSQL = append(diff.SuggestedSQL, createTriggerSQL...)
 	}
 
 	return diff
@@ -812,15 +835,16 @@ func generateIndexSQL(tableName, colName, indexType, dialect string) string {
 	}
 }
 
-func buildTriggerRefreshSQL(schema ModelSchema, dialect string, dbCols map[string]string) []string {
-	var stmts []string
+func buildTriggerRefreshSQL(schema ModelSchema, dialect string, dbCols map[string]string) ([]string, []string) {
+	var dropStmts []string
+	var createStmts []string
 	tableName := schema.TableName
 
 	// 1. Change triggers (for SQLite & MySQL where columns are hardcoded into trigger body)
 	if tableName != "users" && !strings.HasPrefix(tableName, "_") {
 		switch dialect {
 		case SQLITE, "":
-			stmts = append(stmts,
+			dropStmts = append(dropStmts,
 				fmt.Sprintf("DROP TRIGGER IF EXISTS `%s_trig_insert`;", tableName),
 				fmt.Sprintf("DROP TRIGGER IF EXISTS `%s_trig_update`;", tableName),
 				fmt.Sprintf("DROP TRIGGER IF EXISTS `%s_trig_delete`;", tableName),
@@ -846,13 +870,13 @@ func buildTriggerRefreshSQL(schema ModelSchema, dialect string, dbCols map[strin
 			newFields := strings.Join(newPairs, ",")
 			oldFields := strings.Join(oldPairs, ",")
 
-			stmts = append(stmts,
+			createStmts = append(createStmts,
 				fmt.Sprintf("CREATE TRIGGER IF NOT EXISTS `%s_trig_insert` AFTER INSERT ON `%s` FOR EACH ROW BEGIN INSERT INTO `_triggers_queue`(data) VALUES (json_object('operation','insert','table','%s','data',json_object(%s))); END;", tableName, tableName, tableName, newFields),
 				fmt.Sprintf("CREATE TRIGGER IF NOT EXISTS `%s_trig_update` AFTER UPDATE ON `%s` FOR EACH ROW BEGIN INSERT INTO `_triggers_queue`(data) VALUES (json_object('operation','update','table','%s','old',json_object(%s),'new',json_object(%s))); END;", tableName, tableName, tableName, oldFields, newFields),
 				fmt.Sprintf("CREATE TRIGGER IF NOT EXISTS `%s_trig_delete` AFTER DELETE ON `%s` FOR EACH ROW BEGIN INSERT INTO `_triggers_queue`(data) VALUES (json_object('operation','delete','table','%s','data',json_object(%s))); END;", tableName, tableName, tableName, oldFields),
 			)
 		case MYSQL, MARIA:
-			stmts = append(stmts,
+			dropStmts = append(dropStmts,
 				fmt.Sprintf("DROP TRIGGER IF EXISTS `%s_trig_insert`;", tableName),
 				fmt.Sprintf("DROP TRIGGER IF EXISTS `%s_trig_update`;", tableName),
 				fmt.Sprintf("DROP TRIGGER IF EXISTS `%s_trig_delete`;", tableName),
@@ -870,7 +894,7 @@ func buildTriggerRefreshSQL(schema ModelSchema, dialect string, dbCols map[strin
 			newFields := strings.Join(newPairs, ",")
 			oldFields := strings.Join(oldPairs, ",")
 
-			stmts = append(stmts,
+			createStmts = append(createStmts,
 				fmt.Sprintf("CREATE TRIGGER `%s_trig_insert` AFTER INSERT ON `%s` FOR EACH ROW BEGIN INSERT INTO `_triggers_queue`(data) VALUES (JSON_OBJECT('operation','insert','table','%s','data',JSON_OBJECT(%s))); END;", tableName, tableName, tableName, newFields),
 				fmt.Sprintf("CREATE TRIGGER `%s_trig_update` AFTER UPDATE ON `%s` FOR EACH ROW BEGIN INSERT INTO `_triggers_queue`(data) VALUES (JSON_OBJECT('operation','update','table','%s','old',JSON_OBJECT(%s),'new',JSON_OBJECT(%s))); END;", tableName, tableName, tableName, oldFields, newFields),
 				fmt.Sprintf("CREATE TRIGGER `%s_trig_delete` AFTER DELETE ON `%s` FOR EACH ROW BEGIN INSERT INTO `_triggers_queue`(data) VALUES (JSON_OBJECT('operation','delete','table','%s','data',JSON_OBJECT(%s))); END;", tableName, tableName, tableName, oldFields),
@@ -890,29 +914,27 @@ func buildTriggerRefreshSQL(schema ModelSchema, dialect string, dbCols map[strin
 		// Column was dropped
 		switch dialect {
 		case POSTGRES, COCKROACH:
-			stmts = append(stmts,
+			dropStmts = append(dropStmts,
 				fmt.Sprintf(`DROP TRIGGER IF EXISTS "%s_updated_at_update_trig" ON "%s";`, tableName, tableName),
 				fmt.Sprintf(`DROP FUNCTION IF EXISTS "%s_updated_at_trig"();`, tableName),
 			)
 		default:
-			stmts = append(stmts, fmt.Sprintf("DROP TRIGGER IF EXISTS `%s_update_trig`;", tableName))
+			dropStmts = append(dropStmts, fmt.Sprintf("DROP TRIGGER IF EXISTS `%s_update_trig`;", tableName))
 		}
 	} else if hasUpdatedAtInModel {
 		switch dialect {
 		case SQLITE, "":
-			stmts = append(stmts,
-				fmt.Sprintf("DROP TRIGGER IF EXISTS `%s_update_trig`;", tableName),
-				fmt.Sprintf("CREATE TRIGGER IF NOT EXISTS `%s_update_trig` AFTER UPDATE ON `%s` BEGIN UPDATE `%s` SET `updated_at` = strftime('%%s', 'now') WHERE `%s` = NEW.`%s`; END;", tableName, tableName, tableName, pk, pk),
-			)
+			dropStmts = append(dropStmts, fmt.Sprintf("DROP TRIGGER IF EXISTS `%s_update_trig`;", tableName))
+			createStmts = append(createStmts, fmt.Sprintf("CREATE TRIGGER IF NOT EXISTS `%s_update_trig` AFTER UPDATE ON `%s` BEGIN UPDATE `%s` SET `updated_at` = strftime('%%s', 'now') WHERE `%s` = NEW.`%s`; END;", tableName, tableName, tableName, pk, pk))
 		case POSTGRES, COCKROACH:
-			stmts = append(stmts,
+			createStmts = append(createStmts,
 				fmt.Sprintf(`CREATE OR REPLACE FUNCTION "%s_updated_at_trig"() RETURNS trigger AS $$ BEGIN NEW."updated_at" = extract(epoch from now());RETURN NEW; END;$$ LANGUAGE plpgsql;`, tableName),
 				fmt.Sprintf(`CREATE OR REPLACE TRIGGER "%s_updated_at_update_trig" BEFORE UPDATE ON public."%s" FOR EACH ROW EXECUTE PROCEDURE "%s_updated_at_trig"();`, tableName, tableName, tableName),
 			)
 		}
 	}
 
-	return stmts
+	return dropStmts, createStmts
 }
 
 func getExistingIndexes(conn *sql.DB, tableName, dialect string) []string {
