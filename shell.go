@@ -8,6 +8,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/kamalshkeir/argon"
 	"github.com/kamalshkeir/kinput"
@@ -32,7 +33,7 @@ func getShellVersion() string {
 }
 
 func printCommands() {
-	cmdStr := "\033[0;36mtables\033[0m | \033[0;36mcolumns\033[0m | \033[0;36mdiff\033[0m | \033[0;36mmigrate\033[0m | \033[0;36mquery\033[0m | \033[0;36mget\033[0m | \033[0;36mgetall\033[0m | \033[0;36mdelete\033[0m | \033[0;36mdrop\033[0m | \033[0;36mdatabases\033[0m | \033[0;36muse\033[0m"
+	cmdStr := "\033[0;36mtables\033[0m | \033[0;36mcolumns\033[0m | \033[0;36mdiff\033[0m | \033[0;36mexec\033[0m | \033[0;36mquery\033[0m | \033[0;36mget\033[0m | \033[0;36mgetall\033[0m | \033[0;36mdelete\033[0m | \033[0;36mdrop\033[0m | \033[0;36mdatabases\033[0m | \033[0;36muse\033[0m"
 	if dahsboardUsed {
 		cmdStr += " | \033[0;36mcreateuser\033[0m | \033[0;36mcreatesuperuser\033[0m"
 	}
@@ -45,10 +46,10 @@ func printHelp() {
 	fmt.Println("  \033[1;36m⚡ KORM Shell Commands\033[0m")
 	fmt.Println()
 	fmt.Println("  \033[1;33mSchema & Migrations\033[0m")
-	fmt.Println("    \033[1;32mdiff\033[0m [table]          Show schema diff between Go models and DB (dry-run)")
+	fmt.Println("    \033[1;32mdiff\033[0m [table] [-a]     Show schema diff (use -a / --apply to execute directly)")
 	fmt.Println("    \033[1;32mtables\033[0m                List all tables in active database")
 	fmt.Println("    \033[1;32mcolumns\033[0m [table]       List columns and types of a table")
-	fmt.Println("    \033[1;32mmigrate\033[0m <file.sql>    Execute a SQL migration file")
+	fmt.Println("    \033[1;32mexec\033[0m <file.sql>       Execute a SQL script file (alias: source, run, migrate)")
 	fmt.Println()
 	fmt.Println("  \033[1;33mData & Queries\033[0m")
 	fmt.Println("    \033[1;32mquery\033[0m <sql>           Execute a custom SQL query")
@@ -168,7 +169,7 @@ func handleCommand(commands []string) bool {
 		printCommands()
 	case "diff":
 		handleDiffCommand(commands)
-	case "migrate":
+	case "exec", "source", "run", "migrate":
 		var path string
 		if len(commands) > 1 {
 			path = commands[1]
@@ -180,11 +181,11 @@ func handleCommand(commands []string) bool {
 			fmt.Println("  \033[1;31m✖ Path cannot be empty.\033[0m")
 			return false
 		}
-		err := migratefromfile(path)
+		err := executeSQLFile(path)
 		if err == nil {
-			fmt.Printf("  \033[1;32m✔ Migrated '%s' successfully.\033[0m\n", path)
+			fmt.Printf("  \033[1;32m✔ Executed '%s' successfully.\033[0m\n", path)
 		} else {
-			fmt.Printf("  \033[1;31m✖ Migration error: %v\033[0m\n", err)
+			fmt.Printf("  \033[1;31m✖ Execution error: %v\033[0m\n", err)
 		}
 	case "databases":
 		dbs := GetMemoryDatabases()
@@ -461,34 +462,144 @@ func getRow(tbName, where string) {
 	}
 }
 
-func migratefromfile(path string) error {
-	if !SliceContains([]string{POSTGRES, SQLITE, MYSQL, MARIA}, databases[0].Dialect) {
-		return errors.New("database is neither postgres, sqlite3 or mysql")
+func executeSQLFile(path string) error {
+	if usedDB.Conn == nil {
+		return errors.New("no database connection active")
 	}
 	if path == "" {
 		return errors.New("path cannot be empty")
 	}
-	statements := []string{}
 	b, err := os.ReadFile(path)
 	if err != nil {
-		return errors.New("error reading from " + path + ": " + err.Error())
+		return fmt.Errorf("error reading file %s: %w", path, err)
 	}
-	splited := strings.Split(string(b), ";")
-	statements = append(statements, splited...)
 
-	// exec migrations
-	for i := range statements {
-		st := strings.TrimSpace(statements[i])
-		if st == "" {
+	statements := splitSQLStatements(string(b))
+	if len(statements) == 0 {
+		return fmt.Errorf("file '%s' is empty or contains no valid SQL statements", path)
+	}
+
+	start := time.Now()
+	for i, st := range statements {
+		_, err := usedDB.Conn.Exec(st)
+		if err != nil {
+			preview := st
+			if len(preview) > 60 {
+				preview = preview[:57] + "..."
+			}
+			return fmt.Errorf("error in statement #%d ('%s'): %w", i+1, preview, err)
+		}
+	}
+	elapsed := time.Since(start)
+	flushCache()
+	fmt.Printf("  \033[0;32m↳ %d statement(s) executed in %v\033[0m\n", len(statements), elapsed.Round(time.Millisecond))
+	return nil
+}
+
+func splitSQLStatements(rawSQL string) []string {
+	var statements []string
+	var current strings.Builder
+
+	inSingleQuote := false
+	inDoubleQuote := false
+	inLineComment := false
+	inBlockComment := false
+
+	runes := []rune(rawSQL)
+	n := len(runes)
+
+	for i := 0; i < n; i++ {
+		r := runes[i]
+		next := rune(0)
+		if i+1 < n {
+			next = runes[i+1]
+		}
+
+		if inLineComment {
+			if r == '\n' {
+				inLineComment = false
+				current.WriteRune(r)
+			}
 			continue
 		}
-		conn := usedDB.Conn
-		_, err := conn.Exec(st)
-		if err != nil {
-			return errors.New("error migrating from " + path + ": " + err.Error())
+
+		if inBlockComment {
+			if r == '*' && next == '/' {
+				inBlockComment = false
+				i++
+			}
+			continue
 		}
+
+		if inSingleQuote {
+			current.WriteRune(r)
+			if r == '\'' {
+				if next == '\'' {
+					current.WriteRune(next)
+					i++
+				} else {
+					inSingleQuote = false
+				}
+			}
+			continue
+		}
+
+		if inDoubleQuote {
+			current.WriteRune(r)
+			if r == '"' {
+				if next == '"' {
+					current.WriteRune(next)
+					i++
+				} else {
+					inDoubleQuote = false
+				}
+			}
+			continue
+		}
+
+		// Comment starts
+		if r == '-' && next == '-' {
+			inLineComment = true
+			i++
+			continue
+		}
+
+		if r == '/' && next == '*' {
+			inBlockComment = true
+			i++
+			continue
+		}
+
+		if r == '\'' {
+			inSingleQuote = true
+			current.WriteRune(r)
+			continue
+		}
+
+		if r == '"' {
+			inDoubleQuote = true
+			current.WriteRune(r)
+			continue
+		}
+
+		if r == ';' {
+			stmt := strings.TrimSpace(current.String())
+			if stmt != "" {
+				statements = append(statements, stmt)
+			}
+			current.Reset()
+			continue
+		}
+
+		current.WriteRune(r)
 	}
-	return nil
+
+	remaining := strings.TrimSpace(current.String())
+	if remaining != "" {
+		statements = append(statements, remaining)
+	}
+
+	return statements
 }
 
 func dropTable(tbName string) {

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/kamalshkeir/kinput"
 	"github.com/kamalshkeir/kstrct"
 	"github.com/kamalshkeir/lg"
 )
@@ -61,13 +62,13 @@ type ColumnDiff struct {
 
 // TableDiff contains the full structural diff for a given table.
 type TableDiff struct {
-	TableName      string
-	ExistsInDB     bool
-	HasModel       bool
-	AddedCols      []ColumnDiff
-	DroppedCols    []ColumnDiff
-	AlteredCols    []ColumnDiff
-	RenamedCols    []ColumnDiff
+	TableName           string
+	ExistsInDB          bool
+	HasModel            bool
+	AddedCols           []ColumnDiff
+	DroppedCols         []ColumnDiff
+	AlteredCols         []ColumnDiff
+	RenamedCols         []ColumnDiff
 	AddedIndexes        []string
 	DroppedIndexes      []string
 	TriggersNeedRefresh bool
@@ -345,9 +346,10 @@ func generateColumnSQLDefinition(col ModelColumn, dialect string, isAlterAdd boo
 		hasText := false
 		hasJSON := false
 		for _, t := range col.Tags {
-			if t == "text" {
+			switch t {
+			case "text":
 				hasText = true
-			} else if t == "json" {
+			case "json":
 				hasJSON = true
 			}
 		}
@@ -385,9 +387,10 @@ func generateColumnSQLDefinition(col ModelColumn, dialect string, isAlterAdd boo
 		hasText := false
 		hasJSON := false
 		for _, t := range col.Tags {
-			if t == "text" {
+			switch t {
+			case "text":
 				hasText = true
-			} else if t == "json" {
+			case "json":
 				hasJSON = true
 			}
 		}
@@ -413,9 +416,10 @@ func generateColumnSQLDefinition(col ModelColumn, dialect string, isAlterAdd boo
 		hasText := false
 		hasJSON := false
 		for _, t := range col.Tags {
-			if t == "text" {
+			switch t {
+			case "text":
 				hasText = true
-			} else if t == "json" {
+			case "json":
 				hasJSON = true
 			}
 		}
@@ -460,11 +464,12 @@ func generateColumnSQLDefinition(col ModelColumn, dialect string, isAlterAdd boo
 			safeDef := defaultValForType(col.GoType)
 			constraints = append(constraints, fmt.Sprintf("DEFAULT %s", safeDef))
 		} else if cleanType == "bool" && (dialect == SQLITE || dialect == "" || dialect == MYSQL || dialect == MARIA) {
-			if col.DefaultVal == "false" {
+			switch col.DefaultVal {
+			case "false":
 				constraints = append(constraints, "DEFAULT 0")
-			} else if col.DefaultVal == "true" {
+			case "true":
 				constraints = append(constraints, "DEFAULT 1")
-			} else {
+			default:
 				constraints = append(constraints, fmt.Sprintf("DEFAULT %s", col.DefaultVal))
 			}
 		} else if cleanType == "string" && !strings.HasPrefix(col.DefaultVal, "'") {
@@ -773,9 +778,11 @@ func CompareModelWithDB(schema ModelSchema, db *DatabaseEntity, reverseFK ...map
 		}
 	}
 
-	// 8. Refresh triggers if columns were modified on an existing table
-	hasColModifications := len(diff.AddedCols) > 0 || len(diff.DroppedCols) > 0 || len(diff.RenamedCols) > 0 || len(diff.AlteredCols) > 0
-	if diff.ExistsInDB && hasColModifications {
+	// 8. Refresh triggers only if columns were dropped or renamed on an existing table.
+	// In SQLite and MySQL, triggers hardcode column names and will CRASH on write operations
+	// if referencing deleted/renamed columns. ADD COLUMN does not break existing triggers.
+	hasBreakingChanges := len(diff.DroppedCols) > 0 || len(diff.RenamedCols) > 0
+	if diff.ExistsInDB && hasBreakingChanges {
 		trigSQL := buildTriggerRefreshSQL(schema, db.Dialect, dbCols)
 		if len(trigSQL) > 0 {
 			diff.TriggersNeedRefresh = true
@@ -1414,6 +1421,26 @@ func PrintSchemaDiff(diffs []TableDiff) {
 	}
 }
 
+// ApplySchemaDiff executes the suggested SQL statements in diffs against the specified database.
+func ApplySchemaDiff(diffs []TableDiff, dbName string) (int, error) {
+	db, err := GetMemoryDatabase(dbName)
+	if err != nil || db == nil {
+		return 0, fmt.Errorf("database '%s' not found", dbName)
+	}
+	applied := 0
+	for _, d := range diffs {
+		for _, sqlStr := range d.SuggestedSQL {
+			_, err := db.Conn.Exec(sqlStr)
+			if err != nil {
+				return applied, fmt.Errorf("table '%s': error executing '%s': %w", d.TableName, sqlStr, err)
+			}
+			applied++
+		}
+	}
+	flushCache()
+	return applied, nil
+}
+
 // handleDiffCommand is invoked by the shell "diff" command.
 func handleDiffCommand(commands []string) {
 	dbName := ""
@@ -1421,15 +1448,25 @@ func handleDiffCommand(commands []string) {
 		dbName = usedDB.Name
 	}
 
+	apply := false
+	filteredCommands := []string{}
+	for _, c := range commands {
+		if c == "-a" || c == "--apply" || c == "-y" {
+			apply = true
+		} else {
+			filteredCommands = append(filteredCommands, c)
+		}
+	}
+
 	diffs, err := CheckSchema(dbName)
 	if err != nil {
-		fmt.Printf(red, fmt.Sprintf("Error checking schema: %v", err))
+		fmt.Printf(red, fmt.Sprintf("Error checking schema: %v\n", err))
 		return
 	}
 
 	// Filter by specific table if provided: "diff students"
-	if len(commands) > 1 && commands[1] != "" {
-		targetTable := commands[1]
+	if len(filteredCommands) > 1 && filteredCommands[1] != "" {
+		targetTable := filteredCommands[1]
 		filtered := []TableDiff{}
 		for _, d := range diffs {
 			if d.TableName == targetTable {
@@ -1437,12 +1474,42 @@ func handleDiffCommand(commands []string) {
 			}
 		}
 		if len(filtered) == 0 {
-			fmt.Printf(yellow, fmt.Sprintf("Table '%s' not found in registered models.", targetTable))
+			fmt.Printf(yellow, fmt.Sprintf("Table '%s' not found in registered models.\n", targetTable))
 			return
 		}
-		PrintSchemaDiff(filtered)
-		return
+		diffs = filtered
 	}
 
 	PrintSchemaDiff(diffs)
+
+	hasChanges := false
+	totalSQL := 0
+	for _, d := range diffs {
+		totalSQL += len(d.SuggestedSQL)
+		if !d.ExistsInDB || len(d.AddedCols) > 0 || len(d.DroppedCols) > 0 ||
+			len(d.AlteredCols) > 0 || len(d.AddedIndexes) > 0 || len(d.RenamedCols) > 0 {
+			hasChanges = true
+		}
+	}
+
+	if !hasChanges || totalSQL == 0 {
+		return
+	}
+
+	if !apply {
+		confirm := kinput.Input(kinput.Blue, fmt.Sprintf("  Apply these %d statement(s) to '%s'? (y/N): ", totalSQL, dbName))
+		if strings.ToLower(strings.TrimSpace(confirm)) == "y" || strings.ToLower(strings.TrimSpace(confirm)) == "yes" {
+			apply = true
+		}
+	}
+
+	if apply {
+		fmt.Printf("\n  \033[0;33mApplying migrations to '%s'...\033[0m\n", dbName)
+		n, err := ApplySchemaDiff(diffs, dbName)
+		if err != nil {
+			fmt.Printf("  \033[1;31m✖ Error applying migrations: %v\033[0m\n\n", err)
+			return
+		}
+		fmt.Printf("  \033[1;32m✔ Successfully applied %d migration statement(s) to '%s'!\033[0m\n\n", n, dbName)
+	}
 }
