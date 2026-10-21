@@ -342,25 +342,101 @@ func generateColumnSQLDefinition(col ModelColumn, dialect string, isAlterAdd boo
 			baseType = "INTEGER"
 		}
 	case cleanType == "string":
-		if col.Size != "" {
+		hasText := false
+		hasJSON := false
+		for _, t := range col.Tags {
+			if t == "text" {
+				hasText = true
+			} else if t == "json" {
+				hasJSON = true
+			}
+		}
+		if hasText {
+			baseType = "TEXT"
+		} else if hasJSON {
+			switch dialect {
+			case POSTGRES, COCKROACH:
+				baseType = "JSONB"
+			case MYSQL, MARIA:
+				baseType = "JSON"
+			default:
+				baseType = "TEXT"
+			}
+		} else if col.Size != "" {
 			baseType = fmt.Sprintf("VARCHAR(%s)", col.Size)
 		} else {
-			baseType = "TEXT"
+			baseType = "VARCHAR(255)"
 		}
 	case cleanType == "bool":
-		baseType = "BOOLEAN"
-	case cleanType == "time.Time":
+		if dialect == SQLITE || dialect == "" || dialect == MYSQL || dialect == MARIA {
+			baseType = "INTEGER"
+		} else {
+			baseType = "BOOLEAN"
+		}
+	case cleanType == "time.Time" || strings.HasSuffix(cleanType, "Time"):
 		baseType = "BIGINT" // Korm stores time as epoch
 	case strings.Contains(cleanType, "float"):
 		if dialect == POSTGRES || dialect == COCKROACH {
 			baseType = "DOUBLE PRECISION"
 		} else {
-			baseType = "REAL"
+			baseType = "DECIMAL(10,5)"
 		}
 	case strings.HasPrefix(cleanType, "[]") || strings.HasPrefix(cleanType, "map"):
-		baseType = "TEXT"
+		hasText := false
+		hasJSON := false
+		for _, t := range col.Tags {
+			if t == "text" {
+				hasText = true
+			} else if t == "json" {
+				hasJSON = true
+			}
+		}
+		if hasJSON {
+			switch dialect {
+			case POSTGRES, COCKROACH:
+				baseType = "JSONB"
+			case MYSQL, MARIA:
+				baseType = "JSON"
+			default:
+				baseType = "TEXT"
+			}
+		} else if hasText {
+			baseType = "TEXT"
+		} else {
+			if dialect == POSTGRES || dialect == COCKROACH {
+				baseType = "BYTEA"
+			} else {
+				baseType = "BLOB"
+			}
+		}
 	default:
-		baseType = "TEXT"
+		hasText := false
+		hasJSON := false
+		for _, t := range col.Tags {
+			if t == "text" {
+				hasText = true
+			} else if t == "json" {
+				hasJSON = true
+			}
+		}
+		if hasJSON {
+			switch dialect {
+			case POSTGRES, COCKROACH:
+				baseType = "JSONB"
+			case MYSQL, MARIA:
+				baseType = "JSON"
+			default:
+				baseType = "TEXT"
+			}
+		} else if hasText {
+			baseType = "TEXT"
+		} else {
+			if dialect == POSTGRES || dialect == COCKROACH {
+				baseType = "BYTEA"
+			} else {
+				baseType = "BLOB"
+			}
+		}
 	}
 
 	var constraints []string
@@ -383,6 +459,14 @@ func generateColumnSQLDefinition(col ModelColumn, dialect string, isAlterAdd boo
 		if isAlterAdd && (dialect == SQLITE || dialect == "") && isSQLiteDynamicDefault(col.DefaultVal) {
 			safeDef := defaultValForType(col.GoType)
 			constraints = append(constraints, fmt.Sprintf("DEFAULT %s", safeDef))
+		} else if cleanType == "bool" && (dialect == SQLITE || dialect == "" || dialect == MYSQL || dialect == MARIA) {
+			if col.DefaultVal == "false" {
+				constraints = append(constraints, "DEFAULT 0")
+			} else if col.DefaultVal == "true" {
+				constraints = append(constraints, "DEFAULT 1")
+			} else {
+				constraints = append(constraints, fmt.Sprintf("DEFAULT %s", col.DefaultVal))
+			}
 		} else if cleanType == "string" && !strings.HasPrefix(col.DefaultVal, "'") {
 			constraints = append(constraints, fmt.Sprintf("DEFAULT '%s'", col.DefaultVal))
 		} else {
@@ -644,17 +728,7 @@ func CompareModelWithDB(schema ModelSchema, db *DatabaseEntity, reverseFK ...map
 	// 6. Detect ALTERED columns (type / size / nullability changes on existing columns)
 	for colName, col := range schema.Columns {
 		if dbType, exists := dbCols[colName]; exists {
-			// Basic type comparison
-			expectedMainType := strings.ToUpper(strings.Fields(col.SQLType)[0])
-			actualMainType := strings.ToUpper(strings.Fields(dbType)[0])
-
-			// Normalize SQLite typeless variations
-			isCompatible := (expectedMainType == actualMainType) ||
-				(strings.Contains(actualMainType, "INT") && strings.Contains(expectedMainType, "INT")) ||
-				(strings.Contains(actualMainType, "CHAR") && strings.Contains(expectedMainType, "TEXT")) ||
-				(strings.Contains(actualMainType, "TEXT") && strings.Contains(expectedMainType, "VARCHAR"))
-
-			if !isCompatible {
+			if !isTypeCompatible(col, dbType, db.Dialect) {
 				colDiff := ColumnDiff{
 					ColumnName: colName,
 					Action:     "ALTER",
@@ -682,12 +756,13 @@ func CompareModelWithDB(schema ModelSchema, db *DatabaseEntity, reverseFK ...map
 
 	// 7. Detect Index Diffs on existing columns
 	existingIndexes := getExistingIndexes(db.Conn, schema.TableName, db.Dialect)
+	indexedColumns := getIndexedColumns(db.Conn, schema.TableName, db.Dialect)
 	for colName, col := range schema.Columns {
 		// Only check if column already exists in DB (not freshly added)
 		if _, existsInDB := dbCols[colName]; existsInDB {
 			if col.Index != "" {
 				expectedIdxName := fmt.Sprintf("idx_%s_%s", schema.TableName, colName)
-				if !containsString(existingIndexes, expectedIdxName) {
+				if !containsString(existingIndexes, expectedIdxName) && !indexedColumns[colName] {
 					idxSQL := generateIndexSQL(schema.TableName, colName, col.Index, db.Dialect)
 					if idxSQL != "" {
 						diff.AddedIndexes = append(diff.AddedIndexes, idxSQL)
@@ -887,6 +962,196 @@ func containsString(slice []string, val string) bool {
 		if strings.EqualFold(s, val) {
 			return true
 		}
+	}
+	return false
+}
+
+func getIndexedColumns(conn *sql.DB, tableName, dialect string) map[string]bool {
+	indexedCols := make(map[string]bool)
+	if conn == nil {
+		return indexedCols
+	}
+	switch dialect {
+	case SQLITE, "":
+		rows, err := conn.Query(fmt.Sprintf("PRAGMA index_list(`%s`);", tableName))
+		if err != nil {
+			return indexedCols
+		}
+		defer rows.Close()
+		var seq, unique, partial int
+		var idxName, origin string
+		var idxNames []string
+		for rows.Next() {
+			if err := rows.Scan(&seq, &idxName, &unique, &origin, &partial); err == nil {
+				idxNames = append(idxNames, idxName)
+			}
+		}
+		lg.CheckError(rows.Err())
+
+		for _, name := range idxNames {
+			infoRows, err := conn.Query(fmt.Sprintf("PRAGMA index_info(`%s`);", name))
+			if err != nil {
+				continue
+			}
+			var seqno, cid int
+			var colName string
+			for infoRows.Next() {
+				if err := infoRows.Scan(&seqno, &cid, &colName); err == nil {
+					indexedCols[colName] = true
+				}
+			}
+			lg.CheckError(infoRows.Err())
+			infoRows.Close()
+		}
+	case MYSQL, MARIA:
+		rows, err := conn.Query("SELECT DISTINCT column_name FROM information_schema.statistics WHERE table_name = ?", tableName)
+		if err == nil {
+			defer rows.Close()
+			var cName string
+			for rows.Next() {
+				if err := rows.Scan(&cName); err == nil {
+					indexedCols[cName] = true
+				}
+			}
+			lg.CheckError(rows.Err())
+		}
+	case POSTGRES, COCKROACH:
+		query := `SELECT a.attname
+			FROM pg_class t
+			JOIN pg_index ix ON t.oid = ix.indrelid
+			JOIN pg_class i ON i.oid = ix.indexrelid
+			JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey)
+			WHERE t.relname = $1;`
+		rows, err := conn.Query(query, tableName)
+		if err == nil {
+			defer rows.Close()
+			var cName string
+			for rows.Next() {
+				if err := rows.Scan(&cName); err == nil {
+					indexedCols[cName] = true
+				}
+			}
+			lg.CheckError(rows.Err())
+		}
+	}
+	return indexedCols
+}
+
+func normalizeSQLType(raw string) string {
+	t := strings.ToUpper(strings.TrimSpace(raw))
+	if t == "" {
+		return ""
+	}
+	switch {
+	case strings.HasPrefix(t, "DOUBLE PRECISION"):
+		return "DOUBLE PRECISION"
+	case strings.HasPrefix(t, "CHARACTER VARYING"):
+		return "VARCHAR"
+	case strings.HasPrefix(t, "TIMESTAMP WITHOUT TIME ZONE"), strings.HasPrefix(t, "TIMESTAMP WITH TIME ZONE"):
+		return "TIMESTAMP"
+	}
+	fields := strings.Fields(t)
+	if len(fields) > 0 {
+		t = fields[0]
+	}
+	if idx := strings.Index(t, "("); idx != -1 {
+		t = t[:idx]
+	}
+	return strings.TrimSpace(t)
+}
+
+func isTypeCompatible(col ModelColumn, dbType string, dialect string) bool {
+	actual := normalizeSQLType(dbType)
+	expected := normalizeSQLType(col.SQLType)
+
+	if actual == "" || expected == "" {
+		return true
+	}
+	if actual == expected {
+		return true
+	}
+
+	cleanGoType := strings.TrimPrefix(col.GoType, "*")
+
+	// 1. Booleans: in SQLite/MySQL/Postgres, boolean can be represented as INTEGER, TINYINT, BOOLEAN, etc.
+	if cleanGoType == "bool" || expected == "BOOLEAN" || expected == "BOOL" {
+		switch actual {
+		case "BOOLEAN", "BOOL", "TINYINT", "INTEGER", "INT", "SMALLINT", "BIT", "NUMERIC":
+			return true
+		}
+	}
+
+	// 2. Floats & Decimals: REAL, FLOAT, DOUBLE, DOUBLE PRECISION, DECIMAL, NUMERIC
+	if strings.Contains(cleanGoType, "float") || isFloatSQLType(expected) {
+		if isFloatSQLType(actual) {
+			return true
+		}
+	}
+
+	// 3. Integers
+	if strings.Contains(cleanGoType, "int") || isIntegerSQLType(expected) {
+		if dialect == SQLITE || dialect == "" {
+			if isIntegerSQLType(actual) || actual == "NUMERIC" {
+				return true
+			}
+		} else {
+			if isIntegerSQLType(actual) {
+				if (actual == "INT" && expected == "INTEGER") || (actual == "INTEGER" && expected == "INT") {
+					return true
+				}
+				if actual == "SERIAL" || expected == "SERIAL" {
+					return true
+				}
+			}
+		}
+	}
+
+	// 4. Strings / Text / JSON
+	if cleanGoType == "string" || isStringSQLType(expected) {
+		if isStringSQLType(actual) {
+			return true
+		}
+	}
+
+	// 5. Slices / Arrays / Maps / Byte arrays (can be stored as BLOB, BYTEA, TEXT, JSON, JSONB, VARBINARY)
+	if strings.HasPrefix(cleanGoType, "[]") || strings.HasPrefix(cleanGoType, "map") {
+		switch actual {
+		case "BLOB", "BYTEA", "TEXT", "JSON", "JSONB", "VARCHAR", "VARBINARY":
+			return true
+		}
+	}
+
+	// 6. Time (KORM stores unix epoch timestamp or native timestamp)
+	if cleanGoType == "time.Time" || strings.HasSuffix(cleanGoType, "Time") {
+		switch actual {
+		case "BIGINT", "INTEGER", "INT", "NUMERIC", "TIMESTAMP", "DATETIME":
+			return true
+		}
+	}
+
+	return false
+}
+
+func isFloatSQLType(t string) bool {
+	switch t {
+	case "REAL", "FLOAT", "DOUBLE", "DOUBLE PRECISION", "DECIMAL", "NUMERIC":
+		return true
+	}
+	return false
+}
+
+func isIntegerSQLType(t string) bool {
+	switch t {
+	case "INT", "INTEGER", "BIGINT", "SMALLINT", "TINYINT", "MEDIUMINT", "SERIAL", "BIGSERIAL":
+		return true
+	}
+	return false
+}
+
+func isStringSQLType(t string) bool {
+	switch t {
+	case "TEXT", "VARCHAR", "CHAR", "CHARACTER", "CLOB", "STRING", "JSON", "JSONB":
+		return true
 	}
 	return false
 }
