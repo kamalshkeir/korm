@@ -320,6 +320,7 @@ type DashOpts struct {
 	WithTracing        bool   // add tracing handling page in dash and enable tracing
 	WithTerminal       bool   // add terminal session handling page in dash
 	WithRequestCounter bool   // add request counter dashboard,default false
+	WithGlobeExplorer  bool   // add 3D globe explorer page in dash
 }
 
 // WithDashboard enable admin dashboard
@@ -419,6 +420,9 @@ func WithDashboard(addr string, options ...DashOpts) *ksps.ServerBus {
 	}
 	if opts != nil && opts.WithTerminal {
 		terminalUIEnabled = true
+	}
+	if opts != nil && opts.WithGlobeExplorer {
+		withGlobeExplorer = true
 	}
 	initAdminUrlPatterns(reqqCounter, serverBus.App())
 	if len(os.Args) == 1 {

@@ -349,6 +349,17 @@ var OfflineView = func(c *ksmux.Context) {
 	c.Text("<h1>YOUR ARE OFFLINE, check connection</h1>")
 }
 
+// GLOBE
+func HandlerAdminGlobeExplorerHtml(c *ksmux.Context) {
+	user, _ := c.GetKey("korm-user")
+
+	c.Html("admin/admin_globe_explorer.html", map[string]any{
+		"User":       user,
+		"admin_path": "/admin",
+		"static_url": "/static",
+	})
+}
+
 func statsNbRecords() string {
 	allTables := GetAllTables(defaultDB)
 	q := []string{}

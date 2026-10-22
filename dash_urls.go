@@ -16,6 +16,7 @@ func init() {
 		(*data)["trace_enabled"] = defaultTracer.enabled
 		(*data)["terminal_enabled"] = terminalUIEnabled
 		(*data)["kanban_enabled"] = kanbanUIEnabled
+		(*data)["globe_enabled"] = withGlobeExplorer
 		user, ok := c.GetKey(kormKeyUser)
 		if ok {
 			(*data)["IsAuthenticated"] = true
@@ -29,6 +30,7 @@ func init() {
 }
 
 var withRequestCounter = false
+var withGlobeExplorer = false
 
 func initAdminUrlPatterns(withReqCounter bool, r *ksmux.Router) {
 	media_root := http.FileServer(http.Dir("./" + mediaDir))
@@ -89,6 +91,9 @@ func initAdminUrlPatterns(withReqCounter bool, r *ksmux.Router) {
 		adminGroup.Get("/terminal", Admin(TerminalGetView))
 		adminGroup.Post("/terminal/execute", Admin(TerminalExecute))
 		adminGroup.Get("/terminal/complete", Admin(TerminalComplete))
+	}
+	if withGlobeExplorer {
+		adminGroup.Get("/globe-explorer", Admin(HandlerAdminGlobeExplorerHtml))
 	}
 	if kanbanUIEnabled {
 		adminGroup.Get("/kanbans", Admin(KanbanListView))
