@@ -47,6 +47,11 @@ var DashView = func(c *ksmux.Context) {
 		ddd["requests"] = GetTotalRequests()
 	}
 
+	entities := schemaEntities(defaultDB)
+	relations := buildTableRelations(entities)
+	ddd["tables"] = buildTableCards(tableSummaries(defaultDB, entities), relations)
+	ddd["relations"] = relations
+
 	c.Html("admin/admin_index.html", ddd)
 }
 

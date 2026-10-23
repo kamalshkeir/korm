@@ -38,9 +38,16 @@ var TablesView = func(c *ksmux.Context) {
 		return
 	}
 
+	entities := schemaEntities(defaultDB)
+	summaries := tableSummaries(defaultDB, entities)
+	relations := buildTableRelations(entities)
+
 	c.Html("admin/admin_tables.html", map[string]any{
-		"tables":  allTables,
-		"results": results,
+		"tables":    allTables,
+		"results":   results,
+		"summaries": summaries,
+		"relations": relations,
+		"cards":     buildTableCards(summaries, relations),
 	})
 }
 
@@ -246,6 +253,8 @@ var AllModelsGet = func(c *ksmux.Context) {
 			"fkeys":          mmfkeys,
 			"fkeysModels":    mmfkeysModels,
 			"columnsOrdered": cols,
+			"relations":      buildTableRelations(schemaEntities(defaultDB))[model],
+			"rowCount":       countRows(defaultDB, model),
 		}
 		if t != nil {
 			data["columns"] = t.ModelTypes
@@ -257,6 +266,15 @@ var AllModelsGet = func(c *ksmux.Context) {
 		lg.ErrorC("table not found", "table", model)
 		c.Status(404).Error("Unable to find this model")
 	}
+}
+
+// countRows returns the number of rows of a table, 0 on error.
+func countRows(dbName, table string) int {
+	rows, err := Select[int64]().Database(dbName).Query("SELECT COUNT(*) FROM " + table)
+	if err != nil || len(rows) == 0 {
+		return 0
+	}
+	return int(rows[0])
 }
 
 var AllModelsSearch = func(c *ksmux.Context) {
