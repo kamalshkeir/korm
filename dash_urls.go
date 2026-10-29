@@ -71,6 +71,11 @@ func initAdminUrlPatterns(withReqCounter bool, r *ksmux.Router) {
 	adminGroup.Get("/tables/list", Admin(TablesListView))
 	adminGroup.Get("/tables/relations", Admin(TableRelationsView))
 	adminGroup.Get("/schema", Admin(SchemaGraphView))
+
+	// MCP (Model Context Protocol) routes
+	adminGroup.Get("/mcp/sse", Admin(MCPSSEHandler))
+	adminGroup.Post("/mcp/message", Admin(MCPMessageHandler))
+	adminGroup.Post("/mcp/rpc", Admin(MCPRPCHandler))
 	adminGroup.Post("/tables/all/:model", Admin(TableGetAll))
 	adminGroup.Get("/tables/:model", Admin(AllModelsGet))
 	adminGroup.Post("/tables/:model/search", Admin(AllModelsSearch))

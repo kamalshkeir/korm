@@ -109,7 +109,7 @@ type TestTableGorm struct {
 // func BenchmarkGetAllS_GORM(b *testing.B) {
 // 	b.ReportAllocs()
 // 	b.ResetTimer()
-// 	for i := 0; i < b.N; i++ {
+// 	for i := 0; b.Loop(); i++ {
 // 		a := []TestTableGorm{}
 // 		err := gormDB.Find(&a).Error
 // 		if err != nil {
@@ -124,7 +124,7 @@ type TestTableGorm struct {
 func BenchmarkGetAllS(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		a, err := korm.Model[TestTable]().All()
 		if err != nil {
 			b.Error("error BenchmarkGetAllS:", err)
@@ -138,7 +138,7 @@ func BenchmarkGetAllS(b *testing.B) {
 func BenchmarkQueryS(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		a, err := korm.Model[TestTable]().QueryS("select * from test_table where is_admin =?", true)
 		if err != nil {
 			b.Error("error BenchmarkQueryS:", err)
@@ -152,7 +152,7 @@ func BenchmarkQueryS(b *testing.B) {
 func BenchmarkSelect(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		a, err := korm.Select[TestTable]().Query("select * from test_table where is_admin = ?", true)
 		if err != nil {
 			b.Error("error BenchmarkSelect:", err)
@@ -166,7 +166,7 @@ func BenchmarkSelect(b *testing.B) {
 func BenchmarkSelectNamed(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		a, err := korm.Select[TestTable]().Named("select * from test_table where is_admin = :ad", map[string]any{
 			"ad": true,
 		})
@@ -182,7 +182,7 @@ func BenchmarkSelectNamed(b *testing.B) {
 func BenchmarkQueryNamedS(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		a, err := korm.Model[TestTable]().QuerySNamed("select * from test_table where is_admin = :ad", map[string]any{
 			"ad": true,
 		})
@@ -198,7 +198,7 @@ func BenchmarkQueryNamedS(b *testing.B) {
 func BenchmarkQueryM(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		a, err := korm.Table("test_table").QueryM("select * from test_table where is_admin =?", true)
 		if err != nil {
 			b.Error("error BenchmarkQueryM:", err)
@@ -212,7 +212,7 @@ func BenchmarkQueryM(b *testing.B) {
 func BenchmarkQueryNamedM(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		a, err := korm.Table("test_table").QueryMNamed("select * from test_table where is_admin =:ad", map[string]any{
 			"ad": true,
 		})
@@ -228,7 +228,7 @@ func BenchmarkQueryNamedM(b *testing.B) {
 // func BenchmarkGetAllM_GORM(b *testing.B) {
 // 	b.ReportAllocs()
 // 	b.ResetTimer()
-// 	for i := 0; i < b.N; i++ {
+// 	for i := 0; b.Loop(); i++ {
 // 		a := []map[string]any{}
 // 		err := gormDB.Table("test_table_gorms").Find(&a).Error
 // 		if err != nil {
@@ -243,7 +243,7 @@ func BenchmarkQueryNamedM(b *testing.B) {
 func BenchmarkGetAllM(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		a, err := korm.Table("test_table").All()
 		if err != nil {
 			b.Error("error BenchmarkGetAllM:", err)
@@ -257,7 +257,7 @@ func BenchmarkGetAllM(b *testing.B) {
 // func BenchmarkGetRowS_GORM(b *testing.B) {
 // 	b.ReportAllocs()
 // 	b.ResetTimer()
-// 	for i := 0; i < b.N; i++ {
+// 	for i := 0; b.Loop(); i++ {
 // 		u := TestTableGorm{}
 // 		err := gormDB.Where(&TestTableGorm{
 // 			Email: "test-10@example.com",
@@ -274,7 +274,7 @@ func BenchmarkGetAllM(b *testing.B) {
 func BenchmarkGetRowS(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		u, err := korm.Model[TestTable]().Where("email = ?", "test-10@example.com").One()
 		if err != nil {
 			b.Error("error BenchmarkGetRowS:", err)
@@ -288,7 +288,7 @@ func BenchmarkGetRowS(b *testing.B) {
 // func BenchmarkGetRowM_GORM(b *testing.B) {
 // 	b.ReportAllocs()
 // 	b.ResetTimer()
-// 	for i := 0; i < b.N; i++ {
+// 	for i := 0; b.Loop(); i++ {
 // 		u := map[string]any{}
 // 		err := gormDB.Model(&TestTableGorm{}).Where(&TestTableGorm{
 // 			Email: "test-10@example.com",
@@ -305,7 +305,7 @@ func BenchmarkGetRowS(b *testing.B) {
 func BenchmarkGetRowM(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		u, err := korm.Table("test_table").Where("email = ?", "test-10@example.com").One()
 		if err != nil {
 			b.Error("error BenchmarkGetRowM:", err)
@@ -321,7 +321,7 @@ func BenchmarkGetRowM(b *testing.B) {
 // 	pageSize := 10
 // 	b.ReportAllocs()
 // 	b.ResetTimer()
-// 	for i := 0; i < b.N; i++ {
+// 	for i := 0; b.Loop(); i++ {
 // 		u := []TestTableGorm{}
 // 		offset := (page - 1) * pageSize
 // 		err := gormDB.Model(&TestTableGorm{}).Where(&TestTableGorm{
@@ -341,7 +341,7 @@ func BenchmarkPagination10(b *testing.B) {
 	pageSize := 10
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		u, err := korm.Model[TestTable]().Where("is_admin", true).Page(page).Limit(pageSize).All()
 		if err != nil {
 			b.Error("error BenchmarkPagination10:", err)
@@ -360,7 +360,7 @@ func BenchmarkPagination10(b *testing.B) {
 // 	}
 // 	b.ReportAllocs()
 // 	b.ResetTimer()
-// 	for i := 0; i < b.N; i++ {
+// 	for i := 0; b.Loop(); i++ {
 // 		u := []TestTableGorm{}
 // 		offset := (page - 1) * pageSize
 // 		err := gormDB.Model(&TestTableGorm{}).Where(&TestTableGorm{
@@ -383,7 +383,7 @@ func BenchmarkPagination100(b *testing.B) {
 	}
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		u, err := korm.Model[TestTable]().Where("is_admin", true).Page(page).Limit(pageSize).All()
 		if err != nil {
 			b.Error("error BenchmarkPagination10:", err)
@@ -397,7 +397,7 @@ func BenchmarkPagination100(b *testing.B) {
 func BenchmarkGetAllTables(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		t := korm.GetAllTables()
 		if len(t) == 0 {
 			b.Error("error BenchmarkGetAllTables: no data")
@@ -408,7 +408,7 @@ func BenchmarkGetAllTables(b *testing.B) {
 func BenchmarkGetAllColumns(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		c, _ := korm.GetAllColumnsTypes("test_table")
 		if len(c) == 0 {
 			b.Error("error BenchmarkGetAllColumns: no data")

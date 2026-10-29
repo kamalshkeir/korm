@@ -33,7 +33,7 @@ func getShellVersion() string {
 }
 
 func printCommands() {
-	cmdStr := "\033[0;36mtables\033[0m | \033[0;36mcolumns\033[0m | \033[0;36mdiff\033[0m | \033[0;36mexec\033[0m | \033[0;36mquery\033[0m | \033[0;36mget\033[0m | \033[0;36mgetall\033[0m | \033[0;36mdelete\033[0m | \033[0;36mdrop\033[0m | \033[0;36mdatabases\033[0m | \033[0;36muse\033[0m"
+	cmdStr := "\033[0;36mtables\033[0m | \033[0;36mcolumns\033[0m | \033[0;36mdiff\033[0m | \033[0;36mexec\033[0m | \033[0;36mquery\033[0m | \033[0;36mget\033[0m | \033[0;36mgetall\033[0m | \033[0;36mdelete\033[0m | \033[0;36mdrop\033[0m | \033[0;36mdatabases\033[0m | \033[0;36muse\033[0m | \033[0;36mmcp\033[0m"
 	if dahsboardUsed {
 		cmdStr += " | \033[0;36mcreateuser\033[0m | \033[0;36mcreatesuperuser\033[0m"
 	}
@@ -44,6 +44,9 @@ func printCommands() {
 func printHelp() {
 	fmt.Println()
 	fmt.Println("  \033[1;36m⚡ KORM Shell Commands\033[0m")
+	fmt.Println()
+	fmt.Println("  \033[1;33mAI & MCP\033[0m")
+	fmt.Println("    \033[1;32mmcp\033[0m                   Start Model Context Protocol (MCP) stdio server for IDEs")
 	fmt.Println()
 	fmt.Println("  \033[1;33mSchema & Migrations\033[0m")
 	fmt.Println("    \033[1;32mdiff\033[0m [table] [-a]     Show schema diff (use -a / --apply to execute directly)")
@@ -85,6 +88,9 @@ func InitShell() bool {
 	}
 	args = args[1:]
 	switch args[0] {
+	case "mcp":
+		ServeMCPStdio()
+		return true
 	case "commands":
 		fmt.Printf("\033[1;33mUsage: go run main.go shell\033[0m\n")
 		printCommands()
@@ -167,6 +173,9 @@ func handleCommand(commands []string) bool {
 		printHelp()
 	case "commands":
 		printCommands()
+	case "mcp":
+		ServeMCPStdio()
+		return true
 	case "diff":
 		handleDiffCommand(commands)
 	case "exec", "source", "run", "migrate":

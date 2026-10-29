@@ -554,6 +554,53 @@ func TestDeleteM(t *testing.T) {
 	}
 }
 
+func TestSelectorTx(t *testing.T) {
+	tx, err := Transaction()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+
+	// Insert row within transaction
+	_, err = tx.Exec("INSERT INTO users (id, email) VALUES (?, ?)", 9999, "tx_user@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. Test Query with Tx
+	users, err := Select[TestUser]().Tx(tx).Query("SELECT id, email FROM users WHERE id = ?", 9999)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(users) != 1 || users[0].Email == nil || *users[0].Email != "tx_user@example.com" {
+		t.Fatalf("expected tx_user@example.com inside tx, got: %v", users)
+	}
+
+	// 2. Test Named with Tx
+	namedUsers, err := Select[TestUser]().Tx(tx).Named("SELECT id, email FROM users WHERE id = :id", map[string]any{"id": 9999})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(namedUsers) != 1 || namedUsers[0].Email == nil || *namedUsers[0].Email != "tx_user@example.com" {
+		t.Fatalf("expected tx_user@example.com via named inside tx, got: %v", namedUsers)
+	}
+
+	// Rollback
+	err = tx.Rollback()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 3. Verify record does not exist outside rolled-back tx
+	outsideUsers, err := Select[TestUser]().Query("SELECT id, email FROM users WHERE id = ?", 9999)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(outsideUsers) != 0 {
+		t.Fatalf("expected 0 users after rollback, got: %d", len(outsideUsers))
+	}
+}
+
 func TestDropM(t *testing.T) {
 	_, err := Table("m2m_users_groups").Drop()
 	if err != nil {

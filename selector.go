@@ -26,6 +26,7 @@ type Selector[T any] struct {
 	debug   bool
 	ctx     context.Context
 	db      *DatabaseEntity
+	tx      *sql.Tx
 	dest    *[]T
 	nocache bool
 	trace   bool
@@ -67,6 +68,12 @@ func (sl *Selector[T]) Database(dbName string) *Selector[T] {
 
 func (sl *Selector[T]) Ctx(ct context.Context) *Selector[T] {
 	sl.ctx = ct
+	return sl
+}
+
+func (sl *Selector[T]) Tx(tx *sql.Tx) *Selector[T] {
+	sl.tx = tx
+	sl.nocache = true
 	return sl
 }
 
@@ -145,7 +152,13 @@ func (sl *Selector[T]) Query(statement string, args ...any) ([]T, error) {
 		lg.Info("DEBUG SELECTOR", "statement", statement, "args", fmt.Sprintf("%v", args))
 	}
 
-	if sl.ctx != nil {
+	if sl.tx != nil {
+		if sl.ctx != nil {
+			rows, err = sl.tx.QueryContext(sl.ctx, statement, args...)
+		} else {
+			rows, err = sl.tx.Query(statement, args...)
+		}
+	} else if sl.ctx != nil {
 		rows, err = sl.db.Conn.QueryContext(sl.ctx, statement, args...)
 	} else {
 		rows, err = sl.db.Conn.Query(statement, args...)
@@ -495,7 +508,13 @@ func (sl *Selector[T]) Named(statement string, args map[string]any, unsafe ...bo
 	if sl.debug {
 		lg.Printfs("yl%s , args: %v", query, newargs)
 	}
-	if sl.ctx != nil {
+	if sl.tx != nil {
+		if sl.ctx != nil {
+			rows, err = sl.tx.QueryContext(sl.ctx, query, newargs...)
+		} else {
+			rows, err = sl.tx.Query(query, newargs...)
+		}
+	} else if sl.ctx != nil {
 		rows, err = sl.db.Conn.QueryContext(sl.ctx, query, newargs...)
 	} else {
 		rows, err = sl.db.Conn.Query(query, newargs...)

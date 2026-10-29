@@ -45,6 +45,8 @@
 
 - <strong>New:</strong>  korm.LogsQueries() that log statements and time tooked by sql queries 
 
+- <strong>Built-in MCP Server:</strong> Model Context Protocol native server (`korm mcp` via `korm.WithShell()` or `/admin/mcp/*` HTTP/SSE) for Cursor, Claude Desktop, Antigravity, and any AI agent to inspect schemas, execute safe read-only queries, compare models, and view cache stats.
+
 - <strong>Built-in Reverse Proxy & Load Balancer:</strong> Forward subdomains or paths to other services with `router.ReverseProxy(host, toUrl)` and round-robin traffic with `router.LoadBalancer(pattern, backends...)` including Circuit Breaker support
 
 - [Swagger Documentation](#swagger-documentation) with interactive UI and automatic OpenAPI JSON generation
@@ -1683,6 +1685,72 @@ lg.CheckError(err)
 
 fmt.Println("data=", data) // data= [map[data:[3,2]]]
 ```
+
+
+---
+
+# 🤖 MCP Server (Model Context Protocol)
+
+KORM embeds a native **Model Context Protocol (MCP)** server, enabling AI IDEs and agents (**Cursor**, **Claude Desktop**, **Antigravity**, etc.) to directly inspect, query, and diff your database in real time.
+
+### Available MCP Tools
+
+| Tool | Description |
+| :--- | :--- |
+| `korm_get_schema` | Returns complete schema, columns, primary keys, and foreign key relations graph. |
+| `korm_execute_query` | Executes safe read-only SQL queries (`SELECT`, `EXPLAIN`) with automatic `LIMIT` enforcement. |
+| `korm_get_diff` | Inspects structural differences between declared Go struct models and physical database tables. |
+| `korm_cache_stats` | Inspects in-memory KORM cache metrics, RAM usage, and active entries. |
+| `korm_generate_go_struct` | Reverse-engineers any physical table into clean Go struct code with KORM tags. |
+
+### How to use in any KORM project
+
+No separate binary build is required! Simply enable the shell in your app's `main.go`:
+
+```go
+package main
+
+import (
+    "github.com/kamalshkeir/korm"
+    "github.com/kamalshkeir/sqlitedriver"
+)
+
+func main() {
+    err := korm.New(korm.SQLITE, "db", sqlitedriver.Use())
+    if err != nil {
+        return
+    }
+    defer korm.Shutdown()
+
+    // Enables CLI commands, interactive shell, and MCP server
+    korm.WithShell()
+
+    // Start your web server or app...
+}
+```
+
+### Connect Cursor or Claude Desktop (stdio)
+
+Add the following to your AI tool's MCP configuration (e.g. `claude_desktop_config.json` or `.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "my-korm-app": {
+      "command": "go",
+      "args": ["run", "main.go", "mcp"],
+      "cwd": "/path/to/your/korm-project"
+    }
+  }
+}
+```
+
+### HTTP / SSE Transport (Web & Remote)
+
+When using `korm.WithDashboard(":9313")`, the MCP endpoints are automatically mounted:
+* **Server-Sent Events (SSE):** `GET /admin/mcp/sse`
+* **JSON-RPC HTTP POST:** `POST /admin/mcp/rpc`
+* **SSE Message Bridge:** `POST /admin/mcp/message?session_id=...`
 
 
 ---
