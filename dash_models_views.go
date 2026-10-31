@@ -418,12 +418,18 @@ var BulkDeleteRowPost = func(c *ksmux.Context) {
 	if t.Pk != "" && t.Pk != "id" {
 		idString = t.Pk
 	}
+	rowsToDelete, _ := Table(data.Table).Database(defaultDB).Where(idString+" IN (?)", data.Ids).All()
 	_, err = Table(data.Table).Database(defaultDB).Where(idString+" IN (?)", data.Ids).Delete()
 	if lg.CheckError(err) {
 		c.Status(http.StatusBadRequest).Json(map[string]any{
 			"error": err.Error(),
 		})
 		return
+	}
+
+	username := getContextUser(c)
+	for _, r := range rowsToDelete {
+		RecordAudit(defaultDB, data.Table, fmt.Sprint(r[idString]), "delete", r, nil, username)
 	}
 
 	c.Json(map[string]any{
@@ -496,6 +502,9 @@ var CreateModelView = func(c *ksmux.Context) {
 	if len(pathUploaded) > 0 {
 		inserted[formName[0]] = pathUploaded[0]
 	}
+
+	createUsername := getContextUser(c)
+	RecordAudit(defaultDB, data["table"][0], fmt.Sprint(inserted[idString]), "insert", nil, inserted, createUsername)
 
 	c.Json(map[string]any{
 		"success":  "Done !",
@@ -606,6 +615,9 @@ var UpdateRowPost = func(c *ksmux.Context) {
 		c.Status(500).Error("something wrong happened")
 		return
 	}
+
+	updateUsername := getContextUser(c)
+	RecordAudit(defaultDB, data["table"][0], id, "update", modelDB, ret, updateUsername)
 
 	c.Json(map[string]any{
 		"success": ret,
@@ -1011,9 +1023,10 @@ var TableSeedPOST = func(c *ksmux.Context) {
 			}
 		}
 
-		_, err := Table(tableName).Database(defaultDB).Insert(row)
+		insId, err := Table(tableName).Database(defaultDB).Insert(row)
 		if err == nil {
 			insertedCount++
+			RecordAudit(defaultDB, tableName, fmt.Sprint(insId), "insert", nil, row, "mock-seeder")
 		} else {
 			lg.ErrorC("unable to insert seed row", "err", err, "row", row)
 		}

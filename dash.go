@@ -87,6 +87,10 @@ func cloneAndMigrateDashboard(staticAndTemplatesEmbeded ...embed.FS) {
 	}
 	_ = AddChangesTrigger("users", defaultDB)
 	initDashboardRealtimeHooks()
+	err = AutoMigrate[KormAudit]("_korm_audit", defaultDB)
+	if lg.CheckError(err) {
+		return
+	}
 	if kanbanUIEnabled {
 		err = AutoMigrate[Board]("_boards", defaultDB)
 		if lg.CheckError(err) {

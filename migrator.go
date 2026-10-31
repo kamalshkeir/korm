@@ -313,10 +313,20 @@ func autoMigrate[T any](model *T, db *DatabaseEntity, tableName string, execute 
 					lg.Printfs("%s\n", st)
 				}
 				if execute {
-					_, err := db.Conn.Exec(st)
-					if lg.CheckError(err) {
-						lg.Printfs("rdindexes: %s\n", st)
-						return "", err
+					parts := strings.Split(st, " ")
+					var indexName string
+					for j, part := range parts {
+						if part == "INDEX" && j+1 < len(parts) {
+							indexName = parts[j+1]
+							break
+						}
+					}
+					if indexName == "" || !indexExists(db.Conn, tableName, indexName, db.Dialect) {
+						_, err := db.Conn.Exec(st)
+						if lg.CheckError(err) {
+							lg.Printfs("rdindexes: %s\n", st)
+							return "", err
+						}
 					}
 				}
 				toReturnstats = append(toReturnstats, st)
@@ -328,10 +338,20 @@ func autoMigrate[T any](model *T, db *DatabaseEntity, tableName string, execute 
 					lg.Printfs("mindexes: %s\n", st)
 				}
 				if execute {
-					_, err := db.Conn.Exec(st)
-					if lg.CheckError(err) {
-						lg.Printfs("rdmindexes: %s\n", st)
-						return "", err
+					parts := strings.Split(st, " ")
+					var indexName string
+					for j, part := range parts {
+						if part == "INDEX" && j+1 < len(parts) {
+							indexName = parts[j+1]
+							break
+						}
+					}
+					if indexName == "" || !indexExists(db.Conn, tableName, indexName, db.Dialect) {
+						_, err := db.Conn.Exec(st)
+						if lg.CheckError(err) {
+							lg.Printfs("rdmindexes: %s\n", st)
+							return "", err
+						}
 					}
 				}
 				toReturnstats = append(toReturnstats, st)
@@ -687,7 +707,7 @@ func AutoMigrate[T any](tableName string, dbName ...string) error {
 		return errors.New("cannot migrate more than one database at the same time")
 	}
 	tbFoundDB := false
-	tables := GetAllTables(dbname)
+	tables := getAllTablesInternal(true, dbname)
 	for _, t := range tables {
 		if t == tableName {
 			tbFoundDB = true

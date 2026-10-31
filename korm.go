@@ -146,8 +146,8 @@ func New(dbType Dialect, dbName string, dbDriver driver.Driver, dbDSN ...string)
 		return err
 	}
 	if dbType == SQLITE {
-		// 1. Toujours activer les clés étrangères
-		query := `PRAGMA foreign_keys = ON;`
+		// 1. Toujours activer les clés étrangères et le busy_timeout pour éviter "database is locked"
+		query := `PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;`
 
 		// 2. Détecter si on doit activer le WAL
 		// On l'active si :
@@ -569,6 +569,10 @@ func GetConnection(dbName ...string) *sql.DB {
 
 // GetAllTables get all tables for the optional dbName given, otherwise, if not args, it will return tables of the first connected database
 func GetAllTables(dbName ...string) []string {
+	return getAllTablesInternal(false, dbName...)
+}
+
+func getAllTablesInternal(withInternal bool, dbName ...string) []string {
 	var name string
 	if len(dbName) == 0 {
 		name = databases[0].Name
@@ -580,7 +584,7 @@ func GetAllTables(dbName ...string) []string {
 	if err != nil {
 		return nil
 	}
-	if useCache {
+	if !withInternal && useCache {
 		if v, ok := cacheAllTables.Get(name); ok {
 			if len(v) == len(db.Tables) {
 				return v
@@ -643,14 +647,16 @@ func GetAllTables(dbName ...string) []string {
 		return nil
 	}
 
-	for i := len(tables) - 1; i >= 0; i-- {
-		t := tables[i]
-		if strings.HasPrefix(t, "_") {
-			tables = append(tables[:i], tables[i+1:]...)
+	if !withInternal {
+		for i := len(tables) - 1; i >= 0; i-- {
+			t := tables[i]
+			if strings.HasPrefix(t, "_") {
+				tables = append(tables[:i], tables[i+1:]...)
+			}
 		}
-	}
-	if useCache && len(tables) > 0 {
-		cacheAllTables.Set(name, tables)
+		if useCache && len(tables) > 0 {
+			cacheAllTables.Set(name, tables)
+		}
 	}
 	return tables
 }
