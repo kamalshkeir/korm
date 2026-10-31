@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -837,5 +838,190 @@ var ImportView = func(c *ksmux.Context) {
 
 	c.Json(map[string]any{
 		"success": "Import Done , you can see uploaded backups at ./" + mediaDir + "/backup folder",
+	})
+}
+
+var TableSeedPOST = func(c *ksmux.Context) {
+	tableName := c.Param("model")
+	if tableName == "" {
+		c.Status(400).Json(map[string]any{"success": false, "error": "table parameter required"})
+		return
+	}
+
+	body := c.BodyJson()
+	count := 10
+	if body != nil {
+		if v, ok := body["count"].(float64); ok && v > 0 {
+			count = int(v)
+		} else if v, ok := body["count"].(int); ok && v > 0 {
+			count = v
+		}
+	}
+	if count > 100 {
+		count = 100
+	}
+
+	colTypes, cols := GetAllColumnsTypes(tableName, defaultDB)
+	if len(cols) == 0 {
+		c.Status(404).Json(map[string]any{"success": false, "error": "table not found or has no columns"})
+		return
+	}
+
+	pk := "id"
+	if memT, err := GetMemoryTable(tableName, defaultDB); err == nil && memT.Pk != "" {
+		pk = memT.Pk
+	}
+
+	// Find foreign keys to pre-fetch existing parent IDs
+	entities := schemaEntities(defaultDB)
+	relations := buildTableRelations(entities)
+	fkTargets := map[string][]any{}
+	if relList, ok := relations[tableName]; ok {
+		for _, r := range relList {
+			if r.Kind == RelationBelongsTo && r.Field != "" && r.Other != "" {
+				parentRows, err := Table(r.Other).Database(defaultDB).Limit(20).All()
+				if err == nil && len(parentRows) > 0 {
+					pPk := "id"
+					if pMem, pErr := GetMemoryTable(r.Other, defaultDB); pErr == nil && pMem.Pk != "" {
+						pPk = pMem.Pk
+					}
+					vals := []any{}
+					for _, pr := range parentRows {
+						if v, exists := pr[pPk]; exists && v != nil {
+							vals = append(vals, v)
+						}
+					}
+					if len(vals) > 0 {
+						fkTargets[r.Field] = vals
+					}
+				}
+			}
+		}
+	}
+
+	firstNames := []string{"Alex", "Sam", "Jordan", "Taylor", "Morgan", "Casey", "Riley", "Cameron", "Dakota", "Reese"}
+	lastNames := []string{"Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez"}
+	adjectives := []string{"bright", "swift", "silent", "brave", "calm", "clever", "gentle", "happy", "noble", "vivid"}
+	cities := []string{"Paris", "Tokyo", "London", "Berlin", "Sydney", "Toronto", "Madrid", "Rome", "Seoul", "Austin"}
+
+	insertedCount := 0
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	for i := 0; i < count; i++ {
+		row := make(map[string]any)
+		firstName := firstNames[r.Intn(len(firstNames))]
+		lastName := lastNames[r.Intn(len(lastNames))]
+		adj := adjectives[r.Intn(len(adjectives))]
+		city := cities[r.Intn(len(cities))]
+
+		for _, col := range cols {
+			colLower := strings.ToLower(col)
+			cType := strings.ToUpper(colTypes[col])
+
+			// Skip auto-increment integer PK
+			if col == pk {
+				if strings.Contains(cType, "INT") || cType == "" {
+					continue
+				}
+				// If string PK, generate UUID/ULID
+				if strings.Contains(colLower, "ulid") {
+					row[col] = ulid.Make().String()
+				} else {
+					row[col] = GenerateUUID()
+				}
+				continue
+			}
+
+			// Check foreign key
+			if parentVals, hasFK := fkTargets[col]; hasFK && len(parentVals) > 0 {
+				row[col] = parentVals[r.Intn(len(parentVals))]
+				continue
+			}
+
+			// Smart mock generation by column name
+			if strings.Contains(colLower, "email") {
+				row[col] = fmt.Sprintf("%s.%s%d@example.com", strings.ToLower(firstName), strings.ToLower(lastName), r.Intn(999))
+			} else if strings.Contains(colLower, "uuid") {
+				row[col] = GenerateUUID()
+			} else if strings.Contains(colLower, "ulid") {
+				row[col] = ulid.Make().String()
+			} else if strings.Contains(colLower, "password") {
+				hash, _ := argon.Hash("secret123")
+				row[col] = hash
+			} else if strings.Contains(colLower, "username") || strings.Contains(colLower, "login") {
+				row[col] = fmt.Sprintf("%s_%s%d", strings.ToLower(adj), strings.ToLower(firstName), r.Intn(99))
+			} else if colLower == "first_name" || colLower == "firstname" {
+				row[col] = firstName
+			} else if colLower == "last_name" || colLower == "lastname" {
+				row[col] = lastName
+			} else if colLower == "name" || colLower == "full_name" {
+				row[col] = fmt.Sprintf("%s %s", firstName, lastName)
+			} else if strings.Contains(colLower, "city") {
+				row[col] = city
+			} else if strings.Contains(colLower, "phone") || strings.Contains(colLower, "tel") {
+				row[col] = fmt.Sprintf("+336%08d", r.Intn(90000000)+10000000)
+			} else if strings.Contains(colLower, "url") || strings.Contains(colLower, "website") {
+				row[col] = fmt.Sprintf("https://%s-%s.io", strings.ToLower(adj), strings.ToLower(city))
+			} else if strings.Contains(colLower, "image") || strings.Contains(colLower, "avatar") || strings.Contains(colLower, "photo") {
+				row[col] = fmt.Sprintf("https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80&seed=%d", r.Intn(1000))
+			} else if strings.Contains(colLower, "lat") || strings.Contains(colLower, "latitude") {
+				row[col] = 48.85 + (r.Float64()-0.5)*0.2
+			} else if strings.Contains(colLower, "lng") || strings.Contains(colLower, "long") || strings.Contains(colLower, "longitude") {
+				row[col] = 2.35 + (r.Float64()-0.5)*0.2
+			} else if strings.HasPrefix(colLower, "is_") || strings.HasPrefix(colLower, "has_") || colLower == "active" || colLower == "enabled" || colLower == "status_bool" {
+				if strings.Contains(cType, "INT") {
+					row[col] = r.Intn(2)
+				} else {
+					row[col] = r.Intn(2) == 1
+				}
+			} else if strings.Contains(colLower, "status") {
+				statuses := []string{"active", "pending", "completed", "archived"}
+				row[col] = statuses[r.Intn(len(statuses))]
+			} else if strings.Contains(colLower, "role") {
+				roles := []string{"admin", "member", "editor"}
+				row[col] = roles[r.Intn(len(roles))]
+			} else if strings.Contains(colLower, "price") || strings.Contains(colLower, "amount") || strings.Contains(colLower, "total") || strings.Contains(colLower, "salary") {
+				row[col] = float64(r.Intn(50000)+100) / 100.0
+			} else if strings.Contains(colLower, "age") {
+				row[col] = r.Intn(60) + 18
+			} else if strings.Contains(colLower, "count") || strings.Contains(colLower, "quantity") || strings.Contains(colLower, "stock") {
+				row[col] = r.Intn(150) + 1
+			} else if strings.Contains(colLower, "title") {
+				titles := []string{"Quarterly Growth Report", "Platform Performance Audit", "Security Assessment", "Customer Feedback Survey", "Design System Guidelines"}
+				row[col] = titles[r.Intn(len(titles))]
+			} else if strings.Contains(colLower, "desc") || strings.Contains(colLower, "content") || strings.Contains(colLower, "bio") || strings.Contains(colLower, "note") {
+				row[col] = fmt.Sprintf("Automated sample entry for %s created during testing at %s.", col, time.Now().Format("15:04:05"))
+			} else if strings.Contains(colLower, "created_at") || strings.Contains(colLower, "updated_at") || strings.Contains(colLower, "timestamp") || strings.Contains(colLower, "date") {
+				if strings.Contains(cType, "INT") {
+					row[col] = time.Now().Unix() - int64(r.Intn(86400*30))
+				} else {
+					row[col] = time.Now().Add(-time.Duration(r.Intn(720)) * time.Hour).Format("2006-01-02 15:04:05")
+				}
+			} else {
+				// Fallback to type
+				if strings.Contains(cType, "INT") {
+					row[col] = r.Intn(1000) + 1
+				} else if strings.Contains(cType, "DECIMAL") || strings.Contains(cType, "FLOAT") || strings.Contains(cType, "DOUBLE") || strings.Contains(cType, "REAL") {
+					row[col] = float64(r.Intn(10000)) / 100.0
+				} else if strings.Contains(cType, "BOOL") {
+					row[col] = r.Intn(2) == 1
+				} else {
+					row[col] = fmt.Sprintf("sample_%s_%d", colLower, r.Intn(9999))
+				}
+			}
+		}
+
+		_, err := Table(tableName).Database(defaultDB).Insert(row)
+		if err == nil {
+			insertedCount++
+		} else {
+			lg.ErrorC("unable to insert seed row", "err", err, "row", row)
+		}
+	}
+
+	c.Json(map[string]any{
+		"success":  true,
+		"inserted": insertedCount,
+		"table":    tableName,
 	})
 }

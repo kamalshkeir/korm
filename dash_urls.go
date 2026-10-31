@@ -79,6 +79,7 @@ func initAdminUrlPatterns(withReqCounter bool, r *ksmux.Router) {
 	adminGroup.Post("/tables/all/:model", Admin(TableGetAll))
 	adminGroup.Get("/tables/:model", Admin(AllModelsGet))
 	adminGroup.Post("/tables/:model/search", Admin(AllModelsSearch))
+	adminGroup.Post("/tables/:model/seed", Admin(TableSeedPOST))
 	adminGroup.Post("/delete/rows", Admin(BulkDeleteRowPost))
 	adminGroup.Post("/update/row", Admin(UpdateRowPost))
 	adminGroup.Post("/create/row", Admin(CreateModelView))
@@ -88,6 +89,9 @@ func initAdminUrlPatterns(withReqCounter bool, r *ksmux.Router) {
 	adminGroup.Get("/logs", Admin(LogsView))
 	adminGroup.Get("/logs/get", Admin(GetLogsView))
 	adminGroup.Get("/metrics/get", Admin(GetMetricsView))
+	adminGroup.Get("/query", Admin(QueryStudioView))
+	adminGroup.Post("/query/execute", Admin(QueryExecutePOST))
+	adminGroup.Post("/query/codegen", Admin(QueryCodeGenPOST))
 	adminGroup.Post("/import", Admin(ImportView))
 	adminGroup.Get("/restart", Admin(RestartView))
 	if defaultTracer.enabled {

@@ -8,12 +8,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
+	"unicode"
 
 	"github.com/kamalshkeir/kmap"
 	"github.com/kamalshkeir/ksmux"
@@ -360,8 +362,8 @@ func HandlerAdminGlobeExplorerHtml(c *ksmux.Context) {
 
 	c.Html("admin/admin_globe_explorer.html", map[string]any{
 		"User":       user,
-		"admin_path": "/admin",
-		"static_url": "/static",
+		"admin_path": adminPathNameGroup,
+		"static_url": staticUrl,
 	})
 }
 
@@ -942,4 +944,409 @@ func copyDir(src, dst string) error {
 		}
 	}
 	return nil
+}
+
+var QueryStudioView = func(c *ksmux.Context) {
+	user, _ := c.GetKey("korm-user")
+	dbs := make([]string, 0, len(databases))
+	for _, db := range databases {
+		dbs = append(dbs, db.Name)
+	}
+	if len(dbs) == 0 && defaultDB != "" {
+		dbs = append(dbs, defaultDB)
+	}
+
+	tbs := GetAllTables(defaultDB)
+
+	c.Html("admin/admin_query.html", map[string]any{
+		"User":       user,
+		"admin_path": adminPathNameGroup,
+		"static_url": staticUrl,
+		"databases":  dbs,
+		"defaultDB":  defaultDB,
+		"tables":     tbs,
+	})
+}
+
+var QueryExecutePOST = func(c *ksmux.Context) {
+	body := c.BodyJson()
+	if body == nil {
+		c.Status(400).Json(map[string]any{
+			"success": false,
+			"error":   "empty JSON payload",
+		})
+		return
+	}
+
+	rawQuery, _ := body["query"].(string)
+	q := strings.TrimSpace(rawQuery)
+	if q == "" {
+		c.Status(400).Json(map[string]any{
+			"success": false,
+			"error":   "SQL query cannot be empty",
+		})
+		return
+	}
+
+	dbName := defaultDB
+	if v, ok := body["database"].(string); ok && v != "" {
+		dbName = v
+	}
+
+	explain := false
+	if v, ok := body["explain"].(bool); ok {
+		explain = v
+	}
+
+	limit := 50
+	if v, ok := body["limit"].(float64); ok {
+		limit = int(v)
+	} else if v, ok := body["limit"].(int); ok {
+		limit = v
+	}
+
+	db, err := GetMemoryDatabase(dbName)
+	if err != nil || db == nil {
+		c.Status(404).Json(map[string]any{
+			"success": false,
+			"error":   "Database not found: " + dbName,
+		})
+		return
+	}
+
+	qClean := strings.TrimSuffix(q, ";")
+
+	if explain {
+		upperCheck := strings.ToUpper(qClean)
+		if !strings.HasPrefix(upperCheck, "EXPLAIN") {
+			switch db.Dialect {
+			case SQLITE, "":
+				qClean = "EXPLAIN QUERY PLAN " + qClean
+			default:
+				qClean = "EXPLAIN " + qClean
+			}
+		}
+	} else if limit > 0 {
+		upperCheck := strings.ToUpper(qClean)
+		if (strings.HasPrefix(upperCheck, "SELECT") || strings.HasPrefix(upperCheck, "WITH")) &&
+			!strings.Contains(upperCheck, "LIMIT") {
+			qClean = fmt.Sprintf("%s LIMIT %d", qClean, limit)
+		}
+	}
+
+	start := time.Now()
+	upper := strings.ToUpper(strings.TrimSpace(qClean))
+	isReadOnly := strings.HasPrefix(upper, "SELECT") || strings.HasPrefix(upper, "WITH") ||
+		strings.HasPrefix(upper, "EXPLAIN") || strings.HasPrefix(upper, "PRAGMA") || strings.HasPrefix(upper, "SHOW")
+
+	if isReadOnly {
+		rows, err := db.Conn.Query(qClean)
+		duration := float64(time.Since(start).Microseconds()) / 1000.0
+		if err != nil {
+			c.Json(map[string]any{
+				"success":    false,
+				"error":      err.Error(),
+				"durationMs": duration,
+				"query":      qClean,
+			})
+			return
+		}
+		defer rows.Close()
+
+		cols, err := rows.Columns()
+		if err != nil {
+			c.Json(map[string]any{
+				"success":    false,
+				"error":      err.Error(),
+				"durationMs": duration,
+				"query":      qClean,
+			})
+			return
+		}
+
+		resultRows := make([]map[string]any, 0)
+		for rows.Next() {
+			vals := make([]any, len(cols))
+			valPtrs := make([]any, len(cols))
+			for i := range vals {
+				valPtrs[i] = &vals[i]
+			}
+			if err := rows.Scan(valPtrs...); err != nil {
+				continue
+			}
+			rowMap := make(map[string]any, len(cols))
+			for i, col := range cols {
+				val := vals[i]
+				if b, ok := val.([]byte); ok {
+					val = string(b)
+				}
+				rowMap[col] = val
+			}
+			resultRows = append(resultRows, rowMap)
+		}
+
+		if err := rows.Err(); err != nil {
+			c.Json(map[string]any{
+				"success":    false,
+				"error":      err.Error(),
+				"durationMs": float64(time.Since(start).Microseconds()) / 1000.0,
+				"query":      qClean,
+			})
+			return
+		}
+
+		duration = float64(time.Since(start).Microseconds()) / 1000.0
+		c.Json(map[string]any{
+			"success":    true,
+			"columns":    cols,
+			"rows":       resultRows,
+			"count":      len(resultRows),
+			"durationMs": duration,
+			"query":      qClean,
+			"dialect":    db.Dialect,
+			"database":   db.Name,
+		})
+	} else {
+		// DDL / DML query
+		res, err := db.Conn.Exec(qClean)
+		duration := float64(time.Since(start).Microseconds()) / 1000.0
+		if err != nil {
+			c.Json(map[string]any{
+				"success":    false,
+				"error":      err.Error(),
+				"durationMs": duration,
+				"query":      qClean,
+			})
+			return
+		}
+		affected, _ := res.RowsAffected()
+		c.Json(map[string]any{
+			"success":    true,
+			"affected":   affected,
+			"durationMs": duration,
+			"isMutation": true,
+			"query":      qClean,
+			"dialect":    db.Dialect,
+			"database":   db.Name,
+		})
+	}
+}
+
+var (
+	fromTableRegex    = regexp.MustCompile(`(?i)\bFROM\s+([a-zA-Z0-9_]+)`)
+	namedParamRegex   = regexp.MustCompile(`:([a-zA-Z_][a-zA-Z0-9_]*)`)
+	posParamRegex     = regexp.MustCompile(`\?|\$[0-9]+`)
+	copilotLimitRegex = regexp.MustCompile(`(?i)\bLIMIT\s+([0-9]+)`)
+)
+
+func toModelName(s string) string {
+	res := toPascalCase(s)
+	lower := strings.ToLower(res)
+	if strings.HasSuffix(lower, "ies") && len(res) > 3 {
+		return res[:len(res)-3] + "y"
+	} else if strings.HasSuffix(lower, "sses") {
+		return res[:len(res)-2]
+	} else if strings.HasSuffix(lower, "s") && !strings.HasSuffix(lower, "ss") && !strings.HasSuffix(lower, "us") && !strings.HasSuffix(lower, "is") && len(res) > 3 {
+		return res[:len(res)-1]
+	}
+	return res
+}
+
+func goTypeFromSQLType(sqlType string, colName string, isPk bool) string {
+	if isPk {
+		return "uint"
+	}
+	lower := strings.ToLower(sqlType)
+	switch {
+	case strings.Contains(lower, "int"):
+		if strings.Contains(lower, "bool") {
+			return "bool"
+		}
+		if strings.HasPrefix(strings.ToLower(colName), "is_") || strings.HasPrefix(strings.ToLower(colName), "has_") {
+			return "bool"
+		}
+		return "int"
+	case strings.Contains(lower, "bool"):
+		return "bool"
+	case strings.Contains(lower, "char"), strings.Contains(lower, "text"), strings.Contains(lower, "clob"):
+		return "string"
+	case strings.Contains(lower, "decimal"), strings.Contains(lower, "float"), strings.Contains(lower, "double"), strings.Contains(lower, "real"), strings.Contains(lower, "numeric"):
+		return "float64"
+	case strings.Contains(lower, "time"), strings.Contains(lower, "date"):
+		return "time.Time"
+	case strings.Contains(lower, "blob"), strings.Contains(lower, "bytea"):
+		return "[]byte"
+	default:
+		return "any"
+	}
+}
+
+// GenerateSelectorGoCode produces clean, type-safe Go code leveraging selector.go
+func GenerateSelectorGoCode(sqlQuery string, dbName string) string {
+	q := strings.TrimSpace(sqlQuery)
+	if q == "" {
+		q = "SELECT * FROM users LIMIT 10;"
+	}
+
+	tableName := "records"
+	mFrom := fromTableRegex.FindStringSubmatch(q)
+	if len(mFrom) > 1 {
+		tableName = mFrom[1]
+	}
+	structName := toModelName(tableName)
+
+	entities := schemaEntities(dbName)
+	var matchedEntity *TableEntity
+	for i := range entities {
+		if strings.EqualFold(entities[i].Name, tableName) {
+			matchedEntity = &entities[i]
+			break
+		}
+	}
+
+	isSingleRow := false
+	if mLimit := copilotLimitRegex.FindStringSubmatch(q); len(mLimit) > 1 && mLimit[1] == "1" {
+		isSingleRow = true
+	}
+
+	namedMatches := namedParamRegex.FindAllStringSubmatch(q, -1)
+	uniqueParams := make([]string, 0)
+	paramSeen := map[string]bool{}
+	for _, match := range namedMatches {
+		if len(match) > 1 && !paramSeen[match[1]] {
+			paramSeen[match[1]] = true
+			uniqueParams = append(uniqueParams, match[1])
+		}
+	}
+	hasNamed := len(uniqueParams) > 0
+
+	posMatches := posParamRegex.FindAllString(q, -1)
+	hasPositional := len(posMatches) > 0
+
+	var sb strings.Builder
+	sb.WriteString("// Generated with KORM selector.go\n")
+	sb.WriteString("package main\n\n")
+	sb.WriteString("import (\n")
+	sb.WriteString("\t\"fmt\"\n")
+	sb.WriteString("\t\"github.com/kamalshkeir/korm\"\n")
+	sb.WriteString("\t\"github.com/kamalshkeir/lg\"\n")
+	sb.WriteString(")\n\n")
+
+	if matchedEntity != nil && len(matchedEntity.Columns) > 0 {
+		sb.WriteString(fmt.Sprintf("// %s model struct\ntype %s struct {\n", structName, structName))
+		for _, col := range matchedEntity.Columns {
+			fName := toModelName(col)
+			if fName == "" {
+				r := []rune(col)
+				r[0] = unicode.ToUpper(r[0])
+				fName = string(r)
+			}
+			isPk := col == matchedEntity.Pk
+			goType := ""
+			if t, ok := matchedEntity.ModelTypes[col]; ok && t != "" {
+				goType = t
+			} else if t, ok := matchedEntity.Types[col]; ok && t != "" {
+				goType = goTypeFromSQLType(t, col, isPk)
+			} else {
+				goType = goTypeFromSQLType("text", col, isPk)
+			}
+			tag := ""
+			if isPk {
+				tag = ` ` + "`" + `korm:"pk"` + "`"
+			}
+			sb.WriteString(fmt.Sprintf("\t%-14s %-12s%s\n", fName, goType, tag))
+		}
+		sb.WriteString("}\n\n")
+	}
+
+	sb.WriteString("func main() {\n")
+
+	if hasNamed {
+		sb.WriteString("\t// Named parameters\n")
+		sb.WriteString("\tparams := map[string]any{\n")
+		for _, p := range uniqueParams {
+			lower := strings.ToLower(p)
+			val := `"sample_val"`
+			if strings.Contains(lower, "id") || strings.Contains(lower, "limit") || strings.Contains(lower, "count") {
+				val = "1"
+			} else if strings.Contains(lower, "admin") || strings.Contains(lower, "active") || strings.Contains(lower, "status") {
+				val = "true"
+			} else if strings.Contains(lower, "email") {
+				val = `"user@example.com"`
+			}
+			sb.WriteString(fmt.Sprintf("\t\t\"%s\": %s,\n", p, val))
+		}
+		sb.WriteString("\t}\n\n")
+	} else if hasPositional {
+		sb.WriteString("\t// Positional arguments\n")
+		for i := range posMatches {
+			sb.WriteString(fmt.Sprintf("\targ%d := 1\n", i+1))
+		}
+		sb.WriteString("\n")
+	}
+
+	cleanSQL := strings.ReplaceAll(q, "\n", " ")
+	cleanSQL = strings.Join(strings.Fields(cleanSQL), " ")
+
+	chain := ""
+	if dbName != "" && dbName != defaultDB {
+		chain = fmt.Sprintf("\n\t\t.Database(\"%s\")", dbName)
+	}
+
+	if isSingleRow {
+		method := "One"
+		argsCall := fmt.Sprintf("`%s`", cleanSQL)
+		if hasNamed {
+			method = "NamedOne"
+			argsCall = fmt.Sprintf("`%s`, params", cleanSQL)
+		} else if hasPositional {
+			argsList := make([]string, len(posMatches))
+			for i := range posMatches {
+				argsList[i] = fmt.Sprintf("arg%d", i+1)
+			}
+			argsCall = fmt.Sprintf("`%s`, %s", cleanSQL, strings.Join(argsList, ", "))
+		}
+		sb.WriteString(fmt.Sprintf("\titem, err := korm.Select[%s]()%s.\n\t\t%s(%s)\n", structName, chain, method, argsCall))
+		sb.WriteString("\tif err != nil {\n\t\tif err == korm.ErrNoData {\n\t\t\tfmt.Println(\"No record found\")\n\t\t\treturn\n\t\t}\n\t\tlg.Error(err)\n\t\treturn\n\t}\n")
+		sb.WriteString("\tfmt.Println(item)\n}\n")
+	} else {
+		method := "Query"
+		argsCall := fmt.Sprintf("`%s`", cleanSQL)
+		if hasNamed {
+			method = "Named"
+			argsCall = fmt.Sprintf("`%s`, params", cleanSQL)
+		} else if hasPositional {
+			argsList := make([]string, len(posMatches))
+			for i := range posMatches {
+				argsList[i] = fmt.Sprintf("arg%d", i+1)
+			}
+			argsCall = fmt.Sprintf("`%s`, %s", cleanSQL, strings.Join(argsList, ", "))
+		}
+		sb.WriteString(fmt.Sprintf("\titems, err := korm.Select[%s]()%s.\n\t\t%s(%s)\n", structName, chain, method, argsCall))
+		sb.WriteString("\tif err != nil {\n\t\tlg.Error(err)\n\t\treturn\n\t}\n")
+		sb.WriteString(fmt.Sprintf("\tfmt.Printf(\"Retrieved %%d %s records\\n\", len(items))\n}\n", tableName))
+	}
+
+	return sb.String()
+}
+
+// QueryCodeGenPOST handles live Go code generation for typed SQL queries
+var QueryCodeGenPOST = func(c *ksmux.Context) {
+	body := c.BodyJson()
+	if body == nil {
+		c.Status(400).Json(map[string]any{"success": false, "error": "empty JSON payload"})
+		return
+	}
+
+	sqlQuery, _ := body["sql"].(string)
+	dbName := defaultDB
+	if v, ok := body["database"].(string); ok && v != "" {
+		dbName = v
+	}
+
+	goCode := GenerateSelectorGoCode(sqlQuery, dbName)
+	c.Json(map[string]any{
+		"success": true,
+		"go_code": goCode,
+	})
 }

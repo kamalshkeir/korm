@@ -30,11 +30,12 @@ const (
 // TableSummary is a lightweight description of a table used by the dashboard
 // to build navigation trees and schema graphs without loading any rows.
 type TableSummary struct {
-	Name    string   `json:"name"`
-	Count   int      `json:"count"`
-	Columns []string `json:"columns"`
-	Pk      string   `json:"pk"`
-	System  bool     `json:"system"`
+	Name    string            `json:"name"`
+	Count   int               `json:"count"`
+	Columns []string          `json:"columns"`
+	Types   map[string]string `json:"types,omitempty"`
+	Pk      string            `json:"pk"`
+	System  bool              `json:"system"`
 }
 
 // TableCard is the view model rendered by the "Tables" page.
@@ -193,10 +194,12 @@ func tableSummaries(dbName string, entities []TableEntity) []TableSummary {
 	summaries := make([]TableSummary, 0, len(entities))
 	for _, t := range entities {
 		cols := t.Columns
-		if len(cols) == 0 {
-			if _, c := GetAllColumnsTypes(t.Name, dbName); c != nil {
+		var types map[string]string
+		if colTypes, c := GetAllColumnsTypes(t.Name, dbName); c != nil {
+			if len(cols) == 0 {
 				cols = c
 			}
+			types = colTypes
 		}
 		pk := t.Pk
 		if pk == "" {
@@ -206,6 +209,7 @@ func tableSummaries(dbName string, entities []TableEntity) []TableSummary {
 			Name:    t.Name,
 			Count:   counts[t.Name],
 			Columns: cols,
+			Types:   types,
 			Pk:      pk,
 			System:  t.Name == "users" || strings.HasPrefix(t.Name, "_"),
 		})

@@ -4,14 +4,40 @@ import (
 	"embed"
 	"os"
 	"os/exec"
+	"sync"
 
 	"github.com/kamalshkeir/lg"
 )
 
 var (
-	staticAndTemplatesFS []embed.FS
-	statsFuncs           []StatsFunc
+	staticAndTemplatesFS    []embed.FS
+	statsFuncs              []StatsFunc
+	realtimeDashboardHooksOnce sync.Once
 )
+
+func initDashboardRealtimeHooks() {
+	realtimeDashboardHooksOnce.Do(func() {
+		broadcast := func(hd HookData) {
+			if serverBus != nil {
+				payload := map[string]any{
+					"table":     hd.Table,
+					"operation": hd.Operation,
+					"pk":        hd.Pk,
+					"data":      hd.Data,
+					"old":       hd.Old,
+					"new":       hd.New,
+				}
+				serverBus.Publish("korm_db_dashboard_hooks", payload)
+				serverBus.Publish("korm:table:"+hd.Table, payload)
+				serverBus.Publish("korm:changes", payload)
+			}
+		}
+		OnInsert(broadcast)
+		OnSet(broadcast)
+		OnDelete(broadcast)
+		OnDrop(broadcast)
+	})
+}
 
 type StatsFunc struct {
 	Name string
@@ -59,6 +85,8 @@ func cloneAndMigrateDashboard(staticAndTemplatesEmbeded ...embed.FS) {
 	if lg.CheckError(err) {
 		return
 	}
+	_ = AddChangesTrigger("users", defaultDB)
+	initDashboardRealtimeHooks()
 	if kanbanUIEnabled {
 		err = AutoMigrate[Board]("_boards", defaultDB)
 		if lg.CheckError(err) {
